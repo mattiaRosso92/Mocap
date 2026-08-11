@@ -9,7 +9,7 @@ belong in the study directories at the repository root.
 - `FREQNESS_Startup_Mocap.m`: initializes the toolbox and loads datasets from
   `FREQNESS_Data`.
 - `FREQNESS_MainPipeline_Mocap.m`: general block-based MATLAB workflow for the
-  available participant-, visualization-, and group-level functions.
+  available participant-, visualization-, and coordination-level functions.
 - `FREQNESS_Functions`: MATLAB implementations of the core, second-order, and
   third-order analyses.
 - `FREQNESS_ExampleScripts`: dataset-independent examples demonstrating the
@@ -21,9 +21,10 @@ belong in the study directories at the repository root.
   permitted.
 - `python`: the future Python package and its tests.
 
-The third-order analysis layer is specific to the MoCap framework: it operates
-across corresponding participant-level FREQ-NESS outputs to characterize
-interaction within dyads or larger groups.
+The third-order analysis layer is specific to the MoCap framework. It operates
+across corresponding participant-level FREQ-NESS outputs using separate
+functions for temporal coordination (`FREQNESS_TimeCoord_Mocap`) and spatial
+coordination (`FREQNESS_SpaceCoord_Mocap`).
 
 `FREQNESS_EffectDim_Mocap` is the MoCap counterpart of the MEEG
 `FREQNESS_EntropyLandscape` function. It computes quadratic Rényi entropy and
@@ -34,8 +35,8 @@ effective number of frequency-specific body networks.
 
 - `filterFGx.m` and its FREQ-NESS helper `FREQNESS_AnalyticSignal.m` are
   required by `FREQNESS_NetworkEstimation_Mocap`.
-- `RPparam.m` and `jrqa.m` from the CRP Toolbox are required by
-  `FREQNESS_GroupAnalyses_Mocap`.
+- `RPparam.m` and the included minimal JRQA dependency subset from the CRP
+  Toolbox are required by `FREQNESS_TimeCoord_Mocap`.
 
 Place third-party functions, together with their upstream licence and
 documentation, in `FREQNESS_ExternalFunctions`. `FREQNESS_AnalyticSignal.m`

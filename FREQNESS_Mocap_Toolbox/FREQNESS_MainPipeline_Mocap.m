@@ -9,7 +9,8 @@
 %  1) Participant-level network estimation
 %  2) Effective dimensionality of the bodily-network eigenspectrum
 %  3) Network-landscape and bodily-pattern visualization
-%  4) Interaction analyses across participants
+%  4) Temporal coordination across participants
+%  5) Spatial coordination across participants
 %
 %  Place each dataset in a separate folder inside FREQNESS_Data. A dataset
 %  may be stored as one group-level .mat array or as one .mat file per
@@ -18,8 +19,8 @@
 %  External dependencies:
 %  - filterFGx.m and FREQNESS_AnalyticSignal.m are required for network
 %    estimation.
-%  - RPparam.m and jrqa.m from the CRP Toolbox are required only when the
-%    group-analysis block is enabled.
+%  - RPparam.m and the included JRQA dependency subset from the CRP Toolbox
+%    are required only when temporal coordination is enabled.
 %
 % ------------------------------------------------------------------------
 %  AUTHORS:
@@ -50,9 +51,10 @@ clc
 
 % Network estimation is always run because its output is required by the
 % second- and third-order functions.
-run_effect_dim     = true;
-run_visualizer     = false;
-run_group_analyses = false;
+run_effect_dim  = true;
+run_visualizer  = false;
+run_time_coord  = false;
+run_space_coord = false;
 
 
 % ------------------------------------------------------------------------
@@ -98,7 +100,7 @@ patterns_start   = 0.25;
 
 
 % ------------------------------------------------------------------------
-% BLOCK #4: FREQNESS_GroupAnalyses_Mocap
+% BLOCK #4: FREQNESS_TimeCoord_Mocap
 % ------------------------------------------------------------------------
 
 % target_frex must contain one target frequency per participant. Supply a
@@ -106,15 +108,21 @@ patterns_start   = 0.25;
 % a cell array matching allData.
 target_frex = [];
 
-% Embedding settings determined before running the group-analysis function.
-% At minimum, JRQA.m and JRQA.tau must be provided when the block is enabled.
+% Embedding settings determined before running temporal coordination.
+% JRQA.m and JRQA.tau must be provided when the block is enabled.
 JRQA = struct('m',[],'tau',[]);
 
-group_filter_width = 0.2;
-group_metric_levels = [0.25 0.5 1 2];
-group_component = 1;
-group_duration = [0.15 0.85];
-group_visualize = false;
+timecoord_metric_levels = [0.25 0.5 1 2];
+timecoord_component = 1;
+timecoord_duration = [0.15 0.85];
+
+
+% ------------------------------------------------------------------------
+% BLOCK #5: FREQNESS_SpaceCoord_Mocap
+% ------------------------------------------------------------------------
+
+spacecoord_metric_levels = [0.25 0.5 1 2];
+spacecoord_component = 1;
 
 
 %% ========================================================================
@@ -152,6 +160,23 @@ for datai = 1:ndatasets
         this_frex = frex{datai};
     else
         this_frex = frex;
+    end
+
+    if run_time_coord || run_space_coord %#ok<UNRCH>
+        if iscell(target_frex)
+            if datai > numel(target_frex) || isempty(target_frex{datai})
+                error('No target frequencies were provided for dataset %s.', ...
+                    dataLabels{datai});
+            end
+            this_target_frex = target_frex{datai};
+        else
+            this_target_frex = target_frex;
+        end
+
+        if isempty(this_target_frex)
+            error(['target_frex must contain one frequency per participant ' ...
+                'when coordination analyses are enabled.']);
+        end
     end
 
 
@@ -217,43 +242,40 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #4: FREQNESS_GroupAnalyses_Mocap
+    % BLOCK #4: FREQNESS_TimeCoord_Mocap
     % =====================================================================
 
-    if run_group_analyses
+    if run_time_coord
 
         if exist('RPparam','file') ~= 2 || exist('jrqa','file') ~= 2 %#ok<UNRCH>
             error(['RPparam.m and jrqa.m were not found. Add the CRP ' ...
                 'Toolbox dependencies to FREQNESS_ExternalFunctions before ' ...
-                'running group analyses.']);
-        end
-
-        if iscell(target_frex)
-            if datai > numel(target_frex) || isempty(target_frex{datai})
-                error('No target frequencies were provided for dataset %s.', ...
-                    dataLabels{datai});
-            end
-            this_target_frex = target_frex{datai};
-        else
-            this_target_frex = target_frex;
-        end
-
-        if isempty(this_target_frex)
-            error(['target_frex must contain one frequency per participant ' ...
-                'when group analyses are enabled.']);
+                'running temporal coordination.']);
         end
 
         if isempty(JRQA.m) || isempty(JRQA.tau)
-            error('JRQA.m and JRQA.tau must be defined for group analyses.');
+            error('JRQA.m and JRQA.tau must be defined for temporal coordination.');
         end
 
-        [FREQjrqa{datai},FREQmirror{datai}] = ...
-            FREQNESS_GroupAnalyses_Mocap( ...
-            GED{datai},JRQA,this_target_frex,srate,group_visualize, ...
-            'filter_width',group_filter_width, ...
-            'metric_levels',group_metric_levels, ...
-            'component',group_component, ...
-            'duration',group_duration);
+        FREQjrqa{datai} = FREQNESS_TimeCoord_Mocap( ...
+            GED{datai},JRQA,this_target_frex, ...
+            'metric_levels',timecoord_metric_levels, ...
+            'component',timecoord_component, ...
+            'duration',timecoord_duration);
+
+    end
+
+
+    %% ====================================================================
+    % BLOCK #5: FREQNESS_SpaceCoord_Mocap
+    % =====================================================================
+
+    if run_space_coord %#ok<UNRCH>
+
+        FREQmirror{datai} = FREQNESS_SpaceCoord_Mocap( ...
+            GED{datai},this_target_frex, ...
+            'metric_levels',spacecoord_metric_levels, ...
+            'component',spacecoord_component);
 
     end
 
