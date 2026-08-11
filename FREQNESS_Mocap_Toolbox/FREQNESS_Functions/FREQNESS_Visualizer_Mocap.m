@@ -81,13 +81,13 @@ function FREQNESS_Visualizer_Mocap(GED,Landscape,Patterns)
 
 % ------------------------------------------------------------------------
 %  AUTHORS:
-%  Mattia Rosso, Leonardo Bonetti, Felix Bigand
+%  Mattia Rosso, Felix Bigand, Leonardo Bonetti
 %  mattia.rosso@clin.au.dk
-%  leonardo.bonetti@clin.au.dk; leonardo.bonetti@psych.ox.ac.uk
 %  felix.bigand@iit.it
+%  leonardo.bonetti@clin.au.dk; leonardo.bonetti@psych.ox.ac.uk
 %  Center for Music in the Brain, Aarhus University
-%  Centre for Eudaimonia and Human Flourishing, Linacre College, University of Oxford
 %  Neuroscience of Perception & Action Lab, Italian Institute of Technology (IIT)
+%  Centre for Eudaimonia and Human Flourishing, Linacre College, University of Oxford
 %
 %  Rome (IT), 11/04/2025
 % ========================================================================

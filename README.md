@@ -12,6 +12,8 @@ groups.
 
 ```text
 FREQNESS_Mocap_Toolbox/
+  FREQNESS_Startup_Mocap.m     Toolbox initialization and dataset loading
+  FREQNESS_MainPipeline_Mocap.m General block-based MATLAB workflow
   FREQNESS_Functions/          Reusable MATLAB toolbox functions
   FREQNESS_ExampleScripts/     Dataset-independent usage examples
   FREQNESS_Data/               Small example or reference data only
