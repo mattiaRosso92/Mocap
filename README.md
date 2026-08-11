@@ -36,8 +36,9 @@ The MATLAB toolbox currently contains three levels of analysis:
 
 1. `FREQNESS_NetworkEstimation_Mocap` performs the core participant-level
    frequency-resolved decomposition.
-2. `FREQNESS_Visualizer_Mocap` provides second-order visualization of the
-   estimated network landscape and bodily activation patterns.
+2. `FREQNESS_EffectDim_Mocap` and `FREQNESS_Visualizer_Mocap` provide
+   second-order characterization of the effective dimensionality, estimated
+   network landscape, and bodily activation patterns.
 3. `FREQNESS_GroupAnalyses_Mocap` provides third-order interaction analyses
    across multiple participants.
 

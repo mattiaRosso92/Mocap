@@ -7,8 +7,9 @@
 %  of the MEEG FREQ-NESS pipeline while retaining the MoCap analysis layers:
 %
 %  1) Participant-level network estimation
-%  2) Network-landscape and bodily-pattern visualization
-%  3) Interaction analyses across participants
+%  2) Effective dimensionality of the bodily-network eigenspectrum
+%  3) Network-landscape and bodily-pattern visualization
+%  4) Interaction analyses across participants
 %
 %  Place each dataset in a separate folder inside FREQNESS_Data. A dataset
 %  may be stored as one group-level .mat array or as one .mat file per
@@ -49,6 +50,7 @@ clc
 
 % Network estimation is always run because its output is required by the
 % second- and third-order functions.
+run_effect_dim     = true;
 run_visualizer     = false;
 run_group_analyses = false;
 
@@ -70,7 +72,14 @@ network_ncomps         = 30;
 
 
 % ------------------------------------------------------------------------
-% BLOCK #2: FREQNESS_Visualizer_Mocap
+% BLOCK #2: FREQNESS_EffectDim_Mocap
+% ------------------------------------------------------------------------
+
+effectdim_plot_all = false;
+
+
+% ------------------------------------------------------------------------
+% BLOCK #3: FREQNESS_Visualizer_Mocap
 % ------------------------------------------------------------------------
 
 % The current skeleton visualization supports the 22-marker configuration
@@ -89,7 +98,7 @@ patterns_start   = 0.25;
 
 
 % ------------------------------------------------------------------------
-% BLOCK #3: FREQNESS_GroupAnalyses_Mocap
+% BLOCK #4: FREQNESS_GroupAnalyses_Mocap
 % ------------------------------------------------------------------------
 
 % target_frex must contain one target frequency per participant. Supply a
@@ -115,6 +124,8 @@ group_visualize = false;
 ndatasets = numel(allData);
 
 GED        = cell(ndatasets,1);
+H2         = cell(ndatasets,1);
+ED         = cell(ndatasets,1);
 FREQjrqa   = cell(ndatasets,1);
 FREQmirror = cell(ndatasets,1);
 
@@ -164,7 +175,17 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #2: FREQNESS_Visualizer_Mocap
+    % BLOCK #2: FREQNESS_EffectDim_Mocap
+    % =====================================================================
+
+    if run_effect_dim
+        [H2{datai},ED{datai}] = FREQNESS_EffectDim_Mocap( ...
+            GED{datai},'plot_all',effectdim_plot_all);
+    end
+
+
+    %% ====================================================================
+    % BLOCK #3: FREQNESS_Visualizer_Mocap
     % =====================================================================
 
     if run_visualizer
@@ -196,7 +217,7 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #3: FREQNESS_GroupAnalyses_Mocap
+    % BLOCK #4: FREQNESS_GroupAnalyses_Mocap
     % =====================================================================
 
     if run_group_analyses

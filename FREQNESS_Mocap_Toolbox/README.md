@@ -25,6 +25,11 @@ The third-order analysis layer is specific to the MoCap framework: it operates
 across corresponding participant-level FREQ-NESS outputs to characterize
 interaction within dyads or larger groups.
 
+`FREQNESS_EffectDim_Mocap` is the MoCap counterpart of the MEEG
+`FREQNESS_EntropyLandscape` function. It computes quadratic Rényi entropy and
+effective dimensionality from the complete eigenspectrum and visualizes the
+effective number of frequency-specific body networks.
+
 ## External dependencies
 
 - `filterFGx.m` and its FREQ-NESS helper `FREQNESS_AnalyticSignal.m` are
