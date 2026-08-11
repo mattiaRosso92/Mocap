@@ -56,8 +56,14 @@ function [GED] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 % ------------------------------------------------------------------------
 %  OUTPUT ARGUMENTS:
 % ------------------------------------------------------------------------
-%  - GED       : Structure containing eigenvalues, eigenvectors, spatial
-%                activation patterns, and network time series.
+%  - GED       : Structure containing:
+%      - GED.evals : Complete normalized eigenspectrum
+%                    [nMarkerCoordinates x nFrex x nParticipants]. This
+%                    always contains all eigenvalues, independently of
+%                    ncomps.
+%      - GED.evecs : Retained eigenvectors.
+%      - GED.pats  : Retained spatial activation patterns.
+%      - GED.ts    : Retained network time series.
 %                If more participants are given as input, outputs will be
 %                stored along an extra dimension for every individual.
 %
@@ -147,7 +153,7 @@ end
 
 % Initialize GED outputs (subjects as last dimension)
 GED = []; % output structure
-GEDevals = zeros(ncomps, nfrex, nsubs);
+GEDevals = zeros(size(data,1), nfrex, nsubs);
 [GEDevecs, GEDpats] = deal(zeros(size(data,1), ncomps, nfrex, nsubs));
 GEDts = zeros(ncomps, size(data,2), nfrex, nsubs);
 
@@ -180,7 +186,7 @@ for subi = 1:nsubs
         evals = evals.*100./sum(evals); % normalize eigenvalues to percent variance explained
         % Assign temporary variables to output
         GEDevecs(:,:,frexi,subi) = evecs(:,1:ncomps);
-        GEDevals(:,frexi,subi) = evals(1:ncomps);
+        GEDevals(:,frexi,subi) = evals;
 
         % Brain networks' spatial activation patterns and time series
         for compi = 1:ncomps
@@ -218,7 +224,7 @@ if nsubs == 1
 end
 
 % Assign outputs to structure
-GED.evals = GEDevals; % eigenvalues
+GED.evals = GEDevals; % complete normalized eigenspectrum
 GED.evecs = GEDevecs; % eigenvectors
 GED.pats  = GEDpats;  % spatial activation patterns
 GED.ts    = GEDts;    % time series
