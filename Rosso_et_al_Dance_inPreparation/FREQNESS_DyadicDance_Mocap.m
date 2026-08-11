@@ -13,18 +13,27 @@ save_flag = 0;
 % Choose the method youn want to use for FREQNESS (GED or PCA)
 which_method = 'GED';
 
-% Define home path
-path_home = '/Users/au658766/Documents/MIB/Projects/NESS_withLBPD/2025_FreqNESS_Mocap/';
+% Define repository-relative data path
+path_script = fileparts(mfilename('fullpath'));
+path_repo = fileparts(path_script);
+path_home = [fullfile(path_repo,'Dance_Data') filesep];
 
-% NOTE: this will be replaced by a Startup function
-addpath(path_home)
-addpath([path_home '/crptool'])
+% Initialize the MoCap toolbox and external dependencies
+path_toolbox = fullfile(path_repo,'FREQNESS_Mocap_Toolbox');
+addpath(path_toolbox)
+FREQNESS_Startup_Mocap();
 
 % Filter data by experimental conditions
 % 	- 'cond_vis': each cell informs about the condition of a trial (0='No Visual Contact', 1='Visual Contact')
 % 	- 'cond_mus': each cell informs about the condition of a trial (0='Different Music', 1='Same Music')
-lbl_vis = csvread([path_home 'cond_vis.csv'], 1, 1);
-lbl_mus = csvread([path_home 'cond_mus.csv'], 1, 1);
+if isfile([path_home 'cond_vis.csv']) && isfile([path_home 'cond_mus.csv'])
+    lbl_vis = csvread([path_home 'cond_vis.csv'], 1, 1);
+    lbl_mus = csvread([path_home 'cond_mus.csv'], 1, 1);
+else
+    DanceContext = load([path_home 'FREQNESS.mat'],'lbl_vis','lbl_mus');
+    lbl_vis = DanceContext.lbl_vis;
+    lbl_mus = DanceContext.lbl_mus;
+end
 
 
 %% Prepare data
@@ -115,11 +124,17 @@ for condi = 1:nconds
                 id_sub = sublabels{subi};
 
                 % Define path
-                path_data = [path_home 'Data/Dyad_' id_dyad_str '/subj' id_sub];
+                path_data = fullfile(path_home,['Dyad_' id_dyad_str],['subj' id_sub]);
                 cd(path_data);
 
                 % Import info on songs, per single participant
-                song_info = csvread([path_home '/song_subj' id_sub '.csv'], 1, 1) + 1; % already add +1 to compensate Python 0-indexing
+                song_file = [path_home 'song_subj' id_sub '.csv'];
+                if isfile(song_file)
+                    song_info = csvread(song_file, 1, 1) + 1; % compensate Python 0-indexing
+                else
+                    DanceContext = load([path_home 'FREQNESS.mat'],'song_info');
+                    song_info = DanceContext.song_info;
+                end
                 songs_frex = 1 ./ (60 ./ song_bpms); % convert to Hz
                 % Find beat frequency (find song in 'song_subj_LEFT/RIGHT.csv')
                 idx_beat = song_info(id_dyad,id_trial);
@@ -310,7 +325,7 @@ end
 % After fixing, if needed, do the same in FREQNESS_SI_FIlters.m (what about
 % all other plots? massive fix with chatGPT
 
-path_data = '/Users/au658766/Desktop/TEMP_Mocap/';
+path_data = path_home;
 
 % Select method: 'GED' or 'PCA'
 which_method = 'GED';
@@ -882,8 +897,13 @@ which_comp = 2;
 % Choose wheteher you want to attune JRQA
 attune_flag = 0;
 
-% Define home path
-path_home = '/Users/au658766/Documents/MIB/Projects/NESS_withLBPD/2025_FreqNESS_Mocap/';
+% Define repository-relative data path when this section is run directly
+path_script = fileparts(mfilename('fullpath'));
+path_repo = fileparts(path_script);
+path_home = [fullfile(path_repo,'Dance_Data') filesep];
+path_toolbox = fullfile(path_repo,'FREQNESS_Mocap_Toolbox');
+addpath(path_toolbox)
+FREQNESS_Startup_Mocap();
 
 % Re-initialize settings to import GED outputs from the folder
 ndyads = 35;
@@ -892,6 +912,16 @@ ntrials = 8;
 nsubs   = 2;
 list_dyads = [1:12 14:31 33:ndyads]; % Issue with dyad #13: one trial is missing in condi #1 | dyad#32 gives arror with RPparam in condi #4
 srate = 250;
+
+% Use the saved single-GED reference when per-trial outputs are unavailable
+validation_flag = ~isfolder(fullfile(path_home,'GED_output'));
+if validation_flag
+    ndyads = 1;
+    nconds = 1;
+    ntrials = 1;
+    list_dyads = 1;
+    condlabels = {'Validation subset'};
+end
 
 % Define metric levels of interest
 meter = [.25 .5 1 2];
@@ -929,7 +959,13 @@ if attune_flag ==1
             for triali = 1:ntrials
 
                 % Import GED output
-                load([path_home 'GED_output/GED_dyad_' num2str(dyadi) '_cond_' num2str(condi) '_trial_' num2str(triali)]);
+                if validation_flag
+                    load([path_home 'Mocap_Results_tauMean_mMean_psMax.mat'], ...
+                        'GED','beat_frex');
+                else
+                    load([path_home 'GED_output/GED_dyad_' num2str(dyadi) ...
+                        '_cond_' num2str(condi) '_trial_' num2str(triali)]);
+                end
 
                 for subi = 1:nsubs
 
@@ -977,7 +1013,11 @@ if attune_flag ==1
 else
 
     % Import JRQA parapemeters
-    load([path_home 'JRQA/JRQA_Parameters_Comp#' num2str(which_comp)],'JRQA')
+    if validation_flag
+        load([path_home 'JRQA_Parameters.mat'],'JRQA')
+    else
+        load([path_home 'JRQA/JRQA_Parameters_Comp#' num2str(which_comp)],'JRQA')
+    end
 
 end
 
@@ -991,7 +1031,13 @@ for condi = 1:nconds
         for triali = 1:ntrials
 
             % Import GED output
-            load([path_home 'GED_output/GED_dyad_' num2str(dyadi) '_cond_' num2str(condi) '_trial_' num2str(triali)]);
+            if validation_flag
+                load([path_home 'Mocap_Results_tauMean_mMean_psMax.mat'], ...
+                    'GED','beat_frex');
+            else
+                load([path_home 'GED_output/GED_dyad_' num2str(dyadi) ...
+                    '_cond_' num2str(condi) '_trial_' num2str(triali)]);
+            end
              
             % Extract and process time series
             gedTs = squeeze(GED.ts(which_comp,:,:,:)); % [original_time x nfrex x nsubs] 
@@ -1009,8 +1055,18 @@ for condi = 1:nconds
                 end
             end
 
-            % Compute dyadic analysis
-            [FREQjrqa,FREQmirror] = FREQNESS_GroupAnalyses_Mocap(GED,JRQA,beat_frex,srate,vis_flag,'filter_width',.2,'metric_levels',meter,'component',which_comp, 'duration',duration);
+            % Compute temporal coordination
+            FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
+                GED,JRQA,beat_frex, ...
+                'metric_levels',meter, ...
+                'component',which_comp, ...
+                'duration',duration);
+
+            % Compute spatial coordination
+            FREQmirror = FREQNESS_SpaceCoord_Mocap( ...
+                GED,beat_frex, ...
+                'metric_levels',meter, ...
+                'component',which_comp);
 
             % Assign to group-level variables
             for metri = 1:nmeters
@@ -1021,6 +1077,11 @@ for condi = 1:nconds
 
         end
     end
+end
+
+if validation_flag
+    fprintf('\nDance coordination validation subset completed.\n');
+    return
 end
 
 
@@ -1154,6 +1215,3 @@ T = table(subject_col, visual_col, music_col, meter_col, ...
 
 % Export to Excel
 writetable(T, [path_home 'OUT2R_Comp#' num2str(which_comp) '.xlsx']);
-
-
-

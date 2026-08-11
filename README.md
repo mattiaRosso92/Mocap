@@ -39,8 +39,9 @@ The MATLAB toolbox currently contains three levels of analysis:
 2. `FREQNESS_EffectDim_Mocap` and `FREQNESS_Visualizer_Mocap` provide
    second-order characterization of the effective dimensionality, estimated
    network landscape, and bodily activation patterns.
-3. `FREQNESS_GroupAnalyses_Mocap` provides third-order interaction analyses
-   across multiple participants.
+3. `FREQNESS_TimeCoord_Mocap` and `FREQNESS_SpaceCoord_Mocap` provide
+   third-order temporal and spatial coordination analyses across multiple
+   participants.
 
 ## Reference test case
 
