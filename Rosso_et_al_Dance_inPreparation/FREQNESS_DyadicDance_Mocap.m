@@ -512,60 +512,20 @@ gg_evals = squeeze(mean(gg_evals, 2));                          % average over c
 avg_evals_gg = squeeze(mean(gg_evals, 1));                      % average over dyads
 sem_evals_gg = squeeze(std(gg_evals, 0, 1)) / sqrt(size(gg_evals,1)); % SEM across dyads
 
-% Resample group means & SEM onto log2-uniform grid
-avg_evals_gg_rs = zeros(ncomps2keep, nPoints);
-sem_evals_gg_rs = zeros(ncomps2keep, nPoints);
+% Delegate the Figure 2 landscape to the toolbox visualizer. The externally
+% computed SEM retains the inferential unit used here (dyads).
+GED_figure = [];
+GED_figure.evals = avg_evals_gg;
+GED_figure.frex = frex2plot;
 
-for compi = 1:ncomps2keep
-    y  = squeeze(avg_evals_gg(compi,:));
-    se = squeeze(sem_evals_gg(compi,:));
+Landscape_figure = [];
+Landscape_figure.frex = frex2plot;
+Landscape_figure.ncomps = ncomps2keep;
+Landscape_figure.sem = sem_evals_gg;
+Landscape_figure.xlabel = 'Frequency (× Beat)';
+Landscape_figure.title = ['Grand-grandaverage bodily network landscape across conditions - ' which_method];
 
-    avg_evals_gg_rs(compi,:) = interp1(frex2plot, y,  frex_uniform, 'linear','extrap');
-    sem_evals_gg_rs(compi,:) = interp1(frex2plot, se, frex_uniform, 'linear','extrap');
-end
-
-figure
-hold on
-
-for compi = 1:ncomps2keep
-
-    this_y   = squeeze(avg_evals_gg_rs(compi,:));
-    this_sem = squeeze(sem_evals_gg_rs(compi,:));
-
-    xx = [log2_frex_uniform; flipud(log2_frex_uniform)];
-    yy = [this_y(:)-this_sem(:); flipud(this_y(:)+this_sem(:))];
-
-    fill(xx, yy, colors(compi,:), ...
-        'FaceAlpha', 0.22, ...
-        'EdgeColor', 'none');
-
-    plot(log2_frex_uniform, this_y, ...
-        'Color', colors(compi,:), ...
-        'LineWidth', 2.5);
-end
-
-octave_set  = [0.125 0.25 0.5 1 2 4 8];
-in_range    = octave_set >= min(frex_uniform) & octave_set <= max(frex_uniform);
-octave_vals = octave_set(in_range);
-if numel(octave_vals) >= 2
-    xticks(log2(octave_vals));
-    xticklabels(string(octave_vals));
-end
-xtickangle(45)
-
-xlim([min(log2_frex_uniform) max(log2_frex_uniform)])
-ylim([0 80])
-
-xlabel('Frequency (× Beat)', 'FontSize', 14, 'FontWeight', 'bold')
-ylabel('Explained variance (%)', 'FontSize', 14, 'FontWeight', 'bold')
-legend(arrayfun(@(x) sprintf([which_method ' #%d'],x), 1:ncomps2keep, 'UniformOutput', false))
-title('Grand-grandaverage')
-
-grid on; grid minor; box on
-set(gca, 'FontSize', 12, 'LineWidth', 1.2, 'GridAlpha', 0.18, 'MinorGridAlpha', 0.10)
-set(gcf, 'Color', 'w');
-
-sgtitle(['Grand-grandaverage bodily network landscape across conditions - ' which_method])
+FREQNESS_Visualizer_Mocap(GED_figure,Landscape_figure,[]);
 
 
 %%%% GRAND-GRANDAVERAGE ED %%%%
@@ -769,13 +729,6 @@ sgtitle('Spatial correlation between component#1 and component#2')
 % Select component to visualize
 which_comp = 1;
 
-% Fixed marker size: no variability-to-marker-size mapping
-marker_size = 95;
-
-% Marker / skeleton aesthetics
-marker_edge_width = 0.6;
-skeleton_linewidth = 2.6;
-
 % Average activation patterns across trials
 gg_pats = squeeze(mean(all_pats, 3));
 % gg_pats: [dyads x conds x markers x comps x frex x subs]
@@ -788,105 +741,22 @@ gg_pats = squeeze(mean(gg_pats, 2));
 avg_pats_gg = squeeze(mean(gg_pats, 1));
 % avg_pats_gg: [markers x comps x frex x subs]
 
-% Loop over metric levels
-for frexi = 1:length(idx_frex)
+% Delegate Figure 2 spatial patterns to the toolbox visualizer.
+GED_figure.pats = avg_pats_gg;
 
-    % Global normalization value, within frequency and selected component,
-    % across markers and subjects
-    global_max_pat = max(avg_pats_gg(:,which_comp,idx_frex(frexi),:), [], 'all');
+Patterns_figure = [];
+Patterns_figure.frex = frex2plot(idx_frex);
+Patterns_figure.labels = marklabels;
+Patterns_figure.markerData = markData;
+Patterns_figure.comp = which_comp;
+Patterns_figure.srate = srate;
+Patterns_figure.start = 0.25;
+Patterns_figure.bones = bones;
+Patterns_figure.plot_matrix = false;
+Patterns_figure.animate = false;
+Patterns_figure.frequency_unit = '× Beat';
 
-    figure('Color','w'), clf
-
-    % Diagonal placement in a 3x3 grid = XYZ
-    for dimi = 1:ndims
-
-        subplot(ndims, ndims, (dimi-1)*ndims + dimi), hold on
-
-        for subi = 1:nsubs
-
-            % Extract and normalize activation pattern using global max
-            this_pat = squeeze(avg_pats_gg(:,which_comp,idx_frex(frexi),subi));
-            this_pat = this_pat / global_max_pat;
-
-            % Position data
-            x_pos = markData(x_idx,1,subi);
-            y_pos = markData(y_idx,1,subi);
-            z_pos = markData(z_idx,1,subi);
-
-            % Color indices
-            x_pats = this_pat(x_idx);
-            y_pats = this_pat(y_idx);
-            z_pats = this_pat(z_idx);
-
-            cidx_x = min(max(round((x_pats + 1) * (nscale - 1) / 2) + 1, 1), nscale);
-            cidx_y = min(max(round((y_pats + 1) * (nscale - 1) / 2) + 1, 1), nscale);
-            cidx_z = min(max(round((z_pats + 1) * (nscale - 1) / 2) + 1, 1), nscale);
-
-            % Choose colors and plot
-            switch dimi
-                case 1
-                    scatter3(x_pos, y_pos, z_pos, marker_size, col_static(cidx_x,:), ...
-                        'filled', ...
-                        'MarkerEdgeColor','k', ...
-                        'LineWidth', marker_edge_width);
-                    title('X-axis activation')
-
-                case 2
-                    scatter3(x_pos, y_pos, z_pos, marker_size, col_static(cidx_y,:), ...
-                        'filled', ...
-                        'MarkerEdgeColor','k', ...
-                        'LineWidth', marker_edge_width);
-                    title('Y-axis activation')
-
-                case 3
-                    scatter3(x_pos, y_pos, z_pos, marker_size, col_static(cidx_z,:), ...
-                        'filled', ...
-                        'MarkerEdgeColor','k', ...
-                        'LineWidth', marker_edge_width);
-                    title('Z-axis activation')
-            end
-
-            % Plot bones
-            for k = 1:size(bones,1)
-
-                p1 = bones(k,1);
-                p2 = bones(k,2);
-
-                plot3([x_pos(p1) x_pos(p2)], ...
-                      [y_pos(p1) y_pos(p2)], ...
-                      [z_pos(p1) z_pos(p2)], ...
-                      'k-', ...
-                      'LineWidth', skeleton_linewidth);
-
-            end
-
-        end
-
-        % Format subplot
-        axis vis3d
-        daspect([1 1 1])
-
-        xlabel('X')
-        ylabel('Y')
-        zlabel('Z')
-
-        view(60,30)
-
-    end
-
-    % Single shared colorbar
-    colormap(col_static);
-
-    cb = colorbar('Position',[0.965 0.12 0.012 0.76]);
-    cb.Label.String = 'Normalized activation';
-    cb.FontSize = 9;
-
-    sgtitle(['Grand-grandaverage Activation Pattern - ' which_method ...
-        ' | Component #' num2str(which_comp) ...
-        ' | Freq = ' num2str(frex2plot(idx_frex(frexi)), '%.2f') ...
-        ' × Beat'])
-
-end
+FREQNESS_Visualizer_Mocap(GED_figure,[],Patterns_figure);
 %% FREQNESS DYADIC ANALYSES
 
 clear all

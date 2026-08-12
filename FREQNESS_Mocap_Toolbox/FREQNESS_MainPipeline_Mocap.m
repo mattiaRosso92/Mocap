@@ -94,9 +94,22 @@ marker_labels = {'LB Head','LF Head','RF Head','RB Head','Sternum', ...
 
 landscape_frex   = [];
 landscape_ncomps = 10;
+landscape_xlabel = 'Frequency (Hz)';
+landscape_title  = 'Bodily network landscape';
+visualizer_plot_all = false;
 patterns_frex    = 1;
 patterns_comp    = 1;
 patterns_start   = 0.25;
+patterns_plot_matrix = true;
+patterns_animate = false;
+patterns_animation_duration = 10;
+patterns_frequency_unit = 'Hz';
+
+% Dance-study 22-marker skeleton. Supply a different [nLinks x 2] array
+% for other marker configurations, or [] to visualize markers only.
+patterns_bones = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10; ...
+    7,11;11,12;12,13;14,15;14,16;15,16;15,17;17,18;18,19; ...
+    16,20;20,21;21,22];
 
 
 % ------------------------------------------------------------------------
@@ -227,6 +240,8 @@ for datai = 1:ndatasets
             Landscape.frex = landscape_frex;
         end
         Landscape.ncomps = min(landscape_ncomps,size(GED{datai}.evals,1));
+        Landscape.xlabel = landscape_xlabel;
+        Landscape.title = landscape_title;
 
         Patterns = [];
         Patterns.frex = patterns_frex;
@@ -235,8 +250,14 @@ for datai = 1:ndatasets
         Patterns.comp = patterns_comp;
         Patterns.srate = srate;
         Patterns.start = patterns_start;
+        Patterns.bones = patterns_bones;
+        Patterns.plot_matrix = patterns_plot_matrix;
+        Patterns.animate = patterns_animate;
+        Patterns.animation_duration = patterns_animation_duration;
+        Patterns.frequency_unit = patterns_frequency_unit;
 
-        FREQNESS_Visualizer_Mocap(GED{datai},Landscape,Patterns);
+        FREQNESS_Visualizer_Mocap(GED{datai},Landscape,Patterns, ...
+            'plot_all',visualizer_plot_all);
 
     end
 

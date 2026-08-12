@@ -29,7 +29,18 @@ coordination (`FREQNESS_SpaceCoord_Mocap`).
 `FREQNESS_EffectDim_Mocap` is the MoCap counterpart of the MEEG
 `FREQNESS_EntropyLandscape` function. It computes quadratic Rényi entropy and
 effective dimensionality from the complete eigenspectrum and visualizes the
-effective number of frequency-specific body networks.
+effective number of frequency-specific body networks. Its visualization uses
+the same log2 frequency axis, shaded group SEM, and component palette as the
+network landscape.
+
+`FREQNESS_Visualizer_Mocap` follows the MEEG visualizer convention of showing
+the grand-average network landscape by default and accepting `plot_all=true`
+for participant-level landscapes. Its MoCap-specific outputs comprise labelled
+XYZ pattern matrices, globally normalized skeletal activation maps, and an
+optional synchronized animation of the network backprojection and original
+motion. Animation is controlled through `Patterns.animate`; marker colors
+remain participant-specific, while the static outputs use the visual language
+of the Dance reference study's Figure 2.
 
 ## External dependencies
 
