@@ -32,7 +32,8 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 %             Optionally, this can be a 3D matrix in
 %             markers-by-time-by-participants format.
 %
-%  - frex   : Vector of frequencies.
+%  - frex   : Shared frequency vector or participant-specific
+%             [nFrex x nParticipants] frequency matrix.
 %
 %  - srate  : Sampling rate (Hz).
 %
@@ -107,48 +108,88 @@ filter         = opts.filter;
 regularisation = opts.regularisation;
 ncomps         = opts.ncomps;
 
+if ~isnumeric(ncomps) || ~isreal(ncomps) || ~isscalar(ncomps) || ...
+        ~isfinite(ncomps) || ncomps ~= round(ncomps) || ncomps < 1 || ...
+        ncomps > size(data,1)
+    error('ncomps must be an integer from 1 to the number of marker coordinates.');
+end
+
 % Compute necessary parameters
 pnts2keep = duration * srate;
-nfrex = length(frex);
-% Re-sort frequency vector in ascending order
-frex = sort(frex,'ascend');
-
-% Handle missing filter width (based on Rosso et al., 2025 - Advanced Science)
-if isempty(fwidth)
-    % disp('Filter width not provided. Using default reference values.');
-    ref_frex = .1; % set a reference frequency
-    ref_fwhm = .01;  % set a reference filter width
-    max_frex = 10;   % set maximum frequency in the range of motion
-    nfrex_above = 100; % how many frequencies above the reference
-    % Compute the vector of frequencies
-    frex_above = linspace(ref_frex, max_frex, nfrex_above);
-    frex_all = frex_above;
-    % Compute the vector of filter width (log-spaced)
-    fwhm_above = logspace(log10(ref_fwhm), log10(ref_fwhm * (nfrex_above)), nfrex_above);
-    fwidth_all = fwhm_above;
-    % Match user-requested frequencies with the reference frequencies from Rosso et al. (2025)
-    [~, idx] = min(abs(frex_all - frex(1))); % matching the lowest user-defined frequency
-    fwidth = fwidth_all(idx);
-end
-
-% Compute filter widths
-if strcmpi(filter, 'logarithmic')
-    fwidth_all = logspace(log10(fwidth), log10(fwidth * nfrex), nfrex);
-elseif strcmpi(filter, 'linear')
-    fwidth_all = linspace(fwidth, fwidth * nfrex, nfrex);
-else
-    % disp("Invalid filter type. Defaulting to 'logarithmic'.");
-    fwidth_all = logspace(log10(fwidth), log10(fwidth * nfrex), nfrex);
-end
-
-%% GED Computation
 
 % Check input size to verify if more than one participant is being analyzed
-if length(size(data)) < 3 % no extra dimension in the input
+if ndims(data) < 3
     nsubs = 1;
 else
     nsubs = size(data,3);
 end
+
+% Normalize shared or participant-specific frequency input
+if ~isnumeric(frex) || ~isreal(frex) || isempty(frex) || ...
+        any(~isfinite(frex(:))) || any(frex(:) <= 0)
+    error('frex must contain positive finite frequencies.');
+end
+if isvector(frex)
+    frex = sort(frex(:),'ascend');
+    nfrex = numel(frex);
+    frex_by_participant = repmat(frex,1,nsubs);
+    shared_frequencies = true;
+elseif ismatrix(frex) && size(frex,2) == nsubs
+    frex = sort(frex,1,'ascend');
+    nfrex = size(frex,1);
+    frex_by_participant = frex;
+    shared_frequencies = false;
+else
+    error(['frex must be a shared vector or an ' ...
+        '[nFrex x nParticipants] matrix.']);
+end
+
+% Handle missing filter width (based on Rosso et al., 2025 - Advanced Science)
+if isempty(fwidth)
+    ref_frex = .1;
+    ref_fwhm = .01;
+    max_frex = 10;
+    nfrex_above = 100;
+    frex_all = linspace(ref_frex,max_frex,nfrex_above);
+    reference_widths = logspace(log10(ref_fwhm), ...
+        log10(ref_fwhm*nfrex_above),nfrex_above);
+    starting_width = zeros(1,nsubs);
+    for subi = 1:nsubs
+        [~,idx] = min(abs(frex_all-frex_by_participant(1,subi)));
+        starting_width(subi) = reference_widths(idx);
+    end
+elseif isnumeric(fwidth) && isscalar(fwidth) && ...
+        isfinite(fwidth) && fwidth > 0
+    starting_width = repmat(fwidth,1,nsubs);
+elseif isnumeric(fwidth) && isvector(fwidth) && ...
+        numel(fwidth) == nfrex && all(isfinite(fwidth)) && all(fwidth > 0)
+    fwidth_all = repmat(fwidth(:),1,nsubs);
+    starting_width = [];
+elseif isnumeric(fwidth) && isequal(size(fwidth),[nfrex nsubs]) && ...
+        all(isfinite(fwidth(:))) && all(fwidth(:) > 0)
+    fwidth_all = fwidth;
+    starting_width = [];
+else
+    error(['fwidth must be empty, a positive scalar, a shared nFrex ' ...
+        'vector, or an [nFrex x nParticipants] matrix.']);
+end
+
+if ~isempty(starting_width)
+    fwidth_all = zeros(nfrex,nsubs);
+    for subi = 1:nsubs
+        if strcmpi(filter,'logarithmic')
+            fwidth_all(:,subi) = logspace(log10(starting_width(subi)), ...
+                log10(starting_width(subi)*nfrex),nfrex);
+        elseif strcmpi(filter,'linear')
+            fwidth_all(:,subi) = linspace(starting_width(subi), ...
+                starting_width(subi)*nfrex,nfrex);
+        else
+            error('filter must be ''logarithmic'' or ''linear''.');
+        end
+    end
+end
+
+%% GED Computation
 % disp(['Data given for ' num2str(nsubs) ' participants']);
 
 % Initialize GED outputs (subjects as last dimension)
@@ -168,7 +209,8 @@ for subi = 1:nsubs
         % display(['Processing frequency #' num2str(frexi)])
 
         % Filter data
-        narrowData = filterFGx(broadData,srate,frex(frexi),fwidth_all(frexi),0); % turn the last argument of the function filterFGx() to 1 to get a visualization of the Gaussian filter in frequency domain
+        narrowData = filterFGx(broadData,srate, ...
+            frex_by_participant(frexi,subi),fwidth_all(frexi,subi),0);
 
         % Compute covariance matrices
         covS = cov(narrowData');
@@ -228,7 +270,12 @@ FREQ.evals = GEDevals; % complete normalized eigenspectrum
 FREQ.evecs = GEDevecs; % eigenvectors
 FREQ.pats  = GEDpats;  % spatial activation patterns
 FREQ.ts    = GEDts;    % time series
-FREQ.frex  = frex;     % to make use of the analyzed frequencies later on
+if shared_frequencies
+    FREQ.frex = frex;
+else
+    FREQ.frex = frex_by_participant;
+end
+FREQ.fwhm = fwidth_all;
 
 
 end

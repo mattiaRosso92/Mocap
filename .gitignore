@@ -5,6 +5,7 @@
 *.asv
 *.autosave
 *.m~
+.Rhistory
 slprj/
 
 # Python generated files and local environments

@@ -65,8 +65,10 @@ run_space_coord = false;
 % BLOCK #1: FREQNESS_NetworkEstimation_Mocap
 % ------------------------------------------------------------------------
 
-% A numeric frequency vector is applied to every dataset. Alternatively,
-% provide one frequency vector per dataset in a cell array matching allData.
+% A numeric frequency vector is applied to every participant. For grouped
+% data, an [nFrex x nParticipants] matrix permits participant-specific
+% frequencies. Alternatively, provide one vector/matrix per dataset in a
+% cell array matching allData.
 frex  = 0.1:0.1:10;
 srate = 250;
 
@@ -74,13 +76,16 @@ network_duration       = [];
 network_fwidth         = [];
 network_filter         = 'logarithmic';
 network_regularisation = 0.01;
-network_ncomps         = 30;
+% ncomps controls only retained eigenvectors, patterns, and time series.
+% NetworkEstimation always retains the complete eigenspectrum for EffectDim.
+network_ncomps         = 4;
 
 
 % ------------------------------------------------------------------------
 % BLOCK #2: FREQNESS_EffectDim_Mocap
 % ------------------------------------------------------------------------
 
+effectdim_figure   = true;
 effectdim_plot_all = false;
 
 
@@ -238,6 +243,11 @@ for datai = 1:ndatasets
         'regularisation',network_regularisation, ...
         'ncomps',network_ncomps);
 
+    if size(FREQ{datai}.evals,1) ~= size(this_data,1)
+        error(['NetworkEstimation must retain the complete eigenspectrum ' ...
+            'independently of network_ncomps.']);
+    end
+
 
     %% ====================================================================
     % BLOCK #2: FREQNESS_EffectDim_Mocap
@@ -245,7 +255,8 @@ for datai = 1:ndatasets
 
     if run_effect_dim
         [H2{datai},ED{datai}] = FREQNESS_EffectDim_Mocap( ...
-            FREQ{datai},'plot_all',effectdim_plot_all);
+            FREQ{datai},'figure',effectdim_figure, ...
+            'plot_all',effectdim_plot_all);
     end
 
 

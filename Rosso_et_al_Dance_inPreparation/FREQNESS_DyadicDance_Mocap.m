@@ -1,22 +1,121 @@
-clear all
+clear
 close all
+clc
 
 
-%% Startup
+%% BLOCK 0 - USER SETTINGS, STARTUP, AND OUTPUT ROUTING
+
+% All raw inputs and all newly generated outputs stay on the local drive in
+% Dance_Data. The dedicated results root prevents this replication from
+% modifying any legacy analyses currently stored directly in Dance_Data.
+path_script = fileparts(mfilename('fullpath'));
+path_repo = fileparts(path_script);
+
+CFG = [];
+CFG.common.data_path = fullfile(path_repo,'Dance_Data');
+CFG.common.results_folder = ...
+    'FREQNESS_Results_Rosso_et_al_inPreparation';
+CFG.common.results_path = fullfile( ...
+    CFG.common.data_path,CFG.common.results_folder);
+CFG.common.minimum_free_gib = 50;
+CFG.common.ncomps = 4;
+
+CFG.block1.output_path = fullfile( ...
+    CFG.common.results_path,'01_Core');
+CFG.block1.overwrite_flag = false;
+CFG.block2.output_path = fullfile( ...
+    CFG.common.results_path,'02_Landscape');
+CFG.block2.overwrite_flag = false;
+CFG.block3.output_path = fullfile( ...
+    CFG.common.results_path,'03_Coordination');
+CFG.block3.overwrite_flag = false;
+CFG.block4.output_path = fullfile( ...
+    CFG.common.results_path,'04_PhaseSpaceRQA');
+CFG.block4.overwrite_flag = false;
+CFG.block5.output_path = fullfile( ...
+    CFG.common.results_path,'05_Group');
+CFG.block5.figure_path = fullfile(CFG.block5.output_path,'Figures');
+CFG.block5.overwrite_flag = false;
+CFG.block6.output_path = fullfile( ...
+    CFG.common.results_path,'06_Statistics_R');
+CFG.block6.overwrite_flag = false;
+
+% Core analysis settings. Visualizing every single trial would open more
+% than one thousand figures, so trial visualization is optional in BLOCK 1
+% and group visualization is consolidated in BLOCK 5.
+CFG.block1.visualize = false;
+CFG.block1.save = true;
+
+% Confirm that this run is isolated from the legacy result locations.
+path_home = CFG.common.data_path;
+assert(isfolder(path_home), ...
+    'Dance_Data was not found at the repository-relative local path.');
+assert(~strcmp(CFG.common.results_path,path_home), ...
+    'The results root must differ from the raw-data root.');
+assert(startsWith(CFG.common.results_path,[path_home filesep]), ...
+    'The results root must be a child folder of Dance_Data.');
+
+required_metadata = {'cond_vis.csv','cond_mus.csv', ...
+    'song_subj_LEFT.csv','song_subj_RIGHT.csv'};
+for filei = 1:numel(required_metadata)
+    assert(isfile(fullfile(path_home,required_metadata{filei})), ...
+        'Missing Dance input file: %s',required_metadata{filei});
+end
+
+% Estimate retained BLOCK 1 output and abort before heavy computation
+% unless the internal volume has conservative headroom. Each valid dyad
+% contributes 4 conditions x 8 trials; each trial retains one FREQ struct
+% with complete eigenvalues and ncomps time series/patterns/eigenvectors.
+data_volume = javaObject('java.io.File',path_home);
+available_gib = double(data_volume.getUsableSpace())/1024^3;
+valid_dyad_count = 33;
+trial_count = valid_dyad_count*4*8;
+marker_coordinate_count = 66;
+sample_count = 15000;
+frequency_count = 32;
+participant_count = 2;
+bytes_per_trial = 8*( ...
+    marker_coordinate_count*frequency_count*participant_count + ...
+    marker_coordinate_count*CFG.common.ncomps*frequency_count*participant_count*2 + ...
+    CFG.common.ncomps*sample_count*frequency_count*participant_count);
+estimated_block1_gib = bytes_per_trial*trial_count/1024^3;
+fprintf('Estimated retained BLOCK 1 output: %.1f GiB\n', ...
+    estimated_block1_gib);
+fprintf('Dance_Data volume free space: %.1f GiB\n',available_gib);
+if available_gib < CFG.common.minimum_free_gib
+    error(['Full Dance replication not started: %.1f GiB is available, ' ...
+        'but at least %.0f GiB is required.'], ...
+        available_gib,CFG.common.minimum_free_gib);
+end
+
+output_paths = {CFG.block1.output_path,CFG.block2.output_path, ...
+    CFG.block3.output_path,CFG.block4.output_path, ...
+    CFG.block5.output_path,CFG.block5.figure_path, ...
+    CFG.block6.output_path};
+for pathi = 1:numel(output_paths)
+    if ~isfolder(output_paths{pathi})
+        mkdir(output_paths{pathi})
+    end
+end
+clear valid_dyad_count trial_count marker_coordinate_count sample_count
+clear frequency_count participant_count bytes_per_trial
+
+% Save the exact run configuration in the new results root. Do not replace
+% a previous configuration unless overwrite_flag is explicitly enabled.
+configuration_file = fullfile( ...
+    CFG.common.results_path,'FREQNESS_Dance_RunConfiguration.mat');
+if ~isfile(configuration_file) || CFG.block1.overwrite_flag
+    save(configuration_file,'CFG')
+end
 
 % Choose if you want to enable visualizations
-vis_flag = 1;
+vis_flag = CFG.block1.visualize;
 
 % Choose if you want to enable saving of FREQNESS output
-save_flag = 0;
+save_flag = CFG.block1.save;
 
 % Choose the method youn want to use for FREQNESS (GED or PCA)
 which_method = 'GED';
-
-% Define repository-relative data path
-path_script = fileparts(mfilename('fullpath'));
-path_repo = fileparts(path_script);
-path_home = [fullfile(path_repo,'Dance_Data') filesep];
 
 % Initialize the MoCap toolbox and external dependencies
 path_toolbox = fullfile(path_repo,'FREQNESS_Mocap_Toolbox');
@@ -26,14 +125,12 @@ FREQNESS_Startup_Mocap();
 % Filter data by experimental conditions
 % 	- 'cond_vis': each cell informs about the condition of a trial (0='No Visual Contact', 1='Visual Contact')
 % 	- 'cond_mus': each cell informs about the condition of a trial (0='Different Music', 1='Same Music')
-if isfile([path_home 'cond_vis.csv']) && isfile([path_home 'cond_mus.csv'])
-    lbl_vis = csvread([path_home 'cond_vis.csv'], 1, 1);
-    lbl_mus = csvread([path_home 'cond_mus.csv'], 1, 1);
-else
-    DanceContext = load([path_home 'FREQNESS.mat'],'lbl_vis','lbl_mus');
-    lbl_vis = DanceContext.lbl_vis;
-    lbl_mus = DanceContext.lbl_mus;
-end
+lbl_vis = readmatrix(fullfile(path_home,'cond_vis.csv'), ...
+    'NumHeaderLines',1);
+lbl_vis = lbl_vis(:,2:end);
+lbl_mus = readmatrix(fullfile(path_home,'cond_mus.csv'), ...
+    'NumHeaderLines',1);
+lbl_mus = lbl_mus(:,2:end);
 
 
 %% Prepare data
@@ -60,6 +157,11 @@ ntrials = 8; % hard-coded for this experiment
 marklabels = {'LB Head','LF Head','RF Head','RB Head','Sternum','L Shoulder','R Shoulder', ...
     'L Elbow','L Wrist','L Hand','R Elbow','R Wrist','R Hand','Pelvis','L Hip', ...
     'R Hip','L Knee','L Ankle','L Foot','R Knee','R Ankle','R Foot'};
+
+% Dance-study 22-marker skeleton, shared by all visualization blocks.
+bones = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10; ...
+    7,11;11,12;12,13;14,15;14,16;15,16;15,17;17,18;18,19; ...
+    16,20;20,21;21,22];
 
 % Expand with X, Y, Z prefixes
 xyz_marklabels = cell(1, length(marklabels) * 3);
@@ -94,13 +196,13 @@ y_idx = 2:3:nmarks-1;
 z_idx = 3:3:nmarks;
 
 
-%% Run FREQNESS
+%% BLOCK 1 - NETWORK ESTIMATION
  
 % Loop over conditions
 for condi = 1:nconds
 
     % Select dyad and subject
-    for dyadi = 2%list_dyads
+    for dyadi = list_dyads
         disp(['Condition#' num2str(condi) ' - Dyad #' num2str(dyadi)])
         id_dyad = dyadi;
         id_dyad_str = sprintf('%02d', id_dyad); % to add the '0' before numbers < 10
@@ -116,8 +218,18 @@ for condi = 1:nconds
             id_trial = list_trials(triali);
             id_trial_str = sprintf('%02d', id_trial); % to add the '0' before numbers < 10
 
+            output_file = fullfile(CFG.block1.output_path,sprintf( ...
+                'FREQNESS_CORE_D%d_C%d_T%d%s.mat', ...
+                dyadi,condi,triali,prefix{idx_XYZ}));
+            if isfile(output_file) && ~CFG.block1.overwrite_flag
+                fprintf('BLOCK 1 output exists; skipping %s.\n',output_file);
+                continue
+            end
+
             % Refresh data matrix for every iteration
             markData = [];
+            beat_frex = zeros(1,nsubs);
+            frex = [];
 
             % Loop over partners
             for subi = 1:nsubs
@@ -125,16 +237,11 @@ for condi = 1:nconds
 
                 % Define path
                 path_data = fullfile(path_home,['Dyad_' id_dyad_str],['subj' id_sub]);
-                cd(path_data);
 
                 % Import info on songs, per single participant
-                song_file = [path_home 'song_subj' id_sub '.csv'];
-                if isfile(song_file)
-                    song_info = csvread(song_file, 1, 1) + 1; % compensate Python 0-indexing
-                else
-                    DanceContext = load([path_home 'FREQNESS.mat'],'song_info');
-                    song_info = DanceContext.song_info;
-                end
+                song_file = fullfile(path_home,['song_subj' id_sub '.csv']);
+                song_info = readmatrix(song_file,'NumHeaderLines',1);
+                song_info = song_info(:,2:end) + 1; % compensate Python 0-indexing
                 songs_frex = 1 ./ (60 ./ song_bpms); % convert to Hz
                 % Find beat frequency (find song in 'song_subj_LEFT/RIGHT.csv')
                 idx_beat = song_info(id_dyad,id_trial);
@@ -144,7 +251,10 @@ for condi = 1:nconds
                 frex(:,subi) = beat_frex(subi)/8:beat_frex(subi)/8:beat_frex(subi)*4; % above beat
 
                 % Import data (skip 1st row and column)
-                tempData = csvread(['tr' id_trial_str '.csv'], 1, 1);
+                trial_file = fullfile(path_data,['tr' id_trial_str '.csv']);
+                assert(isfile(trial_file),'Missing raw trial: %s',trial_file);
+                tempData = readmatrix(trial_file,'NumHeaderLines',1);
+                tempData = tempData(:,2:end);
                 %tempData = tempData(:,1:dwn:end);  % Downsample the data
                 tempData = tempData(1:end-3,:);  % Remove last marker
                 markData = cat(3,markData,tempData); % Assign to 3rd dimension of input data matrix
@@ -165,13 +275,6 @@ for condi = 1:nconds
 
             end
 
-            % Initialize ED output upon first iteration
-            if condi == 1 && dyadi == list_dyads(1) && triali == 1 
-                nfrex = size(frex,1);
-                ED = zeros(nconds,length(list_dyads),ntrials,nfrex,nsubs);
-            end
-
-
             %% OPTIONAL: convert data to velocity
             % 
             % % NOTE: Ask Petri & Felix whether they project the position
@@ -183,15 +286,20 @@ for condi = 1:nconds
 
             %% Run network decomposition on the dyad
 
-            % NOTE: if you are going to save the GED output, select few ncomps; in
-            % order to estimate ED, you need them to equal nmarks
+            % ncomps controls retained eigenvectors, patterns, and time
+            % series only. The complete eigenspectrum is always retained
+            % and remains available to EffectDimensionality.
 
             if strcmp(which_method,'GED')
 
                 % Compute FREQNESS with GED
                 GED = []; % refresh for loop iterations
-                GED = FREQNESS_NetworkEstimation_Mocap(markData, frex, srate,'ncomps',4); % networks estimation
-                %ED(condi,dyadi,triali,:,:)  = FREQNESS_EffectDim(GED.evals); % effective dimensionality
+                GED = FREQNESS_NetworkEstimation_Mocap(markData, frex, srate, ...
+                    'ncomps',CFG.common.ncomps); % networks estimation
+                assert(size(GED.evals,1) == size(markData,1), ...
+                    'NetworkEstimation did not retain the complete eigenspectrum.');
+                assert(size(GED.evecs,2) == CFG.common.ncomps, ...
+                    'NetworkEstimation retained an unexpected component count.');
                 % Normalize frequencies by beat
                 GED.frex_norm = GED.frex ./ beat_frex;
 
@@ -199,7 +307,8 @@ for condi = 1:nconds
 
                 % Compute FREQNESS with PCA
                 PCA = []; % refresh for loop iterations
-                PCA = FREQNESS_NetworkEstimation_Mocap_PCA(markData, frex, srate,'ncomps',4); % networks estimation
+                PCA = FREQNESS_NetworkEstimation_Mocap_PCA(markData, frex, srate, ...
+                    'ncomps',CFG.common.ncomps); % networks estimation
                 %ED(condi,dyadi,triali,:,:)  = FREQNESS_EffectDim(PCA.evals); % effective dimensionality
                 % Normalize frequencies by beat
                 PCA.frex_norm = PCA.frex ./ beat_frex;
@@ -213,9 +322,14 @@ for condi = 1:nconds
 
             % Save output
             if save_flag == 1
-                mkdir([path_home, which_method '_output']);
-                save([path_home, which_method '_output/' which_method '_dyad_' num2str(dyadi) '_cond_' num2str(condi) '_trial_' num2str(triali) prefix{idx_XYZ}]);
-                %save([path_home, which_method '_EffectDim' prefix{idx_XYZ}], 'ED');
+                marker_reference = markData(:,1,:);
+                if strcmp(which_method,'GED')
+                    save(output_file,'GED','beat_frex','id_dyad','condi', ...
+                        'triali','id_trial','srate','marker_reference','-v7.3')
+                else
+                    save(output_file,'PCA','beat_frex','id_dyad','condi', ...
+                        'triali','id_trial','srate','marker_reference','-v7.3')
+                end
             end
 
 
@@ -230,7 +344,7 @@ for condi = 1:nconds
                 % Settings (visualization of network landscape)
                 Landscape = [];
                 Landscape.frex   = frex;
-                Landscape.ncomps = 4;
+                Landscape.ncomps = CFG.common.ncomps;
 
                 % Settings (visualization of network activation patterns)
                 Patterns = [];
@@ -240,15 +354,13 @@ for condi = 1:nconds
                 Patterns.comp   = 1;            % choose the component to inspect
                 Patterns.srate  = srate;        % necessary for the animation
                 Patterns.start  = .25;           % starting point of the animation (0-1)
-                Patterns.bones  = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10;7,11;11,12;12,13;
-                                   14,15;14,16;15,16;15,17;17,18;18,19;16,20;20,21;21,22];
-                                    % bone sticks for visualization
-                                    % pre-shifted links (MATLAB 1-based indexing already applied)
+                Patterns.bones  = bones;
         
 
                 %%% ------------------ COMPUTATION --------------------- %%%
 
-                % Plot bodily network landscape, spatial activation in XYZ
+                % Optionally inspect this individual dyad and trial before
+                % proceeding to the group-level analysis blocks.
                 FREQNESS_Visualizer_Mocap(GED,Landscape,Patterns)
 
 
@@ -265,8 +377,7 @@ end
 
 
 
-%% FREQNESS GROUP-LEVEL
-% Run up to the '%% Prepare Data' section before running this section
+%% BLOCK 2 - NETWORK LANDSCAPES AND EFFECTIVE DIMENSIONALITY
 
 % Select method: 'GED' or 'PCA'
 which_method = 'GED';
@@ -284,18 +395,23 @@ for dyadi = list_dyads
         for triali = 1:ntrials
 
             % Load into a struct so variable name (GED or PCA) becomes a field
-            S = load([path_home, which_method '_output/' which_method ...
-                      '_dyad_' num2str(dyadi) '_cond_' num2str(condi) ...
-                      '_trial_' num2str(triali) prefix{idx_XYZ}]);
+            input_file = fullfile(CFG.block1.output_path,sprintf( ...
+                'FREQNESS_CORE_D%d_C%d_T%d%s.mat', ...
+                dyadi,condi,triali,prefix{idx_XYZ}));
+            assert(isfile(input_file),'Missing BLOCK 1 output: %s',input_file);
+            S = load(input_file,which_method,'marker_reference');
 
             % Alias to the chosen method struct (either S.GED or S.PCA)
             M = S.(which_method);
 
             % Initialize group-level outputs once, using the loaded struct sizes
             if dyadi == list_dyads(1) && condi == 1 && triali == 1
-                all_evals     = zeros([ndyads, nconds, ntrials, size(M.evals)]);
-                all_pats      = zeros([ndyads, nconds, ntrials, size(M.pats)]);
-                all_frex_norm = zeros([ndyads, nconds, ntrials, nsubs, length(M.frex)]);
+                all_evals = nan([ndyads,nconds,ntrials,size(M.evals)]);
+                all_pats = nan([ndyads,nconds,ntrials,size(M.pats)]);
+                all_frex_norm = nan( ...
+                    ndyads,nconds,ntrials,nsubs,size(M.frex,1));
+                ED = nan(nconds,ndyads,ntrials,size(M.evals,2),nsubs);
+                marker_reference = S.marker_reference;
             end
 
             % Assign normalized frequency axis (based on beat of each subject and trial)
@@ -303,9 +419,26 @@ for dyadi = list_dyads
                 all_frex_norm(dyadi,condi,triali,subi,:) = M.frex_norm(:,subi);
             end
 
-            % Assign outputs (retain top components)
-            all_evals(dyadi,condi,triali,1:ncomps2keep,:,:)  = M.evals(1:ncomps2keep,:,:);
+            % Retain the complete eigenspectrum for EffectDimensionality;
+            % retain only the requested spatial components for visualization.
+            all_evals(dyadi,condi,triali,:,:,:) = M.evals;
             all_pats(dyadi,condi,triali,:,1:ncomps2keep,:,:) = M.pats(:,1:ncomps2keep,:,:);
+            [this_H2,this_ED] = FREQNESS_EffectDim_Mocap(M,'figure',false);
+            ED(condi,dyadi,triali,:,:) = this_ED;
+
+            % Match the HYPER-NESS stage convention: one compact landscape
+            % file per analysis unit (here: dyad, condition, and trial).
+            landscape_file = fullfile(CFG.block2.output_path,sprintf( ...
+                'FREQNESS_LANDSCAPE_D%d_C%d_T%d%s.mat', ...
+                dyadi,condi,triali,prefix{idx_XYZ}));
+            if ~isfile(landscape_file) || CFG.block2.overwrite_flag
+                H2 = this_H2;
+                ED_trial = this_ED;
+                frex = M.frex;
+                frex_norm = M.frex_norm;
+                save(landscape_file,'H2','ED_trial','frex','frex_norm', ...
+                    'dyadi','condi','triali','-v7.3')
+            end
 
         end
     end
@@ -313,19 +446,431 @@ end
 
 % Save output
 if save_flag == 1
-    save([path_home, which_method '_output/' which_method '_All' prefix{idx_XYZ} '.mat'], ...
-         'all_evals', 'all_pats', 'all_frex_norm');
+    group_output_file = fullfile(CFG.block2.output_path, ...
+        ['FREQNESS_GroupNetworkSummary' prefix{idx_XYZ} '.mat']);
+    if ~isfile(group_output_file) || CFG.block2.overwrite_flag
+        save(group_output_file,'all_evals','all_pats','all_frex_norm', ...
+            'ED','list_dyads','marker_reference','-v7.3')
+    end
 end
 
 
 
-%% VISUALIZATION: Eigenspectra & Activation Patterns (Group-level)
+%% BLOCK 3 - JRQA TEMPORAL COORDINATION AND SPATIAL COORDINATION
+
+clearvars -except CFG
+
+% Pick component
+which_comp = 2;
+
+% Choose wheteher you want to attune JRQA
+attune_flag = 0;
+
+% Restore repository-relative paths after clearing the large group arrays.
+path_home = CFG.common.data_path;
+path_repo = fileparts(fileparts(mfilename('fullpath')));
+path_toolbox = fullfile(path_repo,'FREQNESS_Mocap_Toolbox');
+addpath(path_toolbox)
+FREQNESS_Startup_Mocap();
+
+% Re-initialize settings to import GED outputs from the folder
+ndyads = 35;
+nconds  = 4;
+ntrials = 8;
+nsubs   = 2;
+list_dyads = [1:12 14:31 33:ndyads]; % Issue with dyad #13: one trial is missing in condi #1 | dyad#32 gives arror with RPparam in condi #4
+srate = 250;
+
+% This full-experiment script always consumes the new BLOCK 1 outputs.
+validation_flag = false;
+assert(isfolder(CFG.block1.output_path), ...
+    'BLOCK 1 output folder is missing: %s',CFG.block1.output_path);
+condlabels = {'NOvis-DIFFmus','NOvis-SAMEmus', ...
+    'YESvis-DIFFmus','YESvis-SAMEmus'};
+
+% Define metric levels of interest
+meter = [.25 .5 1 2];
+nmeters = length(meter);
+idx_frex = zeros(nsubs,nmeters);
+
+% Downsampling with correction for aliasing
+dwn = 10;
+srate = round(srate/dwn); % update sampling rate
+% Low-pass Butterworth filter to avoid aliasing by downsampling
+nyquist = round(srate/2);
+lp_order = 4;        % Filter order
+lp_cutoff_norm = .8; % Normalized cutoff frequency (.8 of the nyquist, when normalized to 1)
+[b_butt, a_butt] = butter(lp_order, lp_cutoff_norm, 'low'); % Coefficients for high-pass filter
+%     % Visualize the filter's freqency response
+%     figure; freqz(b_butt, a_butt, 100, srate); % Frequency response
+
+% Define duration
+duration = [.15 .85];
+
+% Optimize JRQA parameters (if requested)
+if attune_flag ==1
+
+    % Initialize JRQA parameters
+    [tau,m,ps] = deal(zeros(nsubs,ndyads,nconds,nmeters,ntrials));
+
+    % Loop over conditions
+    for condi = 1:nconds
+
+        % Select dyad and subject
+        for dyadi = list_dyads
+            disp(['Condition#' num2str(condi) ' - Dyad #' num2str(dyadi)])
+
+            % Analyse trial by trial
+            for triali = 1:ntrials
+
+                % Import GED output
+                input_file = fullfile(CFG.block1.output_path,sprintf( ...
+                    'FREQNESS_CORE_D%d_C%d_T%d.mat', ...
+                    dyadi,condi,triali));
+                assert(isfile(input_file),'Missing BLOCK 1 output: %s',input_file);
+                S = load(input_file,'GED','beat_frex');
+                GED = S.GED;
+                beat_frex = S.beat_frex;
+
+                for subi = 1:nsubs
+
+                    % Loop over metric levels (hamronics of the target frequency);
+                    for metri = 1:nmeters
+
+                        % Find frequency in vector
+                        [~,idx_frex(subi,metri)] = min(abs(beat_frex(subi)*meter(metri) - GED.frex(:,subi)));
+
+                        % Assign timeseries
+                        gedTs = GED.ts(which_comp,:,idx_frex(subi,metri),subi); % assign component corresponding to the frequency of interest
+
+                        % Apply Butterworth filter for aliasing correction
+                        gedTs = filtfilt(b_butt, a_butt, gedTs); % Zero-phase filtering
+
+                        % Downsample
+                        gedTs = gedTs(1:dwn:end);
+
+                        % Retain window of interest
+                        gedTs = gedTs( round(duration(1)*srate) : round(duration(end)*srate) );
+
+                        % Optimize embedding parameters
+                        %disp(['Optimizing embedding parameters for participant #' num2str(subi)])
+                        [tau(subi,dyadi,condi,metri,triali), m(subi,dyadi,condi,metri,triali), ps(subi,dyadi,condi,metri,triali)] = RPparam(gedTs');
+
+                    end
+
+                end
+
+            end
+
+        end
+
+    end
+
+    % Average optimal parameters (assign to input structure)
+    JRQA.tau = round(mean(tau(:)));
+    JRQA.m   = round(mean(m(:)));
+    JRQA.ps  = round(mean(ps(:)),1);
+
+    % Save output
+    parameter_file = fullfile(CFG.block3.output_path, ...
+        ['JRQA_Parameters_Comp#' num2str(which_comp) '.mat']);
+    if ~isfile(parameter_file) || CFG.block3.overwrite_flag
+        save(parameter_file,'JRQA')
+    end
+
+else
+
+    % Import JRQA parapemeters
+    parameter_file = fullfile(CFG.block3.output_path, ...
+        ['JRQA_Parameters_Comp#' num2str(which_comp) '.mat']);
+    if isfile(parameter_file)
+        load(parameter_file,'JRQA')
+    else
+        legacy_parameter_file = fullfile(path_home,'JRQA_Parameters.mat');
+        assert(isfile(legacy_parameter_file), ...
+            ['No JRQA parameters were found. Enable attune_flag or provide ' ...
+            'the legacy JRQA_Parameters.mat input.']);
+        load(legacy_parameter_file,'JRQA')
+    end
+
+end
+
+% Pre-allocate group-level output
+[MIRROR,RR,DET] = deal(zeros(ndyads,nconds,nmeters,ntrials));
+
+% Run analyses
+for condi = 1:nconds
+    for dyadi = list_dyads
+        disp(['Condition#' num2str(condi) ' - Dyad #' num2str(dyadi)])
+        for triali = 1:ntrials
+
+            coordination_file = fullfile(CFG.block3.output_path,sprintf( ...
+                'FREQNESS_COORDINATION_D%d_C%d_T%d.mat', ...
+                dyadi,condi,triali));
+            if isfile(coordination_file) && ~CFG.block3.overwrite_flag
+                S = load(coordination_file,'FREQjrqa','FREQmirror');
+                for metri = 1:nmeters
+                    MIRROR(dyadi,condi,metri,triali) = S.FREQmirror(metri);
+                    RR(dyadi,condi,metri,triali) = S.FREQjrqa(metri).RR;
+                    DET(dyadi,condi,metri,triali) = S.FREQjrqa(metri).DET;
+                end
+                continue
+            end
+
+            % Import GED output
+            input_file = fullfile(CFG.block1.output_path,sprintf( ...
+                'FREQNESS_CORE_D%d_C%d_T%d.mat', ...
+                dyadi,condi,triali));
+            assert(isfile(input_file),'Missing BLOCK 1 output: %s',input_file);
+            S = load(input_file,'GED','beat_frex');
+            GED = S.GED;
+            beat_frex = S.beat_frex;
+
+            % Extract and process time series
+            gedTs = squeeze(GED.ts(which_comp,:,:,:)); % [original_time x nfrex x nsubs]
+            for subi = 1:nsubs
+                for frexi = 1:size(gedTs,2)
+                    gedTs(:,frexi,subi) = filtfilt(b_butt, a_butt, gedTs(:,frexi,subi));  % Butterworth filter for aliasing correction
+                end
+            end
+            gedTs = gedTs(1:dwn:end,:,:);  % Downsampling both subs
+            % Overwrite back into GED.ts — shrink time dimension
+            GED.ts = GED.ts(:,1:dwn:end,:,:);  % Shrink time dimension
+            for subi = 1:nsubs
+                for frexi = 1:size(gedTs,2)
+                    GED.ts(which_comp,:,frexi,subi) = gedTs(:,frexi,subi); % re-assign
+                end
+            end
+
+            % Compute temporal coordination
+            FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
+                GED,JRQA,beat_frex, ...
+                'metric_levels',meter, ...
+                'component',which_comp, ...
+                'duration',duration);
+
+            % Compute spatial coordination
+            FREQmirror = FREQNESS_SpaceCoord_Mocap( ...
+                GED,beat_frex, ...
+                'metric_levels',meter, ...
+                'component',which_comp);
+
+            % Assign to group-level variables
+            for metri = 1:nmeters
+                MIRROR(dyadi,condi,metri,triali) = FREQmirror(metri);
+                RR(dyadi,condi,metri,triali)     = FREQjrqa(metri).RR;
+                DET(dyadi,condi,metri,triali)    = FREQjrqa(metri).DET;
+            end
+
+            save(coordination_file,'FREQjrqa','FREQmirror','JRQA', ...
+                'which_comp','meter','dyadi','condi','triali','-v7.3')
+
+        end
+    end
+end
+
+%% BLOCK 4 - PHASE-SPACE RQA (ALTERNATIVE TEMPORAL COORDINATION)
+
+% This is intentionally a separate analysis block following the current
+% GroupAnalyses workflow. It permits direct comparison with JRQA while
+% keeping the two temporal-coordination formulations independent.
+
+% Phase-space RQA settings
+PhaseRQA = [];
+% A scalar frequency/component is shared across the dyad; use one value per
+% participant to analyze participant-specific frequencies or components.
+PhaseRQA.target_frex      = [];
+PhaseRQA.component        = which_comp;
+PhaseRQA.standardize      = true;
+PhaseRQA.threshold_method = 'max_fraction';
+PhaseRQA.threshold        = 0.1;
+PhaseRQA.theiler_window   = 0;
+PhaseRQA.lmin             = 2;
+PhaseRQA.vmin             = 2;
+PhaseRQA.figure           = validation_flag;
+PhaseRQA.animate          = false;
+
+% Pre-allocate one group-level variable for each RQA output
+[RR_phase,L_phase,DET_phase,ENTR_phase,TT_phase,LAM_phase, ...
+    Vmax_phase,DIV_phase] = deal( ...
+    nan(ndyads,nconds,nmeters,ntrials));
+
+for condi = 1:nconds
+    for dyadi = list_dyads
+        disp(['Phase-space RQA: condition #' num2str(condi) ...
+            ' - dyad #' num2str(dyadi)])
+        for triali = 1:ntrials
+
+            phase_rqa_file = fullfile(CFG.block4.output_path,sprintf( ...
+                'FREQNESS_PHASERQA_D%d_C%d_T%d.mat', ...
+                dyadi,condi,triali));
+            if isfile(phase_rqa_file) && ~CFG.block4.overwrite_flag
+                S = load(phase_rqa_file,'FREQrqa');
+                for metri = 1:nmeters
+                    RR_phase(dyadi,condi,metri,triali) = S.FREQrqa(metri).RR;
+                    L_phase(dyadi,condi,metri,triali) = S.FREQrqa(metri).L;
+                    DET_phase(dyadi,condi,metri,triali) = S.FREQrqa(metri).DET;
+                    ENTR_phase(dyadi,condi,metri,triali) = S.FREQrqa(metri).ENTR;
+                    TT_phase(dyadi,condi,metri,triali) = S.FREQrqa(metri).TT;
+                    LAM_phase(dyadi,condi,metri,triali) = S.FREQrqa(metri).LAM;
+                    Vmax_phase(dyadi,condi,metri,triali) = S.FREQrqa(metri).Vmax;
+                    DIV_phase(dyadi,condi,metri,triali) = S.FREQrqa(metri).DIV;
+                end
+                continue
+            end
+
+            % Import the same FREQ network output used by GroupAnalyses
+            input_file = fullfile(CFG.block1.output_path,sprintf( ...
+                'FREQNESS_CORE_D%d_C%d_T%d.mat', ...
+                dyadi,condi,triali));
+            assert(isfile(input_file),'Missing BLOCK 1 output: %s',input_file);
+            S = load(input_file,'GED','beat_frex');
+            GED = S.GED;
+            beat_frex = S.beat_frex;
+
+            if isempty(PhaseRQA.target_frex)
+                this_target_frex = beat_frex;
+            else
+                this_target_frex = PhaseRQA.target_frex;
+            end
+
+            % Apply the same anti-aliasing filter and downsampling used in
+            % the JRQA block so the methods receive matched time series.
+            phase_components = PhaseRQA.component;
+            if isscalar(phase_components)
+                phase_components = repmat(phase_components,1,nsubs);
+            end
+            if numel(phase_components) ~= nsubs
+                error(['PhaseRQA.component must be a scalar or contain one ' ...
+                    'component per participant.']);
+            end
+            for subi = 1:nsubs
+                for frexi = 1:size(GED.ts,3)
+                    this_ts = squeeze(GED.ts(phase_components(subi), ...
+                        :,frexi,subi));
+                    GED.ts(phase_components(subi),:,frexi,subi) = ...
+                        filtfilt(b_butt,a_butt,this_ts);
+                end
+            end
+            GED.ts = GED.ts(:,1:dwn:end,:,:);
+
+            % Compute the joint phase-space recurrence analysis. The saved
+            % study variable is named GED but follows the public FREQ API.
+            make_figure = PhaseRQA.figure && condi == 1 && ...
+                dyadi == list_dyads(1) && triali == 1;
+            FREQrqa = FREQNESS_PhaseSpaceRQA_Mocap( ...
+                GED,this_target_frex, ...
+                'metric_levels',meter, ...
+                'component',PhaseRQA.component, ...
+                'duration',duration, ...
+                'standardize',PhaseRQA.standardize, ...
+                'threshold_method',PhaseRQA.threshold_method, ...
+                'threshold',PhaseRQA.threshold, ...
+                'theiler_window',PhaseRQA.theiler_window, ...
+                'lmin',PhaseRQA.lmin, ...
+                'vmin',PhaseRQA.vmin, ...
+                'store_matrices',false, ...
+                'figure',make_figure, ...
+                'animate',PhaseRQA.animate && make_figure, ...
+                'srate',srate);
+
+            % Assign every RQA output returned by its dedicated function
+            for metri = 1:nmeters
+                RR_phase(dyadi,condi,metri,triali)   = FREQrqa(metri).RR;
+                L_phase(dyadi,condi,metri,triali)    = FREQrqa(metri).L;
+                DET_phase(dyadi,condi,metri,triali)  = FREQrqa(metri).DET;
+                ENTR_phase(dyadi,condi,metri,triali) = FREQrqa(metri).ENTR;
+                TT_phase(dyadi,condi,metri,triali)   = FREQrqa(metri).TT;
+                LAM_phase(dyadi,condi,metri,triali)  = FREQrqa(metri).LAM;
+                Vmax_phase(dyadi,condi,metri,triali) = FREQrqa(metri).Vmax;
+                DIV_phase(dyadi,condi,metri,triali)  = FREQrqa(metri).DIV;
+            end
+
+            save(phase_rqa_file,'FREQrqa','PhaseRQA','dyadi', ...
+                'condi','triali','-v7.3')
+
+        end
+    end
+end
+
+% Keep the alternative analysis together as a study-level result.
+PhaseRQA.output.RR   = RR_phase;
+PhaseRQA.output.L    = L_phase;
+PhaseRQA.output.DET  = DET_phase;
+PhaseRQA.output.ENTR = ENTR_phase;
+PhaseRQA.output.TT   = TT_phase;
+PhaseRQA.output.LAM  = LAM_phase;
+PhaseRQA.output.Vmax = Vmax_phase;
+PhaseRQA.output.DIV  = DIV_phase;
+
+%% BLOCK 5 - GROUP-LEVEL VISUALIZATION
 
 % TODO: SEM are fixed, but still do the following for other plots:
 % After fixing, if needed, do the same in FREQNESS_SI_FIlters.m (what about
 % all other plots? massive fix with chatGPT
 
-path_data = path_home;
+path_data = CFG.block2.output_path;
+
+% Restore plotting metadata cleared before the coordination analyses.
+prefix = {'';'_onlyX';'_onlyY';'_onlyZ'};
+srate = 250;
+ndyads = 35;
+nconds = 4;
+ntrials = 8;
+nsubs = 2;
+list_dyads = [1:12 14:31 33:ndyads];
+condlabels = {'NOvis-DIFFmus','NOvis-SAMEmus', ...
+    'YESvis-DIFFmus','YESvis-SAMEmus'};
+meter = [.25 .5 1 2];
+nmeters = length(meter);
+marklabels = {'LB Head','LF Head','RF Head','RB Head','Sternum', ...
+    'L Shoulder','R Shoulder','L Elbow','L Wrist','L Hand', ...
+    'R Elbow','R Wrist','R Hand','Pelvis','L Hip','R Hip', ...
+    'L Knee','L Ankle','L Foot','R Knee','R Ankle','R Foot'};
+bones = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10; ...
+    7,11;11,12;12,13;14,15;14,16;15,16;15,17;17,18;18,19; ...
+    16,20;20,21;21,22];
+
+% Import the saved dyadic coordination outputs so this block aggregates
+% every completed analysis stage rather than relying on workspace state.
+[MIRROR,RR,DET] = deal(nan(ndyads,nconds,nmeters,ntrials));
+[RR_phase,L_phase,DET_phase,ENTR_phase,TT_phase,LAM_phase, ...
+    Vmax_phase,DIV_phase] = deal( ...
+    nan(ndyads,nconds,nmeters,ntrials));
+
+for condi = 1:nconds
+    for dyadi = list_dyads
+        for triali = 1:ntrials
+            coordination_file = fullfile(CFG.block3.output_path,sprintf( ...
+                'FREQNESS_COORDINATION_D%d_C%d_T%d.mat', ...
+                dyadi,condi,triali));
+            assert(isfile(coordination_file), ...
+                'Missing BLOCK 3 output: %s',coordination_file);
+            S = load(coordination_file,'FREQjrqa','FREQmirror');
+
+            phase_rqa_file = fullfile(CFG.block4.output_path,sprintf( ...
+                'FREQNESS_PHASERQA_D%d_C%d_T%d.mat', ...
+                dyadi,condi,triali));
+            assert(isfile(phase_rqa_file), ...
+                'Missing BLOCK 4 output: %s',phase_rqa_file);
+            P = load(phase_rqa_file,'FREQrqa');
+
+            for metri = 1:nmeters
+                MIRROR(dyadi,condi,metri,triali) = S.FREQmirror(metri);
+                RR(dyadi,condi,metri,triali) = S.FREQjrqa(metri).RR;
+                DET(dyadi,condi,metri,triali) = S.FREQjrqa(metri).DET;
+                RR_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).RR;
+                L_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).L;
+                DET_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).DET;
+                ENTR_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).ENTR;
+                TT_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).TT;
+                LAM_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).LAM;
+                Vmax_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).Vmax;
+                DIV_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).DIV;
+            end
+        end
+    end
+end
 
 % Select method: 'GED' or 'PCA'
 which_method = 'GED';
@@ -336,16 +881,18 @@ idx_XYZ = 1; % 1 = '', all axes included
 close all
 
 % Import group-level data
-load([path_data, which_method '_output/' which_method '_All' prefix{idx_XYZ} '.mat'], 'all_evals', 'all_pats','all_frex_norm')
-load(fullfile(path_data, [which_method '_EffectDim' prefix{idx_XYZ}]));
-   
+load(fullfile(path_data, ...
+    ['FREQNESS_GroupNetworkSummary' prefix{idx_XYZ} '.mat']), ...
+    'all_evals','all_pats','all_frex_norm','ED','list_dyads', ...
+    'marker_reference')
+markData = marker_reference;
 
-% Remove bad dyads
-idx2keep = ismember(1:ndyads,list_dyads); 
-idx2keep = 1:(ndyads-sum(~idx2keep)); % NOTE: at some point, I ended up removing the bad dyads from the GED outputs
-all_evals = all_evals(idx2keep,:,:,:,:,:);
-all_pats = abs( all_pats(idx2keep,:,:,:,:,:,:) ); % convert to abs() here if you want the absolute values
-all_frex_norm = all_frex_norm(idx2keep,:,:,:,:);
+
+% Remove excluded dyads while preserving their actual identifiers.
+all_evals = all_evals(list_dyads,:,:,:,:,:);
+all_pats = abs(all_pats(list_dyads,:,:,:,:,:,:));
+all_frex_norm = all_frex_norm(list_dyads,:,:,:,:);
+ED = ED(:,list_dyads,:,:,:);
 
 % Settings
 ncomps2keep = 4;                 % number of components
@@ -362,10 +909,10 @@ avg_pats  = squeeze(mean(all_pats, 3));    %  [dyads,conds,trials,markers,comps,
 % Compute group mean & SEM over dyads
 avg_evals = squeeze(mean(avg_evals,length(size(avg_evals))));  % average over subjects(partners) first
 sem_evals = squeeze(std(avg_evals,0,1)) / sqrt(size(avg_evals,1));
-avg_evals = squeeze(mean(avg_evals,1));   
+avg_evals = squeeze(mean(avg_evals,1));
 
 sem_pats  = squeeze(std(avg_pats,0,1)) / sqrt(size(avg_pats,1));
-avg_pats  = squeeze(mean(avg_pats,1));      
+avg_pats  = squeeze(mean(avg_pats,1));
 
 % Assign any normalized frequency vector
 frex2plot = squeeze(all_frex_norm(1,1,1,1,:));
@@ -585,7 +1132,6 @@ sgtitle(['Grand-grandaverage effective dimensionality across conditions - ' whic
 nscale     = 1000;
 col_static = .95 * jet(nscale);
 linewidth  = 1.7;
-bones      = Patterns.bones;
 ndims      = 3;
 min_marksize = 30;
 max_marksize = 100;
@@ -703,8 +1249,8 @@ end
 % Put frequency first (due to reshape() behavior): [nfrex × ndyads × nconds × ntrials × nsubs]
 tmp = permute(corrs2avg, [4 1 2 3 5]);
 % Flatten all non-frequency dims, then average across them
-corrs2plot = reshape(tmp, nfrex, []);        
-corrs2plot = mean(corrs2plot, 2, 'omitnan');        
+corrs2plot = reshape(tmp, nfrex, []);
+corrs2plot = mean(corrs2plot, 2, 'omitnan');
 
 % Visualize
 figure
@@ -757,330 +1303,10 @@ Patterns_figure.animate = false;
 Patterns_figure.frequency_unit = '× Beat';
 
 FREQNESS_Visualizer_Mocap(GED_figure,[],Patterns_figure);
-%% FREQNESS DYADIC ANALYSES
-
-clear all
-
-% Pick component
-which_comp = 2;
-
-% Choose wheteher you want to attune JRQA
-attune_flag = 0;
-
-% Define repository-relative data path when this section is run directly
-path_script = fileparts(mfilename('fullpath'));
-path_repo = fileparts(path_script);
-path_home = [fullfile(path_repo,'Dance_Data') filesep];
-path_toolbox = fullfile(path_repo,'FREQNESS_Mocap_Toolbox');
-addpath(path_toolbox)
-FREQNESS_Startup_Mocap();
-
-% Re-initialize settings to import GED outputs from the folder
-ndyads = 35;
-nconds  = 4;
-ntrials = 8;
-nsubs   = 2;
-list_dyads = [1:12 14:31 33:ndyads]; % Issue with dyad #13: one trial is missing in condi #1 | dyad#32 gives arror with RPparam in condi #4
-srate = 250;
-
-% Use the saved single-GED reference when per-trial outputs are unavailable
-validation_flag = ~isfolder(fullfile(path_home,'GED_output'));
-if validation_flag
-    ndyads = 1;
-    nconds = 1;
-    ntrials = 1;
-    list_dyads = 1;
-    condlabels = {'Validation subset'};
-end
-
-% Define metric levels of interest
-meter = [.25 .5 1 2];
-nmeters = length(meter);
-idx_frex = zeros(nsubs,nmeters);
-
-% Downsampling with correction for aliasing
-dwn = 10;
-srate = round(srate/dwn); % update sampling rate
-% Low-pass Butterworth filter to avoid aliasing by downsampling
-nyquist = round(srate/2);
-lp_order = 4;        % Filter order
-lp_cutoff_norm = .8; % Normalized cutoff frequency (.8 of the nyquist, when normalized to 1)
-[b_butt, a_butt] = butter(lp_order, lp_cutoff_norm, 'low'); % Coefficients for high-pass filter
-%     % Visualize the filter's freqency response
-%     figure; freqz(b_butt, a_butt, 100, srate); % Frequency response
-
-% Define duration
-duration = [.15 .85];
-
-% Optimize JRQA parameters (if requested)
-if attune_flag ==1
-
-    % Initialize JRQA parameters
-    [tau,m,ps] = deal(zeros(nsubs,ndyads,nconds,nmeters,ntrials));
-
-    % Loop over conditions
-    for condi = 1:nconds
-
-        % Select dyad and subject
-        for dyadi = list_dyads
-            disp(['Condition#' num2str(condi) ' - Dyad #' num2str(dyadi)])
-
-            % Analyse trial by trial
-            for triali = 1:ntrials
-
-                % Import GED output
-                if validation_flag
-                    load([path_home 'Mocap_Results_tauMean_mMean_psMax.mat'], ...
-                        'GED','beat_frex');
-                else
-                    load([path_home 'GED_output/GED_dyad_' num2str(dyadi) ...
-                        '_cond_' num2str(condi) '_trial_' num2str(triali)]);
-                end
-
-                for subi = 1:nsubs
-
-                    % Loop over metric levels (hamronics of the target frequency);
-                    for metri = 1:nmeters
-
-                        % Find frequency in vector
-                        [~,idx_frex(subi,metri)] = min(abs(beat_frex(subi)*meter(metri) - GED.frex(:,subi)));
-
-                        % Assign timeseries
-                        gedTs = GED.ts(which_comp,:,idx_frex(subi,metri),subi); % assign component corresponding to the frequency of interest
-
-                        % Apply Butterworth filter for aliasing correction
-                        gedTs = filtfilt(b_butt, a_butt, gedTs); % Zero-phase filtering
-
-                        % Downsample
-                        gedTs = gedTs(1:dwn:end);
-
-                        % Retain window of interest
-                        gedTs = gedTs( round(duration(1)*srate) : round(duration(end)*srate) );
-
-                        % Optimize embedding parameters
-                        %disp(['Optimizing embedding parameters for participant #' num2str(subi)])
-                        [tau(subi,dyadi,condi,metri,triali), m(subi,dyadi,condi,metri,triali), ps(subi,dyadi,condi,metri,triali)] = RPparam(gedTs');
-
-                    end
-
-                end
-
-            end
-
-        end
-
-    end
-
-    % Average optimal parameters (assign to input structure)
-    JRQA.tau = round(mean(tau(:)));
-    JRQA.m   = round(mean(m(:)));
-    JRQA.ps  = round(mean(ps(:)),1);
-
-    % Save output
-    mkdir([path_home 'JRQA'])
-    save([path_home 'JRQA/JRQA_Parameters_Comp#' num2str(which_comp)],'JRQA')
-
-else
-
-    % Import JRQA parapemeters
-    if validation_flag
-        load([path_home 'JRQA_Parameters.mat'],'JRQA')
-    else
-        load([path_home 'JRQA/JRQA_Parameters_Comp#' num2str(which_comp)],'JRQA')
-    end
-
-end
-
-% Pre-allocate group-level output
-[MIRROR,RR,DET] = deal(zeros(ndyads,nconds,nmeters,ntrials));
-
-% Run analyses
-for condi = 1:nconds
-    for dyadi = list_dyads
-        disp(['Condition#' num2str(condi) ' - Dyad #' num2str(dyadi)])
-        for triali = 1:ntrials
-
-            % Import GED output
-            if validation_flag
-                load([path_home 'Mocap_Results_tauMean_mMean_psMax.mat'], ...
-                    'GED','beat_frex');
-            else
-                load([path_home 'GED_output/GED_dyad_' num2str(dyadi) ...
-                    '_cond_' num2str(condi) '_trial_' num2str(triali)]);
-            end
-             
-            % Extract and process time series
-            gedTs = squeeze(GED.ts(which_comp,:,:,:)); % [original_time x nfrex x nsubs] 
-            for subi = 1:nsubs
-                for frexi = 1:size(gedTs,2)
-                    gedTs(:,frexi,subi) = filtfilt(b_butt, a_butt, gedTs(:,frexi,subi));  % Butterworth filter for aliasing correction
-                end
-            end
-            gedTs = gedTs(1:dwn:end,:,:);  % Downsampling both subs
-            % Overwrite back into GED.ts — shrink time dimension
-            GED.ts = GED.ts(:,1:dwn:end,:,:);  % Shrink time dimension
-            for subi = 1:nsubs
-                for frexi = 1:size(gedTs,2)
-                    GED.ts(which_comp,:,frexi,subi) = gedTs(:,frexi,subi); % re-assign
-                end
-            end
-
-            % Compute temporal coordination
-            FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
-                GED,JRQA,beat_frex, ...
-                'metric_levels',meter, ...
-                'component',which_comp, ...
-                'duration',duration);
-
-            % Compute spatial coordination
-            FREQmirror = FREQNESS_SpaceCoord_Mocap( ...
-                GED,beat_frex, ...
-                'metric_levels',meter, ...
-                'component',which_comp);
-
-            % Assign to group-level variables
-            for metri = 1:nmeters
-                MIRROR(dyadi,condi,metri,triali) = FREQmirror(metri);
-                RR(dyadi,condi,metri,triali)     = FREQjrqa(metri).RR;
-                DET(dyadi,condi,metri,triali)    = FREQjrqa(metri).DET;
-            end
-
-        end
-    end
-end
 
 
 
-%% FREQNESS PHASE-SPACE RQA (ALTERNATIVE TEMPORAL COORDINATION)
-
-% This is intentionally a separate analysis block following the current
-% GroupAnalyses workflow. It permits direct comparison with JRQA while
-% keeping the two temporal-coordination formulations independent.
-
-% Phase-space RQA settings
-PhaseRQA = [];
-% A scalar frequency/component is shared across the dyad; use one value per
-% participant to analyze participant-specific frequencies or components.
-PhaseRQA.target_frex      = [];
-PhaseRQA.component        = which_comp;
-PhaseRQA.standardize      = true;
-PhaseRQA.threshold_method = 'max_fraction';
-PhaseRQA.threshold        = 0.1;
-PhaseRQA.theiler_window   = 0;
-PhaseRQA.lmin             = 2;
-PhaseRQA.vmin             = 2;
-PhaseRQA.figure           = validation_flag;
-PhaseRQA.animate          = false;
-
-% Pre-allocate one group-level variable for each RQA output
-[RR_phase,L_phase,DET_phase,ENTR_phase,TT_phase,LAM_phase, ...
-    Vmax_phase,DIV_phase] = deal( ...
-    nan(ndyads,nconds,nmeters,ntrials));
-
-for condi = 1:nconds
-    for dyadi = list_dyads
-        disp(['Phase-space RQA: condition #' num2str(condi) ...
-            ' - dyad #' num2str(dyadi)])
-        for triali = 1:ntrials
-
-            % Import the same FREQ network output used by GroupAnalyses
-            if validation_flag
-                load([path_home 'Mocap_Results_tauMean_mMean_psMax.mat'], ...
-                    'GED','beat_frex');
-            else
-                load([path_home 'GED_output/GED_dyad_' num2str(dyadi) ...
-                    '_cond_' num2str(condi) '_trial_' num2str(triali)]);
-            end
-
-            if isempty(PhaseRQA.target_frex)
-                this_target_frex = beat_frex;
-            else
-                this_target_frex = PhaseRQA.target_frex;
-            end
-
-            % Apply the same anti-aliasing filter and downsampling used in
-            % the JRQA block so the methods receive matched time series.
-            phase_components = PhaseRQA.component;
-            if isscalar(phase_components)
-                phase_components = repmat(phase_components,1,nsubs);
-            end
-            if numel(phase_components) ~= nsubs
-                error(['PhaseRQA.component must be a scalar or contain one ' ...
-                    'component per participant.']);
-            end
-            for subi = 1:nsubs
-                for frexi = 1:size(GED.ts,3)
-                    this_ts = squeeze(GED.ts(phase_components(subi), ...
-                        :,frexi,subi));
-                    GED.ts(phase_components(subi),:,frexi,subi) = ...
-                        filtfilt(b_butt,a_butt,this_ts);
-                end
-            end
-            GED.ts = GED.ts(:,1:dwn:end,:,:);
-
-            % Compute the joint phase-space recurrence analysis. The saved
-            % study variable is named GED but follows the public FREQ API.
-            make_figure = PhaseRQA.figure && condi == 1 && ...
-                dyadi == list_dyads(1) && triali == 1;
-            FREQrqa = FREQNESS_PhaseSpaceRQA_Mocap( ...
-                GED,this_target_frex, ...
-                'metric_levels',meter, ...
-                'component',PhaseRQA.component, ...
-                'duration',duration, ...
-                'standardize',PhaseRQA.standardize, ...
-                'threshold_method',PhaseRQA.threshold_method, ...
-                'threshold',PhaseRQA.threshold, ...
-                'theiler_window',PhaseRQA.theiler_window, ...
-                'lmin',PhaseRQA.lmin, ...
-                'vmin',PhaseRQA.vmin, ...
-                'store_matrices',false, ...
-                'figure',make_figure, ...
-                'animate',PhaseRQA.animate && make_figure, ...
-                'srate',srate);
-
-            % Assign every RQA output returned by its dedicated function
-            for metri = 1:nmeters
-                RR_phase(dyadi,condi,metri,triali)   = FREQrqa(metri).RR;
-                L_phase(dyadi,condi,metri,triali)    = FREQrqa(metri).L;
-                DET_phase(dyadi,condi,metri,triali)  = FREQrqa(metri).DET;
-                ENTR_phase(dyadi,condi,metri,triali) = FREQrqa(metri).ENTR;
-                TT_phase(dyadi,condi,metri,triali)   = FREQrqa(metri).TT;
-                LAM_phase(dyadi,condi,metri,triali)  = FREQrqa(metri).LAM;
-                Vmax_phase(dyadi,condi,metri,triali) = FREQrqa(metri).Vmax;
-                DIV_phase(dyadi,condi,metri,triali)  = FREQrqa(metri).DIV;
-            end
-
-        end
-    end
-end
-
-% Keep the alternative analysis together as a study-level result.
-PhaseRQA.output.RR   = RR_phase;
-PhaseRQA.output.L    = L_phase;
-PhaseRQA.output.DET  = DET_phase;
-PhaseRQA.output.ENTR = ENTR_phase;
-PhaseRQA.output.TT   = TT_phase;
-PhaseRQA.output.LAM  = LAM_phase;
-PhaseRQA.output.Vmax = Vmax_phase;
-PhaseRQA.output.DIV  = DIV_phase;
-
-if ~validation_flag
-    path_phase_rqa = fullfile(path_home,'PhaseSpaceRQA');
-    if ~isfolder(path_phase_rqa)
-        mkdir(path_phase_rqa)
-    end
-    save(fullfile(path_phase_rqa, ...
-        ['PhaseSpaceRQA_Comp#' num2str(which_comp) '.mat']),'PhaseRQA')
-end
-
-if validation_flag
-    fprintf('\nDance coordination validation subset completed.\n');
-    return
-end
-
-
-
-%% Visualize output at the group level
+% GROUP-LEVEL COORDINATION VISUALIZATION
 
 % Average over trials dimension
 avg_MIRROR = squeeze( mean(MIRROR([1:12 14:31 33:ndyads],:,:,:), 4) ); 
@@ -1165,9 +1391,56 @@ for metri = 1:nmeters
     sgtitle('Determinism')
 end
 
+% GROUP-LEVEL PHASE-SPACE RQA VISUALIZATION
+
+phase_metric_data = {RR_phase,L_phase,DET_phase,ENTR_phase, ...
+    TT_phase,LAM_phase,Vmax_phase,DIV_phase};
+phase_metric_labels = {'Recurrence rate','Average diagonal length', ...
+    'Determinism','Diagonal-line entropy','Trapping time', ...
+    'Laminarity','Maximum vertical length','Divergence'};
+
+for metrici = 1:numel(phase_metric_data)
+    avg_phase_metric = squeeze(mean( ...
+        phase_metric_data{metrici}([1:12 14:31 33:35],:,:,:),4));
+    figure;
+    for metri = 1:nmeters
+        subplot(ceil(nmeters/3),3,metri);
+        meter_data = squeeze(avg_phase_metric(:,:,metri));
+        mu = mean(meter_data,1);
+        sem = std(meter_data,0,1)/sqrt(size(meter_data,1));
+        bar(mu);
+        hold on;
+        errorbar(1:nconds,mu,sem,'.k');
+        title(['Meter ' num2str(metri)]);
+        xlabel('Condition');
+        ylabel('Mean ± SEM');
+        xticks(1:nconds);
+        xtickangle(45)
+        xticklabels(condlabels)
+        sgtitle(['Phase-space RQA: ' phase_metric_labels{metrici}])
+    end
+end
 
 
-%% Export outputs
+% Export every group-level image only after all numerical analysis blocks
+% have completed. Existing figures remain untouched unless requested.
+figure_handles = findall(groot,'Type','figure');
+for figurei = 1:numel(figure_handles)
+    figure_name = fullfile(CFG.block5.figure_path,sprintf( ...
+        'GROUP_%02d',figurei));
+    if ~isfile([figure_name '.fig']) || CFG.block5.overwrite_flag
+        savefig(figure_handles(figurei),[figure_name '.fig'])
+    end
+    if ~isfile([figure_name '.png']) || CFG.block5.overwrite_flag
+        exportgraphics(figure_handles(figurei),[figure_name '.png'], ...
+            'Resolution',200)
+    end
+end
+close all
+
+
+
+%% BLOCK 6 - R-READY STATISTICAL EXPORT
 
 % Preallocate
 nRows = ndyads * nconds * nmeters;
@@ -1189,7 +1462,7 @@ row = 1;
 for dyadi = 1:ndyads
     for condi = 1:nconds
         for metri = 1:nmeters
-            subject_col(row) = dyadi;
+            subject_col(row) = list_dyads(dyadi);
             visual_col(row) = visual_labels(condi);
             music_col(row) = music_labels(condi);
             meter_col(row) = meter_labels(metri);
@@ -1208,4 +1481,8 @@ T = table(subject_col, visual_col, music_col, meter_col, ...
                             'Mirror', 'RR', 'DET'});
 
 % Export to Excel
-writetable(T, [path_home 'OUT2R_Comp#' num2str(which_comp) '.xlsx']);
+statistics_file = fullfile(CFG.block6.output_path, ...
+    ['OUT2R_Comp#' num2str(which_comp) '.xlsx']);
+if ~isfile(statistics_file) || CFG.block6.overwrite_flag
+    writetable(T,statistics_file)
+end

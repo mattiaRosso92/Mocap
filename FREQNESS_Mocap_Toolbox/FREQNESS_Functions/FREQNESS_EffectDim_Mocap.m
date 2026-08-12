@@ -24,6 +24,9 @@ function [H2,ED] = FREQNESS_EffectDim_Mocap(FREQ,varargin)
 %          • FREQ.frex  -> frequency vector [nFrex x 1] (optional)
 %
 %  - Optional name-value pair:
+%      - 'figure'   : when true, plot the grand-average ED landscape.
+%                     Default: true.
+%
 %      - 'plot_all' : when true, additionally plot the ED landscape for
 %                     every participant. Default: false.
 %
@@ -59,10 +62,14 @@ function [H2,ED] = FREQNESS_EffectDim_Mocap(FREQ,varargin)
 
 %% Handle optional arguments
 
-opts = struct('plot_all',false);
+opts = struct('figure',true,'plot_all',false);
 opts = parse_name_value_pairs(opts,varargin{:});
+figure_flag = opts.figure;
 plot_all = opts.plot_all;
 
+if ~islogical(figure_flag) || ~isscalar(figure_flag)
+    error('figure must be one logical value (true or false).');
+end
 if ~islogical(plot_all) || ~isscalar(plot_all)
     error('plot_all must be one logical value (true or false).');
 end
@@ -143,28 +150,30 @@ if strcmp(xlab,'Frequency (Hz)') && all(x > 0)
 else
     x_plot = x;
 end
-figure('Color','w','Units','normalized','Position',[0.3 0.3 0.35 0.5]);
-hold on
-if nsubs > 1 && ~all(isnan(sem_ED))
-    fill([x_plot; flipud(x_plot)], ...
-        [avg_ED-sem_ED; flipud(avg_ED+sem_ED)], ...
-        col_line,'FaceAlpha',0.22,'EdgeColor','none');
+if figure_flag
+    figure('Color','w','Units','normalized','Position',[0.3 0.3 0.35 0.5]);
+    hold on
+    if nsubs > 1 && ~all(isnan(sem_ED))
+        fill([x_plot; flipud(x_plot)], ...
+            [avg_ED-sem_ED; flipud(avg_ED+sem_ED)], ...
+            col_line,'FaceAlpha',0.22,'EdgeColor','none');
+    end
+    plot(x_plot,avg_ED,'Color',col_line,'LineWidth',2.5);
+    xlabel(xlab,'FontSize',14,'FontWeight','bold');
+    ylabel('Effective dimensionality','FontSize',14,'FontWeight','bold');
+    title('Effective Dimensionality - Grand Average', ...
+        'FontSize',16,'FontWeight','bold');
+    set(gca,'FontSize',12,'LineWidth',1.2,'Box','on', ...
+        'GridAlpha',0.18,'MinorGridAlpha',0.10);
+    grid on
+    grid minor
+    set_frequency_axis(x,x_plot,xlab)
 end
-plot(x_plot,avg_ED,'Color',col_line,'LineWidth',2.5);
-xlabel(xlab,'FontSize',14,'FontWeight','bold');
-ylabel('Effective dimensionality','FontSize',14,'FontWeight','bold');
-title('Effective Dimensionality - Grand Average', ...
-    'FontSize',16,'FontWeight','bold');
-set(gca,'FontSize',12,'LineWidth',1.2,'Box','on', ...
-    'GridAlpha',0.18,'MinorGridAlpha',0.10);
-grid on
-grid minor
-set_frequency_axis(x,x_plot,xlab)
 
 
 %% Optional individual-participant plots
 
-if plot_all
+if figure_flag && plot_all
     for subi = 1:nsubs
         figure('Color','w','Units','normalized','Position',[0.3 0.3 0.35 0.5]);
         plot(x_plot,ED(:,subi),'Color',col_line,'LineWidth',2.5);
