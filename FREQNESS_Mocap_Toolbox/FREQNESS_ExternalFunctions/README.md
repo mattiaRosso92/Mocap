@@ -9,10 +9,14 @@ Currently required:
 
 - `filterFGx.m` for frequency-domain Gaussian filtering during network
   estimation;
-- `FREQNESS_AnalyticSignal.m`, required by the current `filterFGx.m` version
-  (this FREQ-NESS helper may alternatively live in `FREQNESS_Functions`);
+- `FREQNESS_AnalyticSignal.m`, required by the current `filterFGx.m` version,
+  is an internal FREQ-NESS helper included in `FREQNESS_Functions` rather
+  than a third-party dependency;
 - `RPparam.m` and a minimal JRQA dependency subset from the CRP Toolbox for
   recurrence-based temporal coordination.
+- `dl.m`, `tt.m`, and `entropy.m` from the same CRP Toolbox subset for the
+  phase-space RQA metrics. These three files are byte-identical to the files
+  used by `BROADNESS_PhaseSpace_RQA`.
 
 ## Included CRP Toolbox subset
 
@@ -26,6 +30,9 @@ Only the runtime files exercised by non-interactive JRQA calls are included:
 - `jrqa.m`, `crp2.m`, `dl.m`, `entropy.m`, and `tt.m`;
 - `private/check_stop.m`, `private/init_properties.m`,
   `private/is_crp_plugin.m`, and `private/splash_gpl.m`.
+
+The phase-space implementation calls only `dl.m`, `tt.m`, and `entropy.m`;
+it does not require `jrqa.m`, `RPparam.m`, or the CRP private helpers.
 
 The complete CRP Toolbox is not bundled. The local change in
 `private/splash_gpl.m` allows it to locate the colocated `jrqa.m` when the
