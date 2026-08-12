@@ -39,9 +39,11 @@ The MATLAB toolbox currently contains three levels of analysis:
 2. `FREQNESS_EffectDim_Mocap` and `FREQNESS_Visualizer_Mocap` provide
    second-order characterization of the effective dimensionality, estimated
    network landscape, and bodily activation patterns.
-3. `FREQNESS_TimeCoord_Mocap` and `FREQNESS_SpaceCoord_Mocap` provide
-   third-order temporal and spatial coordination analyses across multiple
-   participants.
+3. `FREQNESS_PhaseSpaceRQA_Mocap`, `FREQNESS_TimeCoord_Mocap`, and
+   `FREQNESS_SpaceCoord_Mocap` provide third-order temporal and spatial
+   coordination analyses across multiple participants. Phase-space RQA is
+   the embedding-free temporal alternative; JRQA remains available for
+   direct methodological comparison.
 
 ## Reference test case
 

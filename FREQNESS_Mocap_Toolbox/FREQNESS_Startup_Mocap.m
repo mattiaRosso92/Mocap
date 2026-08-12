@@ -61,8 +61,9 @@ fprintf('Base directory: %s\n\n', path_home);
 
 %% Report external dependencies
 
-required_external = {'filterFGx','FREQNESS_AnalyticSignal'};
-optional_external = {'RPparam','jrqa'};
+required_external = {'filterFGx'};
+required_internal = {'FREQNESS_AnalyticSignal'};
+optional_external = {'RPparam','jrqa','dl','tt','entropy'};
 
 for funi = 1:numel(required_external)
     if exist(required_external{funi}, 'file') ~= 2
@@ -73,12 +74,21 @@ for funi = 1:numel(required_external)
     end
 end
 
+for funi = 1:numel(required_internal)
+    if exist(required_internal{funi}, 'file') ~= 2
+        warning('FREQNESS:MissingInternalFunction', ...
+            ['Required FREQ-NESS helper %s was not found. Restore it in ' ...
+            'FREQNESS_Functions before running network estimation.'], ...
+            required_internal{funi});
+    end
+end
+
 for funi = 1:numel(optional_external)
     if exist(optional_external{funi}, 'file') ~= 2
         warning('FREQNESS:MissingGroupDependency', ...
-            ['Optional temporal-coordination function %s was not found. Add the ' ...
-            'CRP Toolbox dependency to FREQNESS_ExternalFunctions before ' ...
-            'running FREQNESS_TimeCoord_Mocap.'], ...
+            ['Optional temporal-coordination function %s was not found. Add ' ...
+            'the documented CRP Toolbox dependency to ' ...
+            'FREQNESS_ExternalFunctions before running recurrence analyses.'], ...
             optional_external{funi});
     end
 end

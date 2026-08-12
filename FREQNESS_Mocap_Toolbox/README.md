@@ -23,8 +23,23 @@ belong in the study directories at the repository root.
 
 The third-order analysis layer is specific to the MoCap framework. It operates
 across corresponding participant-level FREQ-NESS outputs using separate
-functions for temporal coordination (`FREQNESS_TimeCoord_Mocap`) and spatial
-coordination (`FREQNESS_SpaceCoord_Mocap`).
+functions for phase-space temporal coordination
+(`FREQNESS_PhaseSpaceRQA_Mocap`), JRQA temporal coordination
+(`FREQNESS_TimeCoord_Mocap`), and spatial coordination
+(`FREQNESS_SpaceCoord_Mocap`). Phase-space RQA treats every participant's
+selected network time series as one dimension of the joint group state and
+therefore supports dyads and larger groups without scalar delay embedding.
+Its frequency and component inputs can be scalars shared by the whole group
+or participant-specific vectors; component 1 is used for all participants
+when no component is supplied.
+
+The phase-space RQA metrics are independently implemented and callable as:
+`FREQNESS_RQA_RecurrenceRate_Mocap`,
+`FREQNESS_RQA_MeanDiagonalLength_Mocap`,
+`FREQNESS_RQA_Determinism_Mocap`, `FREQNESS_RQA_Entropy_Mocap`,
+`FREQNESS_RQA_TrappingTime_Mocap`, `FREQNESS_RQA_Laminarity_Mocap`,
+`FREQNESS_RQA_MaxVerticalLine_Mocap`, and
+`FREQNESS_RQA_Divergence_Mocap`.
 
 `FREQNESS_EffectDim_Mocap` is the MoCap counterpart of the MEEG
 `FREQNESS_EntropyLandscape` function. It computes quadratic Rényi entropy and
@@ -44,11 +59,16 @@ of the Dance reference study's Figure 2.
 
 ## External dependencies
 
-- `filterFGx.m` and its FREQ-NESS helper `FREQNESS_AnalyticSignal.m` are
-  required by `FREQNESS_NetworkEstimation_Mocap`.
+- `filterFGx.m` and the included FREQ-NESS helper
+  `FREQNESS_AnalyticSignal.m` are required by
+  `FREQNESS_NetworkEstimation_Mocap`. The helper is the toolbox's internal
+  FFT-based equivalent of `hilbert.m`, avoiding that external dependency.
 - `RPparam.m` and the included minimal JRQA dependency subset from the CRP
   Toolbox are required by `FREQNESS_TimeCoord_Mocap`.
+- `dl.m`, `tt.m`, and `entropy.m` from that same subset are required by
+  `FREQNESS_PhaseSpaceRQA_Mocap` and its metric functions. They are
+  byte-identical to the versions distributed with BROADNESS.
 
 Place third-party functions, together with their upstream licence and
-documentation, in `FREQNESS_ExternalFunctions`. `FREQNESS_AnalyticSignal.m`
-may instead remain in `FREQNESS_Functions` because it is a FREQ-NESS helper.
+documentation, in `FREQNESS_ExternalFunctions`. FREQ-NESS-owned helpers such
+as `FREQNESS_AnalyticSignal.m` belong in `FREQNESS_Functions`.

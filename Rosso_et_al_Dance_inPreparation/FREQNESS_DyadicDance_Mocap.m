@@ -892,7 +892,7 @@ else
 end
 
 % Pre-allocate group-level output
-[MIRROR,RR,DET] = deal( zeros(ndyads,nconds,nmeters,ntrials) );
+[MIRROR,RR,DET] = deal(zeros(ndyads,nconds,nmeters,ntrials));
 
 % Run analyses
 for condi = 1:nconds
@@ -947,6 +947,130 @@ for condi = 1:nconds
 
         end
     end
+end
+
+
+
+%% FREQNESS PHASE-SPACE RQA (ALTERNATIVE TEMPORAL COORDINATION)
+
+% This is intentionally a separate analysis block following the current
+% GroupAnalyses workflow. It permits direct comparison with JRQA while
+% keeping the two temporal-coordination formulations independent.
+
+% Phase-space RQA settings
+PhaseRQA = [];
+% A scalar frequency/component is shared across the dyad; use one value per
+% participant to analyze participant-specific frequencies or components.
+PhaseRQA.target_frex      = [];
+PhaseRQA.component        = which_comp;
+PhaseRQA.standardize      = true;
+PhaseRQA.threshold_method = 'max_fraction';
+PhaseRQA.threshold        = 0.1;
+PhaseRQA.theiler_window   = 0;
+PhaseRQA.lmin             = 2;
+PhaseRQA.vmin             = 2;
+PhaseRQA.figure           = validation_flag;
+PhaseRQA.animate          = false;
+
+% Pre-allocate one group-level variable for each RQA output
+[RR_phase,L_phase,DET_phase,ENTR_phase,TT_phase,LAM_phase, ...
+    Vmax_phase,DIV_phase] = deal( ...
+    nan(ndyads,nconds,nmeters,ntrials));
+
+for condi = 1:nconds
+    for dyadi = list_dyads
+        disp(['Phase-space RQA: condition #' num2str(condi) ...
+            ' - dyad #' num2str(dyadi)])
+        for triali = 1:ntrials
+
+            % Import the same FREQ network output used by GroupAnalyses
+            if validation_flag
+                load([path_home 'Mocap_Results_tauMean_mMean_psMax.mat'], ...
+                    'GED','beat_frex');
+            else
+                load([path_home 'GED_output/GED_dyad_' num2str(dyadi) ...
+                    '_cond_' num2str(condi) '_trial_' num2str(triali)]);
+            end
+
+            if isempty(PhaseRQA.target_frex)
+                this_target_frex = beat_frex;
+            else
+                this_target_frex = PhaseRQA.target_frex;
+            end
+
+            % Apply the same anti-aliasing filter and downsampling used in
+            % the JRQA block so the methods receive matched time series.
+            phase_components = PhaseRQA.component;
+            if isscalar(phase_components)
+                phase_components = repmat(phase_components,1,nsubs);
+            end
+            if numel(phase_components) ~= nsubs
+                error(['PhaseRQA.component must be a scalar or contain one ' ...
+                    'component per participant.']);
+            end
+            for subi = 1:nsubs
+                for frexi = 1:size(GED.ts,3)
+                    this_ts = squeeze(GED.ts(phase_components(subi), ...
+                        :,frexi,subi));
+                    GED.ts(phase_components(subi),:,frexi,subi) = ...
+                        filtfilt(b_butt,a_butt,this_ts);
+                end
+            end
+            GED.ts = GED.ts(:,1:dwn:end,:,:);
+
+            % Compute the joint phase-space recurrence analysis. The saved
+            % study variable is named GED but follows the public FREQ API.
+            make_figure = PhaseRQA.figure && condi == 1 && ...
+                dyadi == list_dyads(1) && triali == 1;
+            FREQrqa = FREQNESS_PhaseSpaceRQA_Mocap( ...
+                GED,this_target_frex, ...
+                'metric_levels',meter, ...
+                'component',PhaseRQA.component, ...
+                'duration',duration, ...
+                'standardize',PhaseRQA.standardize, ...
+                'threshold_method',PhaseRQA.threshold_method, ...
+                'threshold',PhaseRQA.threshold, ...
+                'theiler_window',PhaseRQA.theiler_window, ...
+                'lmin',PhaseRQA.lmin, ...
+                'vmin',PhaseRQA.vmin, ...
+                'store_matrices',false, ...
+                'figure',make_figure, ...
+                'animate',PhaseRQA.animate && make_figure, ...
+                'srate',srate);
+
+            % Assign every RQA output returned by its dedicated function
+            for metri = 1:nmeters
+                RR_phase(dyadi,condi,metri,triali)   = FREQrqa(metri).RR;
+                L_phase(dyadi,condi,metri,triali)    = FREQrqa(metri).L;
+                DET_phase(dyadi,condi,metri,triali)  = FREQrqa(metri).DET;
+                ENTR_phase(dyadi,condi,metri,triali) = FREQrqa(metri).ENTR;
+                TT_phase(dyadi,condi,metri,triali)   = FREQrqa(metri).TT;
+                LAM_phase(dyadi,condi,metri,triali)  = FREQrqa(metri).LAM;
+                Vmax_phase(dyadi,condi,metri,triali) = FREQrqa(metri).Vmax;
+                DIV_phase(dyadi,condi,metri,triali)  = FREQrqa(metri).DIV;
+            end
+
+        end
+    end
+end
+
+% Keep the alternative analysis together as a study-level result.
+PhaseRQA.output.RR   = RR_phase;
+PhaseRQA.output.L    = L_phase;
+PhaseRQA.output.DET  = DET_phase;
+PhaseRQA.output.ENTR = ENTR_phase;
+PhaseRQA.output.TT   = TT_phase;
+PhaseRQA.output.LAM  = LAM_phase;
+PhaseRQA.output.Vmax = Vmax_phase;
+PhaseRQA.output.DIV  = DIV_phase;
+
+if ~validation_flag
+    path_phase_rqa = fullfile(path_home,'PhaseSpaceRQA');
+    if ~isfolder(path_phase_rqa)
+        mkdir(path_phase_rqa)
+    end
+    save(fullfile(path_phase_rqa, ...
+        ['PhaseSpaceRQA_Comp#' num2str(which_comp) '.mat']),'PhaseRQA')
 end
 
 if validation_flag

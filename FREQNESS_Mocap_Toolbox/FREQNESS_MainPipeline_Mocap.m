@@ -9,8 +9,9 @@
 %  1) Participant-level network estimation
 %  2) Effective dimensionality of the bodily-network eigenspectrum
 %  3) Network-landscape and bodily-pattern visualization
-%  4) Temporal coordination across participants
-%  5) Spatial coordination across participants
+%  4) Phase-space temporal coordination across participants
+%  5) JRQA temporal coordination across participants (alternative)
+%  6) Spatial coordination across participants
 %
 %  Place each dataset in a separate folder inside FREQNESS_Data. A dataset
 %  may be stored as one group-level .mat array or as one .mat file per
@@ -19,8 +20,10 @@
 %  External dependencies:
 %  - filterFGx.m and FREQNESS_AnalyticSignal.m are required for network
 %    estimation.
+%  - dl.m, tt.m, and entropy.m from the included CRP Toolbox subset are
+%    required for phase-space RQA.
 %  - RPparam.m and the included JRQA dependency subset from the CRP Toolbox
-%    are required only when temporal coordination is enabled.
+%    are required only when JRQA temporal coordination is enabled.
 %
 % ------------------------------------------------------------------------
 %  AUTHORS:
@@ -53,6 +56,7 @@ clc
 % second- and third-order functions.
 run_effect_dim  = true;
 run_visualizer  = false;
+run_phase_rqa   = false;
 run_time_coord  = false;
 run_space_coord = false;
 
@@ -113,13 +117,35 @@ patterns_bones = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10; ...
 
 
 % ------------------------------------------------------------------------
-% BLOCK #4: FREQNESS_TimeCoord_Mocap
+% BLOCK #4: FREQNESS_PhaseSpaceRQA_Mocap
 % ------------------------------------------------------------------------
 
-% target_frex must contain one target frequency per participant. Supply a
-% numeric vector to reuse it for every dataset, or one vector per dataset in
-% a cell array matching allData.
+% target_frex may be one frequency reused for all participants or one value
+% per participant. Supply a numeric scalar/vector to reuse it for every
+% dataset, or one scalar/vector per dataset in a cell array matching allData.
 target_frex = [];
+
+phaserqa_metric_levels = [0.25 0.5 1 2];
+% A scalar component is reused for all participants. A vector assigns one
+% component per participant. The toolbox default is component 1 for all.
+phaserqa_component = 1;
+phaserqa_duration = [0.15 0.85];
+phaserqa_downsample = 1;
+phaserqa_standardize = true;
+phaserqa_threshold_method = 'max_fraction';
+phaserqa_threshold = 0.1;
+phaserqa_theiler_window = 0;
+phaserqa_lmin = 2;
+phaserqa_vmin = 2;
+phaserqa_store_matrices = false;
+phaserqa_figure = false;
+phaserqa_animate = false;
+phaserqa_animation_pause = 0.01;
+
+
+% ------------------------------------------------------------------------
+% BLOCK #5: FREQNESS_TimeCoord_Mocap (JRQA alternative)
+% ------------------------------------------------------------------------
 
 % Embedding settings determined before running temporal coordination.
 % JRQA.m and JRQA.tau must be provided when the block is enabled.
@@ -131,7 +157,7 @@ timecoord_duration = [0.15 0.85];
 
 
 % ------------------------------------------------------------------------
-% BLOCK #5: FREQNESS_SpaceCoord_Mocap
+% BLOCK #6: FREQNESS_SpaceCoord_Mocap
 % ------------------------------------------------------------------------
 
 spacecoord_metric_levels = [0.25 0.5 1 2];
@@ -147,6 +173,7 @@ ndatasets = numel(allData);
 FREQ       = cell(ndatasets,1);
 H2         = cell(ndatasets,1);
 ED         = cell(ndatasets,1);
+FREQrqa    = cell(ndatasets,1);
 FREQjrqa   = cell(ndatasets,1);
 FREQmirror = cell(ndatasets,1);
 
@@ -175,7 +202,7 @@ for datai = 1:ndatasets
         this_frex = frex;
     end
 
-    if run_time_coord || run_space_coord %#ok<UNRCH>
+    if run_phase_rqa || run_time_coord || run_space_coord %#ok<UNRCH>
         if iscell(target_frex)
             if datai > numel(target_frex) || isempty(target_frex{datai})
                 error('No target frequencies were provided for dataset %s.', ...
@@ -187,8 +214,8 @@ for datai = 1:ndatasets
         end
 
         if isempty(this_target_frex)
-            error(['target_frex must contain one frequency per participant ' ...
-                'when coordination analyses are enabled.']);
+            error(['target_frex must contain a shared frequency or one ' ...
+                'frequency per participant when coordination analyses are enabled.']);
         end
     end
 
@@ -263,7 +290,34 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #4: FREQNESS_TimeCoord_Mocap
+    % BLOCK #4: FREQNESS_PhaseSpaceRQA_Mocap
+    % =====================================================================
+
+    if run_phase_rqa %#ok<UNRCH>
+
+        FREQrqa{datai} = FREQNESS_PhaseSpaceRQA_Mocap( ...
+            FREQ{datai},this_target_frex, ...
+            'metric_levels',phaserqa_metric_levels, ...
+            'component',phaserqa_component, ...
+            'duration',phaserqa_duration, ...
+            'downsample',phaserqa_downsample, ...
+            'standardize',phaserqa_standardize, ...
+            'threshold_method',phaserqa_threshold_method, ...
+            'threshold',phaserqa_threshold, ...
+            'theiler_window',phaserqa_theiler_window, ...
+            'lmin',phaserqa_lmin, ...
+            'vmin',phaserqa_vmin, ...
+            'store_matrices',phaserqa_store_matrices, ...
+            'figure',phaserqa_figure, ...
+            'animate',phaserqa_animate, ...
+            'srate',srate, ...
+            'animation_pause',phaserqa_animation_pause);
+
+    end
+
+
+    %% ====================================================================
+    % BLOCK #5: FREQNESS_TimeCoord_Mocap (JRQA alternative)
     % =====================================================================
 
     if run_time_coord
@@ -288,7 +342,7 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #5: FREQNESS_SpaceCoord_Mocap
+    % BLOCK #6: FREQNESS_SpaceCoord_Mocap
     % =====================================================================
 
     if run_space_coord %#ok<UNRCH>
