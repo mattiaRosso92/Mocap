@@ -17,7 +17,6 @@ CFG.common.results_folder = ...
     'FREQNESS_Results_Rosso_et_al_inPreparation';
 CFG.common.results_path = fullfile( ...
     CFG.common.data_path,CFG.common.results_folder);
-CFG.common.minimum_free_gib = 50;
 CFG.common.ncomps = 4;
 
 CFG.block1.output_path = fullfile( ...
@@ -62,32 +61,6 @@ for filei = 1:numel(required_metadata)
         'Missing Dance input file: %s',required_metadata{filei});
 end
 
-% Estimate retained BLOCK 1 output and abort before heavy computation
-% unless the internal volume has conservative headroom. Each valid dyad
-% contributes 4 conditions x 8 trials; each trial retains one FREQ struct
-% with complete eigenvalues and ncomps time series/patterns/eigenvectors.
-data_volume = javaObject('java.io.File',path_home);
-available_gib = double(data_volume.getUsableSpace())/1024^3;
-valid_dyad_count = 33;
-trial_count = valid_dyad_count*4*8;
-marker_coordinate_count = 66;
-sample_count = 15000;
-frequency_count = 32;
-participant_count = 2;
-bytes_per_trial = 8*( ...
-    marker_coordinate_count*frequency_count*participant_count + ...
-    marker_coordinate_count*CFG.common.ncomps*frequency_count*participant_count*2 + ...
-    CFG.common.ncomps*sample_count*frequency_count*participant_count);
-estimated_block1_gib = bytes_per_trial*trial_count/1024^3;
-fprintf('Estimated retained BLOCK 1 output: %.1f GiB\n', ...
-    estimated_block1_gib);
-fprintf('Dance_Data volume free space: %.1f GiB\n',available_gib);
-if available_gib < CFG.common.minimum_free_gib
-    error(['Full Dance replication not started: %.1f GiB is available, ' ...
-        'but at least %.0f GiB is required.'], ...
-        available_gib,CFG.common.minimum_free_gib);
-end
-
 output_paths = {CFG.block1.output_path,CFG.block2.output_path, ...
     CFG.block3.output_path,CFG.block4.output_path, ...
     CFG.block5.output_path,CFG.block5.figure_path, ...
@@ -97,8 +70,6 @@ for pathi = 1:numel(output_paths)
         mkdir(output_paths{pathi})
     end
 end
-clear valid_dyad_count trial_count marker_coordinate_count sample_count
-clear frequency_count participant_count bytes_per_trial
 
 % Save the exact run configuration in the new results root. Do not replace
 % a previous configuration unless overwrite_flag is explicitly enabled.
