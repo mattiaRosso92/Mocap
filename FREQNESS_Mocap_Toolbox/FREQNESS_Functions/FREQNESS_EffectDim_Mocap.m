@@ -1,4 +1,4 @@
-function [H2,ED] = FREQNESS_EffectDim_Mocap(GED,varargin)
+function [H2,ED] = FREQNESS_EffectDim_Mocap(FREQ,varargin)
 
 % ========================================================================
 %
@@ -18,10 +18,10 @@ function [H2,ED] = FREQNESS_EffectDim_Mocap(GED,varargin)
 % ------------------------------------------------------------------------
 %  INPUT ARGUMENTS:
 % ------------------------------------------------------------------------
-%  - GED : structure with fields
-%          • GED.evals -> complete eigenvalue array
+%  - FREQ : structure with fields
+%          • FREQ.evals -> complete eigenvalue array
 %                         [nEigenvalues x nFrex x (nParticipants)]
-%          • GED.frex  -> frequency vector [nFrex x 1] (optional)
+%          • FREQ.frex  -> frequency vector [nFrex x 1] (optional)
 %
 %  - Optional name-value pair:
 %      - 'plot_all' : when true, additionally plot the ED landscape for
@@ -68,21 +68,21 @@ if ~islogical(plot_all) || ~isscalar(plot_all)
 end
 
 
-%% Map and validate inputs from GED
+%% Map and validate inputs from FREQ
 
-if ~isstruct(GED)
-    error('Input must be a GED structure.');
+if ~isstruct(FREQ)
+    error('Input must be a FREQ structure.');
 end
 
-if ~isfield(GED,'evals') || isempty(GED.evals)
-    error('GED.evals is missing or empty.');
+if ~isfield(FREQ,'evals') || isempty(FREQ.evals)
+    error('FREQ.evals is missing or empty.');
 end
 
-eigenspectrum = GED.evals;
+eigenspectrum = FREQ.evals;
 if ~isnumeric(eigenspectrum) || ~isreal(eigenspectrum) || ...
         ndims(eigenspectrum) > 3 || any(isinf(eigenspectrum(:))) || ...
         any(eigenspectrum(:) < 0)
-    error(['GED.evals must be a real numeric array of non-negative, ' ...
+    error(['FREQ.evals must be a real numeric array of non-negative, ' ...
         'non-infinite eigenvalues in ' ...
         '[nEigenvalues x nFrex x (nParticipants)] format.']);
 end
@@ -95,10 +95,10 @@ nfrex = size(eigenspectrum,2);
 nsubs = size(eigenspectrum,3);
 
 % Use the analyzed frequencies when valid; otherwise use frequency indices
-if isfield(GED,'frex') && isnumeric(GED.frex) && isreal(GED.frex) && ...
-        isvector(GED.frex) && numel(GED.frex)==nfrex && ...
-        all(isfinite(GED.frex))
-    x = GED.frex(:);
+if isfield(FREQ,'frex') && isnumeric(FREQ.frex) && isreal(FREQ.frex) && ...
+        isvector(FREQ.frex) && numel(FREQ.frex)==nfrex && ...
+        all(isfinite(FREQ.frex))
+    x = FREQ.frex(:);
     xlab = 'Frequency (Hz)';
 else
     x = (1:nfrex)';

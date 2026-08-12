@@ -1,4 +1,4 @@
-function figures = FREQNESS_Visualizer_Mocap(GED,Landscape,Patterns,varargin)
+function figures = FREQNESS_Visualizer_Mocap(FREQ,Landscape,Patterns,varargin)
 
 % ========================================================================
 %  FREQNESS VISUALIZER: BODILY NETWORK LANDSCAPE & ACTIVATION PATTERNS
@@ -15,12 +15,12 @@ function figures = FREQNESS_Visualizer_Mocap(GED,Landscape,Patterns,varargin)
 % ------------------------------------------------------------------------
 %  INPUT ARGUMENTS:
 % ------------------------------------------------------------------------
-%  - GED.evals : normalized eigenspectrum
+%  - FREQ.evals : normalized eigenspectrum
 %                [nEigenvalues x nFrex x (nParticipants)]
-%  - GED.pats  : spatial activation patterns
+%  - FREQ.pats  : spatial activation patterns
 %                [nChannels x nComponents x nFrex x (nParticipants)]
-%  - GED.ts    : component time series, required only for animation
-%  - GED.frex  : analyzed frequencies
+%  - FREQ.ts    : component time series, required only for animation
+%  - FREQ.frex  : analyzed frequencies
 %
 %  - Landscape.frex   : frequencies to visualize
 %  - Landscape.ncomps : number of components to visualize
@@ -83,33 +83,33 @@ figures = struct('landscape',gobjects(0),'pattern_matrix',gobjects(0), ...
     'patterns',gobjects(0),'animation',gobjects(0));
 
 
-%% Check GED and Landscape inputs
+%% Check FREQ and Landscape inputs
 
-if ~isstruct(GED) || ~(isstruct(Landscape) || isempty(Landscape))
-    error('GED must be a structure; Landscape must be a structure or [].');
+if ~isstruct(FREQ) || ~(isstruct(Landscape) || isempty(Landscape))
+    error('FREQ must be a structure; Landscape must be a structure or [].');
 end
 
 required_ged_fields = {'evals','frex'};
 for fieldi = 1:numel(required_ged_fields)
-    if ~isfield(GED,required_ged_fields{fieldi}) || ...
-            isempty(GED.(required_ged_fields{fieldi}))
-        error('GED.%s is missing or empty.',required_ged_fields{fieldi});
+    if ~isfield(FREQ,required_ged_fields{fieldi}) || ...
+            isempty(FREQ.(required_ged_fields{fieldi}))
+        error('FREQ.%s is missing or empty.',required_ged_fields{fieldi});
     end
 end
 
-if ~isnumeric(GED.evals) || ~isreal(GED.evals) || ...
-        ndims(GED.evals) > 3 || any(~isfinite(GED.evals(:)))
-    error(['GED.evals must be a real finite numeric array in ' ...
+if ~isnumeric(FREQ.evals) || ~isreal(FREQ.evals) || ...
+        ndims(FREQ.evals) > 3 || any(~isfinite(FREQ.evals(:)))
+    error(['FREQ.evals must be a real finite numeric array in ' ...
         '[nEigenvalues x nFrex x (nParticipants)] format.']);
 end
 
-frex = GED.frex(:)';
+frex = FREQ.frex(:)';
 if ~isnumeric(frex) || ~isreal(frex) || isempty(frex) || ...
         any(~isfinite(frex)) || any(frex <= 0)
-    error('GED.frex must contain positive finite frequencies.');
+    error('FREQ.frex must contain positive finite frequencies.');
 end
-if size(GED.evals,2) ~= numel(frex)
-    error('The frequency dimension of GED.evals does not match GED.frex.');
+if size(FREQ.evals,2) ~= numel(frex)
+    error('The frequency dimension of FREQ.evals does not match FREQ.frex.');
 end
 
 if ~isempty(Landscape)
@@ -121,13 +121,13 @@ end
 landscape_frex = validate_frequency_vector(Landscape.frex,'Landscape.frex');
 landscape_ncomps = validate_component_number( ...
     Landscape.ncomps,'Landscape.ncomps');
-if landscape_ncomps > size(GED.evals,1)
+if landscape_ncomps > size(FREQ.evals,1)
     error('Landscape.ncomps exceeds the number of estimated networks.');
 end
 
 [idx_landscape,landscape_frex_actual] = map_frequencies( ...
     frex,landscape_frex,'Landscape');
-nsubs_landscape = size(GED.evals,3);
+nsubs_landscape = size(FREQ.evals,3);
 
 if isfield(Landscape,'xlabel') && ~isempty(Landscape.xlabel)
     landscape_xlabel = char(Landscape.xlabel);
@@ -162,7 +162,7 @@ colors = component_colors(landscape_ncomps);
 
 if plot_all || nsubs_landscape == 1
     for subi = 1:nsubs_landscape
-        this_evals = squeeze(GED.evals(1:landscape_ncomps, ...
+        this_evals = squeeze(FREQ.evals(1:landscape_ncomps, ...
             idx_landscape,subi));
         if landscape_ncomps == 1
             this_evals = reshape(this_evals,1,[]);
@@ -187,7 +187,7 @@ if plot_all || nsubs_landscape == 1
 end
 
 if nsubs_landscape > 1
-    all_evals = GED.evals(1:landscape_ncomps,idx_landscape,:);
+    all_evals = FREQ.evals(1:landscape_ncomps,idx_landscape,:);
     avg_evals = mean(all_evals,3,'omitnan');
     sem_evals = std(all_evals,0,3,'omitnan')/sqrt(nsubs_landscape);
     fig = plot_network_landscape(landscape_frex_actual,avg_evals, ...
@@ -217,14 +217,14 @@ for fieldi = 1:numel(required_pattern_fields)
     end
 end
 
-if ~isfield(GED,'pats') || isempty(GED.pats) || ...
-        ~isnumeric(GED.pats) || ~isreal(GED.pats) || ...
-        ndims(GED.pats) > 4 || any(isinf(GED.pats(:)))
-    error(['GED.pats must be a real numeric array in ' ...
+if ~isfield(FREQ,'pats') || isempty(FREQ.pats) || ...
+        ~isnumeric(FREQ.pats) || ~isreal(FREQ.pats) || ...
+        ndims(FREQ.pats) > 4 || any(isinf(FREQ.pats(:)))
+    error(['FREQ.pats must be a real numeric array in ' ...
         '[nChannels x nComponents x nFrex x (nParticipants)] format.']);
 end
-if size(GED.pats,3) ~= numel(frex)
-    error('The frequency dimension of GED.pats does not match GED.frex.');
+if size(FREQ.pats,3) ~= numel(frex)
+    error('The frequency dimension of FREQ.pats does not match FREQ.frex.');
 end
 
 markData = Patterns.markerData;
@@ -235,8 +235,8 @@ if ~isnumeric(markData) || ~isreal(markData) || ndims(markData) > 3 || ...
 end
 
 nchannels = size(markData,1);
-if mod(nchannels,3) ~= 0 || size(GED.pats,1) ~= nchannels
-    error(['Motion data must contain XYZ triplets, and GED.pats must have ' ...
+if mod(nchannels,3) ~= 0 || size(FREQ.pats,1) ~= nchannels
+    error(['Motion data must contain XYZ triplets, and FREQ.pats must have ' ...
         'one row per motion-data channel.']);
 end
 nmarkers = nchannels/3;
@@ -247,15 +247,15 @@ end
 
 pattern_frex = validate_frequency_vector(Patterns.frex,'Patterns.frex');
 pattern_comp = validate_component_number(Patterns.comp,'Patterns.comp');
-if pattern_comp > size(GED.pats,2)
+if pattern_comp > size(FREQ.pats,2)
     error('Patterns.comp exceeds the number of estimated networks.');
 end
 [idx_patterns,pattern_frex_actual] = map_frequencies( ...
     frex,pattern_frex,'Patterns');
 
-nsubs_patterns = size(GED.pats,4);
+nsubs_patterns = size(FREQ.pats,4);
 if size(markData,3) ~= nsubs_patterns
-    error('GED.pats and Patterns.markerData contain different participant counts.');
+    error('FREQ.pats and Patterns.markerData contain different participant counts.');
 end
 
 if ~isnumeric(Patterns.srate) || ~isscalar(Patterns.srate) || ...
@@ -298,7 +298,7 @@ z_idx = 3:3:nchannels;
 
 for freqi = 1:numel(idx_patterns)
     this_frex = pattern_frex_actual(freqi);
-    this_pats = squeeze(GED.pats(:,pattern_comp,idx_patterns(freqi),:));
+    this_pats = squeeze(FREQ.pats(:,pattern_comp,idx_patterns(freqi),:));
     if nsubs_patterns == 1
         this_pats = reshape(this_pats,nchannels,1);
     end
@@ -332,8 +332,8 @@ if animate_flag
         error(['The animation supports one frequency at a time. Disable ' ...
             'animation or provide one frequency in Patterns.frex.']);
     end
-    if ~isfield(GED,'ts') || isempty(GED.ts)
-        error('GED.ts is required when Patterns.animate is true.');
+    if ~isfield(FREQ,'ts') || isempty(FREQ.ts)
+        error('FREQ.ts is required when Patterns.animate is true.');
     end
 
     if isfield(Patterns,'animation_duration') && ...
@@ -347,7 +347,7 @@ if animate_flag
         error('Patterns.animation_duration must be one positive scalar.');
     end
 
-    figures.animation = plot_motion_animation(GED,markData, ...
+    figures.animation = plot_motion_animation(FREQ,markData, ...
         idx_patterns(1),pattern_comp,Patterns.srate,Patterns.start, ...
         animation_duration,x_idx,y_idx,z_idx,bones, ...
         pattern_frex_actual(1),frequency_unit);
@@ -519,11 +519,11 @@ end
 
 
 %% Helper function: Animate component backprojection and original motion
-function fig = plot_motion_animation(GED,markData,frequency_index,component, ...
+function fig = plot_motion_animation(FREQ,markData,frequency_index,component, ...
     srate,start_fraction,duration,x_idx,y_idx,z_idx,bones,frex,frequency_unit)
 
 nsubs = size(markData,3);
-npnts = min(size(markData,2),size(GED.ts,2));
+npnts = min(size(markData,2),size(FREQ.ts,2));
 booster = 10;
 
 xData = markData(x_idx,1:npnts,:);
@@ -535,17 +535,17 @@ y_component = zeros(numel(y_idx),npnts,nsubs);
 z_component = zeros(numel(z_idx),npnts,nsubs);
 
 for subi = 1:nsubs
-    this_ts = squeeze(GED.ts(component,1:npnts,frequency_index,subi));
+    this_ts = squeeze(FREQ.ts(component,1:npnts,frequency_index,subi));
     this_ts = booster*(this_ts(:)-mean(this_ts,'omitnan'));
     ts2plot(:,subi) = this_ts;
     remeaner = mean(markData(:,1:npnts,subi),2,'omitnan');
 
     x_component(:,:,subi) = ...
-        GED.pats(x_idx,component,frequency_index,subi)*this_ts' + remeaner(x_idx);
+        FREQ.pats(x_idx,component,frequency_index,subi)*this_ts' + remeaner(x_idx);
     y_component(:,:,subi) = ...
-        GED.pats(y_idx,component,frequency_index,subi)*this_ts' + remeaner(y_idx);
+        FREQ.pats(y_idx,component,frequency_index,subi)*this_ts' + remeaner(y_idx);
     z_component(:,:,subi) = ...
-        GED.pats(z_idx,component,frequency_index,subi)*this_ts' + remeaner(z_idx);
+        FREQ.pats(z_idx,component,frequency_index,subi)*this_ts' + remeaner(z_idx);
 end
 
 dwn = max(1,10+5*nsubs);
@@ -832,7 +832,7 @@ frex_actual = frex(idx_frex);
 
 if ~all(ismembertol(frex_requested(:),frex(:),1e-3))
     warning(['Some requested frequencies in ' label ...
-        '.frex are not present in GED.frex. Using closest matches instead.']);
+        '.frex are not present in FREQ.frex. Using closest matches instead.']);
 end
 
 end

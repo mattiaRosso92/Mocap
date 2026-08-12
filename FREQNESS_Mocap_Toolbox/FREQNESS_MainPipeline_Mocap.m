@@ -144,7 +144,7 @@ spacecoord_component = 1;
 
 ndatasets = numel(allData);
 
-GED        = cell(ndatasets,1);
+FREQ       = cell(ndatasets,1);
 H2         = cell(ndatasets,1);
 ED         = cell(ndatasets,1);
 FREQjrqa   = cell(ndatasets,1);
@@ -203,7 +203,7 @@ for datai = 1:ndatasets
             'Add the missing file to the toolbox before running this pipeline.']);
     end
 
-    GED{datai} = FREQNESS_NetworkEstimation_Mocap( ...
+    FREQ{datai} = FREQNESS_NetworkEstimation_Mocap( ...
         this_data,this_frex,srate, ...
         'duration',network_duration, ...
         'fwidth',network_fwidth, ...
@@ -218,7 +218,7 @@ for datai = 1:ndatasets
 
     if run_effect_dim
         [H2{datai},ED{datai}] = FREQNESS_EffectDim_Mocap( ...
-            GED{datai},'plot_all',effectdim_plot_all);
+            FREQ{datai},'plot_all',effectdim_plot_all);
     end
 
 
@@ -239,7 +239,7 @@ for datai = 1:ndatasets
         else
             Landscape.frex = landscape_frex;
         end
-        Landscape.ncomps = min(landscape_ncomps,size(GED{datai}.evals,1));
+        Landscape.ncomps = min(landscape_ncomps,size(FREQ{datai}.evals,1));
         Landscape.xlabel = landscape_xlabel;
         Landscape.title = landscape_title;
 
@@ -256,7 +256,7 @@ for datai = 1:ndatasets
         Patterns.animation_duration = patterns_animation_duration;
         Patterns.frequency_unit = patterns_frequency_unit;
 
-        FREQNESS_Visualizer_Mocap(GED{datai},Landscape,Patterns, ...
+        FREQNESS_Visualizer_Mocap(FREQ{datai},Landscape,Patterns, ...
             'plot_all',visualizer_plot_all);
 
     end
@@ -279,7 +279,7 @@ for datai = 1:ndatasets
         end
 
         FREQjrqa{datai} = FREQNESS_TimeCoord_Mocap( ...
-            GED{datai},JRQA,this_target_frex, ...
+            FREQ{datai},JRQA,this_target_frex, ...
             'metric_levels',timecoord_metric_levels, ...
             'component',timecoord_component, ...
             'duration',timecoord_duration);
@@ -294,7 +294,7 @@ for datai = 1:ndatasets
     if run_space_coord %#ok<UNRCH>
 
         FREQmirror{datai} = FREQNESS_SpaceCoord_Mocap( ...
-            GED{datai},this_target_frex, ...
+            FREQ{datai},this_target_frex, ...
             'metric_levels',spacecoord_metric_levels, ...
             'component',spacecoord_component);
 

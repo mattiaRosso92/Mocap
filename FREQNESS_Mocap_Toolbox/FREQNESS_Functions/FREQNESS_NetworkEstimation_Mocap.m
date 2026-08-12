@@ -1,4 +1,4 @@
-function [GED] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
+function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 % ========================================================================
 %  FREQUENCY-RESOLVED NETWORK ESTIMATION TOOLBOX - MOCAP version
 %
@@ -56,14 +56,14 @@ function [GED] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 % ------------------------------------------------------------------------
 %  OUTPUT ARGUMENTS:
 % ------------------------------------------------------------------------
-%  - GED       : Structure containing:
-%      - GED.evals : Complete normalized eigenspectrum
+%  - FREQ      : Structure containing:
+%      - FREQ.evals : Complete normalized eigenspectrum
 %                    [nMarkerCoordinates x nFrex x nParticipants]. This
 %                    always contains all eigenvalues, independently of
 %                    ncomps.
-%      - GED.evecs : Retained eigenvectors.
-%      - GED.pats  : Retained spatial activation patterns.
-%      - GED.ts    : Retained network time series.
+%      - FREQ.evecs : Retained eigenvectors.
+%      - FREQ.pats  : Retained spatial activation patterns.
+%      - FREQ.ts    : Retained network time series.
 %                If more participants are given as input, outputs will be
 %                stored along an extra dimension for every individual.
 %
@@ -152,7 +152,7 @@ end
 % disp(['Data given for ' num2str(nsubs) ' participants']);
 
 % Initialize GED outputs (subjects as last dimension)
-GED = []; % output structure
+FREQ = []; % output structure
 GEDevals = zeros(size(data,1), nfrex, nsubs);
 [GEDevecs, GEDpats] = deal(zeros(size(data,1), ncomps, nfrex, nsubs));
 GEDts = zeros(ncomps, size(data,2), nfrex, nsubs);
@@ -224,11 +224,11 @@ if nsubs == 1
 end
 
 % Assign outputs to structure
-GED.evals = GEDevals; % complete normalized eigenspectrum
-GED.evecs = GEDevecs; % eigenvectors
-GED.pats  = GEDpats;  % spatial activation patterns
-GED.ts    = GEDts;    % time series
-GED.frex  = frex;     % to make use of the analyzed frequencies later on
+FREQ.evals = GEDevals; % complete normalized eigenspectrum
+FREQ.evecs = GEDevecs; % eigenvectors
+FREQ.pats  = GEDpats;  % spatial activation patterns
+FREQ.ts    = GEDts;    % time series
+FREQ.frex  = frex;     % to make use of the analyzed frequencies later on
 
 
 end

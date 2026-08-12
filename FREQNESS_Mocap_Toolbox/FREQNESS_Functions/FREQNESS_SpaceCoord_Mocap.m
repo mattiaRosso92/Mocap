@@ -1,4 +1,4 @@
-function FREQmirror = FREQNESS_SpaceCoord_Mocap(GED,target_frex,varargin)
+function FREQmirror = FREQNESS_SpaceCoord_Mocap(FREQ,target_frex,varargin)
 
 % ========================================================================
 %
@@ -16,10 +16,10 @@ function FREQmirror = FREQNESS_SpaceCoord_Mocap(GED,target_frex,varargin)
 % ------------------------------------------------------------------------
 %  INPUT ARGUMENTS:
 % ------------------------------------------------------------------------
-%  - GED : Structure with fields
-%          - GED.pats : Spatial activation patterns organized as
+%  - FREQ : Structure with fields
+%          - FREQ.pats : Spatial activation patterns organized as
 %                       [nCoordinates x nComponents x nFrex x 2].
-%          - GED.frex : Shared frequency vector or participant-specific
+%          - FREQ.frex : Shared frequency vector or participant-specific
 %                       [nFrex x 2] frequency matrix.
 %
 %  - target_frex : Two-element vector containing one target frequency per
@@ -58,25 +58,25 @@ meter = opts.metric_levels;
 
 %% Validate inputs
 
-if ~isstruct(GED) || ~isfield(GED,'pats') || isempty(GED.pats) || ...
-        ~isfield(GED,'frex') || isempty(GED.frex)
-    error('GED must contain non-empty GED.pats and GED.frex fields.');
+if ~isstruct(FREQ) || ~isfield(FREQ,'pats') || isempty(FREQ.pats) || ...
+        ~isfield(FREQ,'frex') || isempty(FREQ.frex)
+    error('FREQ must contain non-empty FREQ.pats and FREQ.frex fields.');
 end
 
-if ndims(GED.pats) < 4 || size(GED.pats,4) ~= 2
+if ndims(FREQ.pats) < 4 || size(FREQ.pats,4) ~= 2
     error(['FREQNESS_SpaceCoord_Mocap currently supports dyadic input. ' ...
-        'GED.pats must contain exactly two participants in its last dimension.']);
+        'FREQ.pats must contain exactly two participants in its last dimension.']);
 end
 
-nsubs = size(GED.pats,4);
-valid_shared_frex = isvector(GED.frex) && ...
-    numel(GED.frex) == size(GED.pats,3);
-valid_participant_frex = ismatrix(GED.frex) && ...
-    isequal(size(GED.frex),[size(GED.pats,3) nsubs]);
-if ~isnumeric(GED.frex) || ~isreal(GED.frex) || ...
-        any(~isfinite(GED.frex(:))) || ...
+nsubs = size(FREQ.pats,4);
+valid_shared_frex = isvector(FREQ.frex) && ...
+    numel(FREQ.frex) == size(FREQ.pats,3);
+valid_participant_frex = ismatrix(FREQ.frex) && ...
+    isequal(size(FREQ.frex),[size(FREQ.pats,3) nsubs]);
+if ~isnumeric(FREQ.frex) || ~isreal(FREQ.frex) || ...
+        any(~isfinite(FREQ.frex(:))) || ...
         ~(valid_shared_frex || valid_participant_frex)
-    error(['GED.frex must be a shared frequency vector or an ' ...
+    error(['FREQ.frex must be a shared frequency vector or an ' ...
         '[nFrex x nParticipants] frequency matrix.']);
 end
 
@@ -88,8 +88,8 @@ end
 
 if ~isnumeric(which_comp) || ~isscalar(which_comp) || ...
         which_comp < 1 || which_comp ~= round(which_comp) || ...
-        which_comp > size(GED.pats,2)
-    error('component must be an integer indexing the second dimension of GED.pats.');
+        which_comp > size(FREQ.pats,2)
+    error('component must be an integer indexing the second dimension of FREQ.pats.');
 end
 
 if ~isnumeric(meter) || ~isreal(meter) || isempty(meter) || ...
@@ -107,9 +107,9 @@ fprintf('\nFREQNESS Space Coordination: analysing %d participants.\n',nsubs);
 idx_frex = zeros(nsubs,nmeters);
 for subi = 1:nsubs
     if valid_shared_frex
-        this_frex = GED.frex(:);
+        this_frex = FREQ.frex(:);
     else
-        this_frex = GED.frex(:,subi);
+        this_frex = FREQ.frex(:,subi);
     end
     for metri = 1:nmeters
         [~,idx_frex(subi,metri)] = min(abs( ...
@@ -127,8 +127,8 @@ for metri = 1:nmeters
     % compared at the frequency selected for the last participant.
     shared_frex_idx = idx_frex(nsubs,metri);
     FREQmirror(metri) = corr( ...
-        GED.pats(:,which_comp,shared_frex_idx,1), ...
-        GED.pats(:,which_comp,shared_frex_idx,2));
+        FREQ.pats(:,which_comp,shared_frex_idx,1), ...
+        FREQ.pats(:,which_comp,shared_frex_idx,2));
 
 end
 

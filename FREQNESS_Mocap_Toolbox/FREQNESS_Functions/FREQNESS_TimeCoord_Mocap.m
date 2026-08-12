@@ -1,4 +1,4 @@
-function FREQjrqa = FREQNESS_TimeCoord_Mocap(GED,JRQA,target_frex,varargin)
+function FREQjrqa = FREQNESS_TimeCoord_Mocap(FREQ,JRQA,target_frex,varargin)
 
 % ========================================================================
 %
@@ -17,10 +17,10 @@ function FREQjrqa = FREQNESS_TimeCoord_Mocap(GED,JRQA,target_frex,varargin)
 % ------------------------------------------------------------------------
 %  INPUT ARGUMENTS:
 % ------------------------------------------------------------------------
-%  - GED : Structure with fields
-%          - GED.ts   : Network activation time series organized as
+%  - FREQ : Structure with fields
+%          - FREQ.ts   : Network activation time series organized as
 %                       [nComponents x nTimePoints x nFrex x 2].
-%          - GED.frex : Shared frequency vector or participant-specific
+%          - FREQ.frex : Shared frequency vector or participant-specific
 %                       [nFrex x 2] frequency matrix.
 %
 %  - JRQA : Structure containing the embedding dimension JRQA.m and delay
@@ -72,25 +72,25 @@ meter = opts.metric_levels;
 
 %% Validate inputs
 
-if ~isstruct(GED) || ~isfield(GED,'ts') || isempty(GED.ts) || ...
-        ~isfield(GED,'frex') || isempty(GED.frex)
-    error('GED must contain non-empty GED.ts and GED.frex fields.');
+if ~isstruct(FREQ) || ~isfield(FREQ,'ts') || isempty(FREQ.ts) || ...
+        ~isfield(FREQ,'frex') || isempty(FREQ.frex)
+    error('FREQ must contain non-empty FREQ.ts and FREQ.frex fields.');
 end
 
-if ndims(GED.ts) < 4 || size(GED.ts,4) ~= 2
+if ndims(FREQ.ts) < 4 || size(FREQ.ts,4) ~= 2
     error(['FREQNESS_TimeCoord_Mocap currently supports dyadic input. ' ...
-        'GED.ts must contain exactly two participants in its last dimension.']);
+        'FREQ.ts must contain exactly two participants in its last dimension.']);
 end
 
-nsubs = size(GED.ts,4);
-valid_shared_frex = isvector(GED.frex) && ...
-    numel(GED.frex) == size(GED.ts,3);
-valid_participant_frex = ismatrix(GED.frex) && ...
-    isequal(size(GED.frex),[size(GED.ts,3) nsubs]);
-if ~isnumeric(GED.frex) || ~isreal(GED.frex) || ...
-        any(~isfinite(GED.frex(:))) || ...
+nsubs = size(FREQ.ts,4);
+valid_shared_frex = isvector(FREQ.frex) && ...
+    numel(FREQ.frex) == size(FREQ.ts,3);
+valid_participant_frex = ismatrix(FREQ.frex) && ...
+    isequal(size(FREQ.frex),[size(FREQ.ts,3) nsubs]);
+if ~isnumeric(FREQ.frex) || ~isreal(FREQ.frex) || ...
+        any(~isfinite(FREQ.frex(:))) || ...
         ~(valid_shared_frex || valid_participant_frex)
-    error(['GED.frex must be a shared frequency vector or an ' ...
+    error(['FREQ.frex must be a shared frequency vector or an ' ...
         '[nFrex x nParticipants] frequency matrix.']);
 end
 
@@ -107,8 +107,8 @@ end
 
 if ~isnumeric(which_comp) || ~isscalar(which_comp) || ...
         which_comp < 1 || which_comp ~= round(which_comp) || ...
-        which_comp > size(GED.ts,1)
-    error('component must be an integer indexing the first dimension of GED.ts.');
+        which_comp > size(FREQ.ts,1)
+    error('component must be an integer indexing the first dimension of FREQ.ts.');
 end
 
 if ~isnumeric(meter) || ~isreal(meter) || isempty(meter) || ...
@@ -137,14 +137,14 @@ fprintf('\nFREQNESS Time Coordination: analysing %d participants.\n',nsubs);
 
 %% Apply duration trimming
 
-npnts = size(GED.ts,2);
+npnts = size(FREQ.ts,2);
 if ~isempty(duration)
     first_point = round(duration(1)*npnts);
     last_point = round(duration(2)*npnts);
     first_point = max(first_point,1);
     last_point = min(last_point,npnts);
-    GED.ts = GED.ts(:,first_point:last_point,:,:);
-    npnts = size(GED.ts,2);
+    FREQ.ts = FREQ.ts(:,first_point:last_point,:,:);
+    npnts = size(FREQ.ts,2);
 end
 
 
@@ -153,9 +153,9 @@ end
 idx_frex = zeros(nsubs,nmeters);
 for subi = 1:nsubs
     if valid_shared_frex
-        this_frex = GED.frex(:);
+        this_frex = FREQ.frex(:);
     else
-        this_frex = GED.frex(:,subi);
+        this_frex = FREQ.frex(:,subi);
     end
     for metri = 1:nmeters
         [~,idx_frex(subi,metri)] = min(abs( ...
@@ -173,7 +173,7 @@ for metri = 1:nmeters
 
     ps = zeros(1,nsubs);
     for subi = 1:nsubs
-        gedTs(subi,:) = GED.ts( ...
+        gedTs(subi,:) = FREQ.ts( ...
             which_comp,:,idx_frex(subi,metri),subi);
         fprintf('Optimizing embedding parameters for participant #%d\n',subi);
         [~,~,ps(subi)] = RPparam(gedTs(subi,:)');
