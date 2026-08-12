@@ -133,24 +133,33 @@ else
     sem_ED = [];
 end
 
-cmap = parula(256);
-col_line = cmap(1,:);
+% Match the visual language used for the Dance-study network landscapes:
+% the leading network color, a translucent SEM ribbon, and a log2-spaced
+% frequency axis whose labels remain in linear units.
+col_line = [0.90 0.22 0.16];
 
+if strcmp(xlab,'Frequency (Hz)') && all(x > 0)
+    x_plot = log2(x);
+else
+    x_plot = x;
+end
 figure('Color','w','Units','normalized','Position',[0.3 0.3 0.35 0.5]);
 hold on
 if nsubs > 1 && ~all(isnan(sem_ED))
-    fill([x; flipud(x)],[avg_ED-sem_ED; flipud(avg_ED+sem_ED)], ...
-        [0 0 0],'FaceAlpha',0.1,'EdgeColor','none');
+    fill([x_plot; flipud(x_plot)], ...
+        [avg_ED-sem_ED; flipud(avg_ED+sem_ED)], ...
+        col_line,'FaceAlpha',0.22,'EdgeColor','none');
 end
-plot(x,avg_ED,'Color',col_line,'LineWidth',2);
-xlabel(xlab,'FontSize',13,'FontWeight','bold');
-ylabel('Effective dimensionality','FontSize',13,'FontWeight','bold');
+plot(x_plot,avg_ED,'Color',col_line,'LineWidth',2.5);
+xlabel(xlab,'FontSize',14,'FontWeight','bold');
+ylabel('Effective dimensionality','FontSize',14,'FontWeight','bold');
 title('Effective Dimensionality - Grand Average', ...
-    'FontSize',14,'FontWeight','bold');
-set(gca,'FontSize',12,'LineWidth',1.2,'Box','off');
+    'FontSize',16,'FontWeight','bold');
+set(gca,'FontSize',12,'LineWidth',1.2,'Box','on', ...
+    'GridAlpha',0.18,'MinorGridAlpha',0.10);
 grid on
 grid minor
-set_frequency_limits(x)
+set_frequency_axis(x,x_plot,xlab)
 
 
 %% Optional individual-participant plots
@@ -158,15 +167,16 @@ set_frequency_limits(x)
 if plot_all
     for subi = 1:nsubs
         figure('Color','w','Units','normalized','Position',[0.3 0.3 0.35 0.5]);
-        plot(x,ED(:,subi),'Color',col_line,'LineWidth',1.5);
-        xlabel(xlab,'FontSize',13,'FontWeight','bold');
-        ylabel('Effective dimensionality','FontSize',13,'FontWeight','bold');
+        plot(x_plot,ED(:,subi),'Color',col_line,'LineWidth',2.5);
+        xlabel(xlab,'FontSize',14,'FontWeight','bold');
+        ylabel('Effective dimensionality','FontSize',14,'FontWeight','bold');
         title(sprintf('Effective Dimensionality - Participant #%d',subi), ...
-            'FontSize',14,'FontWeight','bold');
-        set(gca,'FontSize',12,'LineWidth',1.2,'Box','off');
+            'FontSize',16,'FontWeight','bold');
+        set(gca,'FontSize',12,'LineWidth',1.2,'Box','on', ...
+            'GridAlpha',0.18,'MinorGridAlpha',0.10);
         grid on
         grid minor
-        set_frequency_limits(x)
+        set_frequency_axis(x,x_plot,xlab)
     end
 end
 
@@ -181,14 +191,25 @@ end
 end
 
 
-%% Helper function: Set frequency limits
-function set_frequency_limits(frex)
+%% Helper function: Set frequency-axis limits and octave ticks
+function set_frequency_axis(x,x_plot,xlab)
 
-if numel(frex) == 1 %#ok<ISCL>
-    padding = max(abs(frex(1))*0.05,0.5);
-    xlim([frex(1)-padding frex(1)+padding])
+if numel(x) == 1 %#ok<ISCL>
+    padding = 0.5;
+    xlim([x_plot(1)-padding x_plot(1)+padding])
+    xticks(x_plot(1))
+    xticklabels(string(x(1)))
+elseif strcmp(xlab,'Frequency (Hz)') && all(x > 0)
+    octave_set = 2.^(-6:8);
+    octave_values = octave_set(octave_set >= min(x) & octave_set <= max(x));
+    if numel(octave_values) >= 2
+        xticks(log2(octave_values))
+        xticklabels(string(octave_values))
+    end
+    xtickangle(45)
+    xlim([min(x_plot) max(x_plot)])
 else
-    xlim([min(frex) max(frex)])
+    xlim([min(x_plot) max(x_plot)])
 end
 
 end

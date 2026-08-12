@@ -1,84 +1,58 @@
-function FREQNESS_Visualizer_Mocap(GED,Landscape,Patterns)
+function figures = FREQNESS_Visualizer_Mocap(GED,Landscape,Patterns,varargin)
+
 % ========================================================================
-%  FREQNESS VISUALIZER: BODILY NETWORK LANDSCAPE & BODILY ACTIVATION PATTERNS
+%  FREQNESS VISUALIZER: BODILY NETWORK LANDSCAPE & ACTIVATION PATTERNS
 %
-%  This visualization is meant to scale from one to multiple participants,
-%  as long as they share the same reference point and spatial coordinates
-%  as defined during data acquisition.
+%  This function mirrors the organization of the MEEG FREQNESS visualizer
+%  while retaining MoCap-specific outputs: labelled XYZ patterns, static
+%  skeletal projections, and synchronized movement animations.
 %
-% ========================================================================
-%
-%  This script visualizes:
-%
-%  - Bodily network prominence across frequencies
-%    Quantified as % variance explained based on the associated
-%    eigenvalues, producing a frequency-resolved network landscape
-%
-%  - Spatial activation patterns of the networks
-%    - The requested network is plotted in a 2D visualization 
-%      of the labelled bodily districts, sorted from high to low,
-%      separately for X,Y,and Z. The scale is not normalized.
-%     - The requested network is plotted in a 3D visualization 
-%      of the skeleton with all mocap markers, color-coded by activation
-%      magnitude along X,Y,and Z directions. The scale is normalized.
-%     - Upon user's request, an animation is displayed. The animation
-%     shows the activation timeseries of the selected bodily network
-%     component. The red ball is constantly updated to track how the
-%     activation over time maps onto the XYZ space via backprojection of
-%     the component in the markers' space. For comparison, the animation of
-%     the original data (i.e., including the sum of all components) is also
-%     synchronized with he component's activation.
+%  If multiple participants are provided, the landscape is shown as a
+%  grand average with shaded SEM. Set 'plot_all' to true to additionally
+%  show individual landscapes. Static patterns overlay the participants in
+%  their common acquisition space and use one normalization across them.
 %
 % ------------------------------------------------------------------------
 %  INPUT ARGUMENTS:
 % ------------------------------------------------------------------------
-%  - GED              : Structure outputted by FREQNESS_NetworkEstimation function.
-%                       We recommend not to modify this structure before giving it
-%                       as input to the current function (FREQNESS_Visualizer).
-%      - GED.evals    : Normalized eigenvalues (variance explained in % points).
-%      - GED.pats     : Spatial activation patterns used to generate NIFTI files
-%                       for visualizing network topographies.
-%      - GED.frex     : Vector of frequencies analyzed; used to select subsets
-%                       for visualization.
+%  - GED.evals : normalized eigenspectrum
+%                [nEigenvalues x nFrex x (nParticipants)]
+%  - GED.pats  : spatial activation patterns
+%                [nChannels x nComponents x nFrex x (nParticipants)]
+%  - GED.ts    : component time series, required only for animation
+%  - GED.frex  : analyzed frequencies
 %
+%  - Landscape.frex   : frequencies to visualize
+%  - Landscape.ncomps : number of components to visualize
 %
-%  - Landscape                : Structure containing settings for network landscape visualization
-%      - Landscape.frex       : Vector of frequencies to visualize in the network landscape.
-%      - Landscape.ncomps     : Number of components (networks) to visualize in the landscape.
+%    Optional Landscape fields:
+%  - Landscape.sem    : externally computed SEM [nComponents x nFrex]
+%  - Landscape.xlabel : x-axis label (default: 'Frequency (Hz)')
+%  - Landscape.title  : figure title
 %
+%  - Patterns.frex       : frequencies to visualize
+%  - Patterns.labels     : one label per XYZ marker triplet
+%  - Patterns.markerData : motion data [nChannels x nTime x nParticipants]
+%  - Patterns.comp       : component to visualize
+%  - Patterns.srate      : original sampling rate
+%  - Patterns.start      : animation starting point in [0,1]
 %
-%  - Patterns                 : Structure containing settings for activation patterns visualization
-%      - Patterns.frex        : Vector of frequencies to visualize the associated
-%                               networks' spatial activation patterns.
-%      - Patterns.labels      : Mocap marker labels, in format X1,Y1,Z1,X2,Y2,Z2,[...]
-%      - Patterns.markerData  : Mocap marker data, in format
-%                               X1,Y1,Z1,X2,Y2,Z2,[...]. Used to backproject and animate.
-%      - Patterns.comp        : index of the component # to inspect
-%      - Patterns.srate       : original sampling rate, for time info in the animation
-%      - Patterns.start       : starting point of the animation (0-1)
+%    Optional Patterns fields:
+%  - Patterns.bones              : marker links [nLinks x 2]
+%  - Patterns.animate            : true/false; if absent, ask interactively
+%  - Patterns.plot_matrix        : show labelled XYZ matrices (default: true)
+%  - Patterns.animation_duration : maximum displayed seconds (default: Inf)
+%  - Patterns.frequency_unit     : frequency suffix (default: 'Hz')
 %
+%  Optional name-value pair:
+%  - 'plot_all' : additionally plot every participant's landscape.
+%                 Default: false.
 %
-%  NOTE 1: At the moment, only the BONE STRUCTURE used in Bigand et al.
-%  (2024) is supported for visualizing the skeleton (consider asking the
-%  user to input their own)
+% ------------------------------------------------------------------------
+%  OUTPUT ARGUMENT:
+% ------------------------------------------------------------------------
+%  - figures : structure containing handles to the generated figures.
 %
-
-% NOTE2 : the 'booster' for animation should relate to the variance in the
-% data, rather than being hard-coded
-
-% NOTE 3: include an optional argument for setting the starting point of
-% the animation (in % of the recording length)
-
-% NOTE 5: re-normalize the activation pattern scale from -1 to 1 (rather
-% than 0 to 1)??? Maybe it's actually better to bottom at 0, so that the 
-% skeleton does not fold over itself?
-
-% NOTE 6: the SIGN ARBITRARITY seems to affect the spatial activation
-% pattern. In some cases, the component is clearly in anti-phase with the
-% original data animation. HP: the sign adjustment should correct all XYZ
-% dimensions at ones, because of how the input data are structured.
-
-
 % ------------------------------------------------------------------------
 %  AUTHORS:
 %  Mattia Rosso, Felix Bigand, Leonardo Bonetti
@@ -88,402 +62,800 @@ function FREQNESS_Visualizer_Mocap(GED,Landscape,Patterns)
 %  Center for Music in the Brain, Aarhus University
 %  Neuroscience of Perception & Action Lab, Italian Institute of Technology (IIT)
 %  Centre for Eudaimonia and Human Flourishing, Linacre College, University of Oxford
-%
-%  Rome (IT), 11/04/2025
 % ========================================================================
 
 
-%% Define visualization for N participants
+%% Handle optional arguments
 
-% Check input size to verify if more than one participant is being analyzed
-if length(size(GED.evals)) < 3 % no extra dimension in the input
-    nsubs = 1;
+if nargin < 3
+    Patterns = [];
+end
+
+opts = struct('plot_all',false);
+opts = parse_name_value_pairs(opts,varargin{:});
+plot_all = opts.plot_all;
+
+if ~islogical(plot_all) || ~isscalar(plot_all)
+    error('plot_all must be one logical value (true or false).');
+end
+
+figures = struct('landscape',gobjects(0),'pattern_matrix',gobjects(0), ...
+    'patterns',gobjects(0),'animation',gobjects(0));
+
+
+%% Check GED and Landscape inputs
+
+if ~isstruct(GED) || ~(isstruct(Landscape) || isempty(Landscape))
+    error('GED must be a structure; Landscape must be a structure or [].');
+end
+
+required_ged_fields = {'evals','frex'};
+for fieldi = 1:numel(required_ged_fields)
+    if ~isfield(GED,required_ged_fields{fieldi}) || ...
+            isempty(GED.(required_ged_fields{fieldi}))
+        error('GED.%s is missing or empty.',required_ged_fields{fieldi});
+    end
+end
+
+if ~isnumeric(GED.evals) || ~isreal(GED.evals) || ...
+        ndims(GED.evals) > 3 || any(~isfinite(GED.evals(:)))
+    error(['GED.evals must be a real finite numeric array in ' ...
+        '[nEigenvalues x nFrex x (nParticipants)] format.']);
+end
+
+frex = GED.frex(:)';
+if ~isnumeric(frex) || ~isreal(frex) || isempty(frex) || ...
+        any(~isfinite(frex)) || any(frex <= 0)
+    error('GED.frex must contain positive finite frequencies.');
+end
+if size(GED.evals,2) ~= numel(frex)
+    error('The frequency dimension of GED.evals does not match GED.frex.');
+end
+
+if ~isempty(Landscape)
+
+if ~isfield(Landscape,'frex') || ~isfield(Landscape,'ncomps')
+    error('Landscape must contain the fields frex and ncomps.');
+end
+
+landscape_frex = validate_frequency_vector(Landscape.frex,'Landscape.frex');
+landscape_ncomps = validate_component_number( ...
+    Landscape.ncomps,'Landscape.ncomps');
+if landscape_ncomps > size(GED.evals,1)
+    error('Landscape.ncomps exceeds the number of estimated networks.');
+end
+
+[idx_landscape,landscape_frex_actual] = map_frequencies( ...
+    frex,landscape_frex,'Landscape');
+nsubs_landscape = size(GED.evals,3);
+
+if isfield(Landscape,'xlabel') && ~isempty(Landscape.xlabel)
+    landscape_xlabel = char(Landscape.xlabel);
 else
-    nsubs = size(GED.evals,3);
+    landscape_xlabel = 'Frequency (Hz)';
 end
-disp(['Visualization will include ' num2str(nsubs) ' participants']);
+if isfield(Landscape,'title') && ~isempty(Landscape.title)
+    landscape_title = char(Landscape.title);
+else
+    landscape_title = 'Bodily network landscape';
+end
 
-
-
-%% Output #1: NETWORK LANDSCAPE
-
-
-
-
-% Sort Landscape frequencies
-Landscape.frex = sort(Landscape.frex,'ascend');
-
-% Match GED.frex to Landscape.frex
-[~, idx_frex2plot] = ismembertol(Landscape.frex, GED.frex, 1e-4);
-
-% Create a log2-evenly spaced frequency vector
-log2_min = log2(min(Landscape.frex));
-log2_max = log2(max(Landscape.frex));
-nPoints = 100; % you can pick how fine you want the interpolation
-log2_frex_uniform = linspace(log2_min, log2_max, nPoints);
-frex_uniform = 2.^log2_frex_uniform; % back to Hz
-
-% Define colormap
-colors = flipud([linspace(0,1,Landscape.ncomps)', zeros(Landscape.ncomps,1), linspace(1,0,Landscape.ncomps)']);
-
-% Plot all participants
-figure
-for subi = 1:nsubs
-
-    % Interpolate GED data onto this uniform log2 frequency axis
-    resampled_GED = zeros(Landscape.ncomps, nPoints);
-    for i = 1:Landscape.ncomps
-        resampled_GED(i,:) = interp1(Landscape.frex, GED.evals(i,idx_frex2plot,subi), frex_uniform, 'linear', 'extrap');
+external_sem = [];
+if isfield(Landscape,'sem') && ~isempty(Landscape.sem)
+    external_sem = Landscape.sem;
+    if ~isnumeric(external_sem) || ~isreal(external_sem) || ...
+            size(external_sem,1) < landscape_ncomps || ...
+            size(external_sem,2) ~= numel(frex) || ...
+            any(~isfinite(external_sem(:))) || any(external_sem(:) < 0)
+        error(['Landscape.sem must be a non-negative finite array in ' ...
+            '[nComponents x nFrex] format.']);
     end
+end
 
-    subplot(nsubs,1,subi), hold on
-    for i = 1:Landscape.ncomps
-        if i == 1
-            plot(log2(frex_uniform), resampled_GED(i,:), 'Color', colors(i,:), 'LineWidth', 3);
+fprintf('\nFREQNESS Visualizer: visualizing %d participants.\n', ...
+    nsubs_landscape);
+
+
+%% Output #1: Network landscape
+
+colors = component_colors(landscape_ncomps);
+
+if plot_all || nsubs_landscape == 1
+    for subi = 1:nsubs_landscape
+        this_evals = squeeze(GED.evals(1:landscape_ncomps, ...
+            idx_landscape,subi));
+        if landscape_ncomps == 1
+            this_evals = reshape(this_evals,1,[]);
+        end
+
+        this_sem = [];
+        if nsubs_landscape == 1 && ~isempty(external_sem)
+            this_sem = external_sem(1:landscape_ncomps,idx_landscape);
+        end
+
+        if nsubs_landscape == 1
+            this_title = landscape_title;
         else
-            plot(log2(frex_uniform), resampled_GED(i,:), 'Color', colors(i,:), 'LineWidth', 2);
+            this_title = sprintf('%s - Participant #%d', ...
+                landscape_title,subi);
         end
+
+        fig = plot_network_landscape(landscape_frex_actual,this_evals, ...
+            this_sem,colors,landscape_xlabel,this_title);
+        figures.landscape(end+1) = fig;
     end
-    xlim([min(log2(frex_uniform)) , max(log2(frex_uniform))])
-    ylim([0 100]) % assuming eigenvalues normalized in %
-    title(['Participant #' num2str(subi)])
+end
 
-    % Define octave ticks
-    octave_ticks = unique(2.^round(log2(Landscape.frex)));
-    octave_ticks = octave_ticks(octave_ticks >= min(Landscape.frex) & octave_ticks <= max(Landscape.frex));
-    % Apply to plot
-    xticks(log2(octave_ticks))        % visualize as log spaced
-    xticklabels(string(octave_ticks)) % read as linear
-    xtickangle(45)
-    xlabel('Frequency (Hz)', 'FontSize', 14, 'FontWeight', 'bold')
-    ylabel('Explained variance (%)', 'FontSize', 14, 'FontWeight', 'bold')
-    sgtitle('Bodily networks prominence across frequencies', 'FontSize', 16, 'FontWeight', 'bold')
-    grid on
-    hold off
-
-    % Create custom legend with 'GED component #' labels
-    legendLabels = arrayfun(@(x) sprintf('GED component #%d', x), 1:Landscape.ncomps, 'UniformOutput', false);
-    legend(legendLabels, 'Location', 'Northeast', 'FontSize', 12)
-    grid minor
-    set(gca, 'FontSize', 12, 'LineWidth', 1.5) % Make axis and labels more visible
-    box on
-    set(gcf, 'Color', 'w'); % Set figure background to white
+if nsubs_landscape > 1
+    all_evals = GED.evals(1:landscape_ncomps,idx_landscape,:);
+    avg_evals = mean(all_evals,3,'omitnan');
+    sem_evals = std(all_evals,0,3,'omitnan')/sqrt(nsubs_landscape);
+    fig = plot_network_landscape(landscape_frex_actual,avg_evals, ...
+        sem_evals,colors,landscape_xlabel, ...
+        [landscape_title ' - Grand average']);
+    figures.landscape(end+1) = fig;
+end
 
 end
 
-%% Output #2: BODILY SPATIAL ACTIVATION PATTERNS (3D static visualization)
+if isempty(Patterns)
+    return
+end
 
-% NOTE: because we decomposend the positions in terms of distance fomr the
-% origin, the space is in the activation timeseries! And in the weights.
-% Because of the demeaning, I might have to 'inflate' the skeleton based on
-% the data ('re-inject' the mean)
 
-% NOTE2: THE SIGNS in the patterns ARE VERY IMPORTANT!!
+%% Check Patterns inputs
 
-% Assign input data
+if ~isstruct(Patterns)
+    error('Patterns must be a structure or an empty array.');
+end
+
+required_pattern_fields = {'frex','labels','markerData','comp','srate','start'};
+for fieldi = 1:numel(required_pattern_fields)
+    if ~isfield(Patterns,required_pattern_fields{fieldi}) || ...
+            isempty(Patterns.(required_pattern_fields{fieldi}))
+        error('Patterns.%s is missing or empty.',required_pattern_fields{fieldi});
+    end
+end
+
+if ~isfield(GED,'pats') || isempty(GED.pats) || ...
+        ~isnumeric(GED.pats) || ~isreal(GED.pats) || ...
+        ndims(GED.pats) > 4 || any(isinf(GED.pats(:)))
+    error(['GED.pats must be a real numeric array in ' ...
+        '[nChannels x nComponents x nFrex x (nParticipants)] format.']);
+end
+if size(GED.pats,3) ~= numel(frex)
+    error('The frequency dimension of GED.pats does not match GED.frex.');
+end
+
 markData = Patterns.markerData;
-nmarks = size(markData,1);
-npnts  = size(markData,2);
+if ~isnumeric(markData) || ~isreal(markData) || ndims(markData) > 3 || ...
+        any(~isfinite(markData(:)))
+    error(['Patterns.markerData must be a real finite numeric array in ' ...
+        '[nChannels x nTime x (nParticipants)] format.']);
+end
 
-% Define X,Y,Z indexes
-x_idx = 1:3:nmarks-2;
-y_idx = 2:3:nmarks-1;
-z_idx = 3:3:nmarks;
+nchannels = size(markData,1);
+if mod(nchannels,3) ~= 0 || size(GED.pats,1) ~= nchannels
+    error(['Motion data must contain XYZ triplets, and GED.pats must have ' ...
+        'one row per motion-data channel.']);
+end
+nmarkers = nchannels/3;
 
-% Assign separately X,Y,Z data, per participant
+if numel(Patterns.labels) ~= nmarkers
+    error('Patterns.labels must contain one label per XYZ marker triplet.');
+end
+
+pattern_frex = validate_frequency_vector(Patterns.frex,'Patterns.frex');
+pattern_comp = validate_component_number(Patterns.comp,'Patterns.comp');
+if pattern_comp > size(GED.pats,2)
+    error('Patterns.comp exceeds the number of estimated networks.');
+end
+[idx_patterns,pattern_frex_actual] = map_frequencies( ...
+    frex,pattern_frex,'Patterns');
+
+nsubs_patterns = size(GED.pats,4);
+if size(markData,3) ~= nsubs_patterns
+    error('GED.pats and Patterns.markerData contain different participant counts.');
+end
+
+if ~isnumeric(Patterns.srate) || ~isscalar(Patterns.srate) || ...
+        ~isfinite(Patterns.srate) || Patterns.srate <= 0
+    error('Patterns.srate must be one positive finite scalar.');
+end
+if ~isnumeric(Patterns.start) || ~isscalar(Patterns.start) || ...
+        ~isfinite(Patterns.start) || Patterns.start < 0 || Patterns.start > 1
+    error('Patterns.start must be one finite scalar in [0,1].');
+end
+
+if isfield(Patterns,'plot_matrix') && ~isempty(Patterns.plot_matrix)
+    plot_matrix = Patterns.plot_matrix;
+else
+    plot_matrix = true;
+end
+if ~islogical(plot_matrix) || ~isscalar(plot_matrix)
+    error('Patterns.plot_matrix must be one logical value.');
+end
+
+if isfield(Patterns,'frequency_unit') && ~isempty(Patterns.frequency_unit)
+    frequency_unit = char(Patterns.frequency_unit);
+else
+    frequency_unit = 'Hz';
+end
+
+if isfield(Patterns,'bones') && ~isempty(Patterns.bones)
+    bones = Patterns.bones;
+else
+    bones = default_bones(nmarkers);
+end
+validate_bones(bones,nmarkers)
+
+x_idx = 1:3:nchannels-2;
+y_idx = 2:3:nchannels-1;
+z_idx = 3:3:nchannels;
+
+
+%% Output #2: Bodily spatial activation patterns
+
+for freqi = 1:numel(idx_patterns)
+    this_frex = pattern_frex_actual(freqi);
+    this_pats = squeeze(GED.pats(:,pattern_comp,idx_patterns(freqi),:));
+    if nsubs_patterns == 1
+        this_pats = reshape(this_pats,nchannels,1);
+    end
+
+    if plot_matrix
+        fig = plot_pattern_matrix(this_pats,Patterns.labels,x_idx,y_idx,z_idx, ...
+            this_frex,frequency_unit,pattern_comp);
+        figures.pattern_matrix(end+1) = fig;
+    end
+
+    fig = plot_static_patterns(this_pats,markData,x_idx,y_idx,z_idx, ...
+        bones,this_frex,frequency_unit,pattern_comp);
+    figures.patterns(end+1) = fig;
+end
+
+
+%% Output #3: Bodily spatial activation-pattern animation
+
+if isfield(Patterns,'animate') && ~isempty(Patterns.animate)
+    animate_flag = Patterns.animate;
+else
+    animate_flag = logical(input(['Please inspect the static representation ' ...
+        'of the motion patterns. Visualize the animation? (0 or 1): ']));
+end
+if ~islogical(animate_flag) || ~isscalar(animate_flag)
+    error('Patterns.animate must be one logical value (true or false).');
+end
+
+if animate_flag
+    if numel(idx_patterns) > 1
+        error(['The animation supports one frequency at a time. Disable ' ...
+            'animation or provide one frequency in Patterns.frex.']);
+    end
+    if ~isfield(GED,'ts') || isempty(GED.ts)
+        error('GED.ts is required when Patterns.animate is true.');
+    end
+
+    if isfield(Patterns,'animation_duration') && ...
+            ~isempty(Patterns.animation_duration)
+        animation_duration = Patterns.animation_duration;
+    else
+        animation_duration = Inf;
+    end
+    if ~isnumeric(animation_duration) || ~isscalar(animation_duration) || ...
+            animation_duration <= 0 || isnan(animation_duration)
+        error('Patterns.animation_duration must be one positive scalar.');
+    end
+
+    figures.animation = plot_motion_animation(GED,markData, ...
+        idx_patterns(1),pattern_comp,Patterns.srate,Patterns.start, ...
+        animation_duration,x_idx,y_idx,z_idx,bones, ...
+        pattern_frex_actual(1),frequency_unit);
+end
+
+end
+
+
+%% Helper function: Plot a network landscape
+function fig = plot_network_landscape(frex,evals,sem,colors,xlabel_text,title_text)
+
+ncomps = size(evals,1);
+npoints = 200;
+
+if numel(frex) > 1
+    x_uniform = 2.^linspace(log2(min(frex)),log2(max(frex)),npoints);
+else
+    x_uniform = frex;
+end
+x_plot = log2(x_uniform);
+
+fig = figure('Color','w','Units','pixels','Position',[120 120 880 590]);
+ax = axes('Parent',fig);
+hold(ax,'on')
+line_handles = gobjects(ncomps,1);
+upper_limit = 0;
+
+for compi = 1:ncomps
+    y = reshape(evals(compi,:),1,[]);
+    if numel(frex) > 1
+        y = interp1(frex,y,x_uniform,'linear','extrap');
+    end
+
+    if ~isempty(sem)
+        se = reshape(sem(compi,:),1,[]);
+        if numel(frex) > 1
+            se = interp1(frex,se,x_uniform,'linear','extrap');
+        end
+        fill(ax,[x_plot fliplr(x_plot)], ...
+            [y-se fliplr(y+se)],colors(compi,:), ...
+            'FaceAlpha',0.22,'EdgeColor','none','HandleVisibility','off');
+        upper_limit = max(upper_limit,max(y+se,[],'omitnan'));
+    else
+        upper_limit = max(upper_limit,max(y,[],'omitnan'));
+    end
+
+    line_handles(compi) = plot(ax,x_plot,y,'Color',colors(compi,:), ...
+        'LineWidth',2.5,'DisplayName',sprintf('GED #%d',compi));
+end
+
+set_log2_frequency_axis(ax,x_uniform)
+if upper_limit <= 0 || ~isfinite(upper_limit)
+    upper_limit = 1;
+end
+ylim(ax,[0 min(100,max(10,ceil(1.1*upper_limit/10)*10))])
+xlabel(ax,xlabel_text,'FontSize',14,'FontWeight','bold');
+ylabel(ax,'Explained variance (%)','FontSize',14,'FontWeight','bold');
+title(ax,title_text,'FontSize',16,'FontWeight','bold');
+legend(ax,line_handles,'Location','northeast','FontSize',11);
+format_figure_axes(ax)
+
+end
+
+
+%% Helper function: Plot labelled XYZ pattern matrices
+function fig = plot_pattern_matrix(patterns,labels,x_idx,y_idx,z_idx, ...
+    frex,frequency_unit,component)
+
+nsubs = size(patterns,2);
+max_abs = max(abs(patterns(:)),[],'omitnan');
+if max_abs <= 0 || ~isfinite(max_abs)
+    max_abs = 1;
+end
+
+fig = figure('Color','w','Units','pixels', ...
+    'Position',[80 80 1050 max(430,250*nsubs)]);
+layout = tiledlayout(fig,nsubs,3,'TileSpacing','compact','Padding','compact');
+dimensions = {x_idx,y_idx,z_idx};
+dimension_labels = {'X','Y','Z'};
+
 for subi = 1:nsubs
-    xData(:,:,subi) = markData(x_idx,:,subi);
-    yData(:,:,subi) = markData(y_idx,:,subi);
-    zData(:,:,subi) = markData(z_idx,:,subi);
+    for dimi = 1:3
+        ax = nexttile(layout);
+        imagesc(ax,patterns(dimensions{dimi},subi));
+        clim(ax,[-max_abs max_abs])
+        xticks(ax,[])
+        yticks(ax,1:numel(labels))
+        yticklabels(ax,labels)
+        if dimi > 1
+            yticklabels(ax,[])
+        end
+        title(ax,sprintf('Participant #%d - %s',subi,dimension_labels{dimi}), ...
+            'FontWeight','bold')
+        set(ax,'FontSize',10,'LineWidth',1,'Box','on')
+    end
 end
 
-% Re-sort frequencies in ascending order (allows for input in random order)
-Patterns.frex = sort(Patterns.frex,'ascend');
-nfrex = length(Patterns.frex);
-
-% Find indices of GED.frex that match elements in Patterns.frex
-[~, idxfrex] = ismembertol(Patterns.frex, GED.frex, 1e-4);
-
-% Produce one output per input frequency
-for frexi = 1:nfrex
-
-    % Assing current frequency to temporary variable
-    thisfrex = Patterns.frex(frexi);
-
-    %% Visualize by labelled matrix
-    figure, clf
-    for subi = 1:nsubs
-        % X
-        subplot(nsubs, 3, 3*(subi-1)+1)
-        imagesc(GED.pats(x_idx,Patterns.comp,idxfrex(frexi),subi))
-        xticks([])
-        yticks(1:nmarks/3)
-        yticklabels(Patterns.labels)
-        title(['Participant #' num2str(subi) ' - X'])
-        colorbar
-        % Y
-        subplot(nsubs, 3, 3*(subi-1)+2)
-        imagesc(GED.pats(y_idx,Patterns.comp,idxfrex(frexi),subi))
-        xticks([])
-        yticks(1:nmarks/3)
-        yticklabels(Patterns.labels)
-        title(['Participant #' num2str(subi) ' - Y'])
-        colorbar
-        % Z
-        subplot(nsubs, 3, 3*(subi-1)+3)
-        imagesc(GED.pats(z_idx,Patterns.comp,idxfrex(frexi),subi))
-        xticks([])
-        yticks(1:nmarks/3)
-        yticklabels(Patterns.labels)
-        title(['Participant #' num2str(subi) ' - Z'])
-        colorbar
-    end
-    set(gcf, 'Color', 'w'); % Set figure background to white
-    % General
-    sgtitle(['Movement frequency: ' num2str(thisfrex) 'Hz'])
-
-
-    %% Static skeleton
-
-    figure, clf
-    for subi = 1:nsubs
-        % Inflate the de-meaned projection
-        remeaner = 1*squeeze( mean(markData(:,:,subi),2) ); % compute teh means by channel
-
-        % Demean and boost the component timeseries, for visualization
-        booster = 10; % I guess this should be proportional to the VARIANCE instead, but the componets is demeaned
-        % NOTE: booster previously hard-coded to 15, seemed to work for the tested
-        % particiapnts
-        ts2plot(:,subi) = booster * (GED.ts(Patterns.comp,:,idxfrex(frexi),subi)-mean(GED.ts(Patterns.comp,:,idxfrex(frexi),subi)));
-
-        % Backprojection on 3 dimensions
-        x_comp2plot(:,:,subi) = GED.pats(x_idx,Patterns.comp,idxfrex(frexi),subi) * ts2plot(:,subi)' + remeaner(x_idx);
-        y_comp2plot(:,:,subi) = GED.pats(y_idx,Patterns.comp,idxfrex(frexi),subi) * ts2plot(:,subi)' + remeaner(y_idx);
-        z_comp2plot(:,:,subi) = GED.pats(z_idx,Patterns.comp,idxfrex(frexi),subi) * ts2plot(:,subi)' + remeaner(z_idx);
-
-        % % Define limits
-        % xmin = min(x_comp2plot(:));
-        % ymin = min(y_comp2plot(:));
-        % zmin = min(z_comp2plot(:));
-        % xmax = max(x_comp2plot(:));
-        % ymax = max(y_comp2plot(:));
-        % zmax = max(z_comp2plot(:));
-
-        % Static scatterplot 3D (hack: use initial position and map the act patterns on the marker color, by XYZ)
-        nscale = 1000;                    % Number of colors in the colormap
-        col_static = .95*jet(nscale);      % Create a jet colormap
-        marksize = 100;
-
-        % Normalize all activation patterns to [-1, 1]
-        all_pats2see = GED.pats(:,Patterns.comp,idxfrex(frexi),subi) / max(abs(GED.pats(:,Patterns.comp,idxfrex(frexi),subi)));
-
-        % Select the activation values relevant to each axis
-        x_pats2see = all_pats2see(x_idx);
-        y_pats2see = all_pats2see(y_idx);
-        z_pats2see = all_pats2see(z_idx);
-
-        % Convert [-1, 1] values to indices in [1, nscale] to map into the colormap
-        % Step-by-step:
-        % - Shift range from [-1, 1] to [0, 2] with (val + 1)
-        % - Scale to [0, nscale-1] by multiplying by (nscale-1)/2
-        % - Add 1 to get final index range [1, nscale]
-        color_idx_x = round((x_pats2see + 1) * (nscale - 1) / 2) + 1;
-        color_idx_y = round((y_pats2see + 1) * (nscale - 1) / 2) + 1;
-        color_idx_z = round((z_pats2see + 1) * (nscale - 1) / 2) + 1;
-
-        % Clamp to make sure indices are within bounds
-        color_idx_x = min(max(color_idx_x, 1), nscale);
-        color_idx_y = min(max(color_idx_y, 1), nscale);
-        color_idx_z = min(max(color_idx_z, 1), nscale);
-
-        % Pre-shifted links (MATLAB 1-based indexing already applied)
-        bones = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10;7,11;11,12;12,13;
-            14,15;14,16;15,16;15,17;17,18;18,19;16,20;20,21;21,22];
-        linewidth = 1.7;
-
-        % Plot for X dimension
-        subplot(131)
-        scatter3(x_comp2plot(:,1,subi), y_comp2plot(:,1,subi), z_comp2plot(:,1,subi), marksize, col_static(color_idx_x,:), 'filled');
-        hold on
-        % for k = 1:size(bones,1)
-        %     p1 = bones(k,1);
-        %     p2 = bones(k,2);
-        %     plot3([x_comp2plot(p1,1,subi), x_comp2plot(p2,1,subi)], ...
-        %         [y_comp2plot(p1,1,subi), y_comp2plot(p2,1,subi)], ...
-        %         [z_comp2plot(p1,1,subi), z_comp2plot(p2,1,subi)], 'k-', 'Linewidth', linewidth);
-        % end
-        colorbar
-        xlim([ min([xData(:);yData(:)]) , max([xData(:);yData(:)]) ]);
-        ylim([ min([xData(:);yData(:)]) , max([xData(:);yData(:)]) ]);
-        zlim([min(zData(:))-.1 max(zData(:))+.1]); % tiny offset to get increasing values in the case of 2D data
-        xlabel('X')
-        ylabel('Y')
-        zlabel('Z')
-        title('X')
-        axis square
-        % Plot for Y dimension
-        subplot(132)
-        scatter3(x_comp2plot(:,1,subi), y_comp2plot(:,1,subi), z_comp2plot(:,1,subi), marksize, col_static(color_idx_y,:), 'filled');
-        hold on
-        % for k = 1:size(bones,1)
-        %     p1 = bones(k,1);
-        %     p2 = bones(k,2);
-        %     plot3([x_comp2plot(p1,1,subi), x_comp2plot(p2,1,subi)], ...
-        %         [y_comp2plot(p1,1,subi), y_comp2plot(p2,1,subi)], ...
-        %         [z_comp2plot(p1,1,subi), z_comp2plot(p2,1,subi)], 'k-', 'Linewidth', linewidth);
-        % end
-        xlim([ min([xData(:);yData(:)]) , max([xData(:);yData(:)]) ]);
-        ylim([ min([xData(:);yData(:)]) , max([xData(:);yData(:)]) ]);
-        zlim([min(zData(:))-.1 max(zData(:))+.1]);
-        xlabel('X')
-        ylabel('Y')
-        zlabel('Z')
-        title('Y')
-        axis square
-        colorbar
-        % Plot for Z dimension
-        subplot(133)
-        scatter3(x_comp2plot(:,1,subi), y_comp2plot(:,1,subi), z_comp2plot(:,1,subi), marksize, col_static(color_idx_z,:), 'filled');
-        hold on
-        % for k = 1:size(bones,1)
-        %     p1 = bones(k,1);
-        %     p2 = bones(k,2);
-        %     plot3([x_comp2plot(p1,1,subi), x_comp2plot(p2,1,subi)], ...
-        %         [y_comp2plot(p1,1,subi), y_comp2plot(p2,1,subi)], ...
-        %         [z_comp2plot(p1,1,subi), z_comp2plot(p2,1,subi)], 'k-', 'Linewidth', linewidth);
-        % end
-        xlim([ min([xData(:);yData(:)]) , max([xData(:);yData(:)]) ]);
-        ylim([ min([xData(:);yData(:)]) , max([xData(:);yData(:)]) ]);
-        zlim([min(zData(:))-.1 max(zData(:))+.1]);
-        xlabel('X')
-        ylabel('Y')
-        zlabel('Z')
-        title('Z')
-        axis square
-        colorbar
-        % General title
-        sgtitle(['Movement frequency: ' num2str(thisfrex) 'Hz'])
-
-    end
-    set(gcf, 'Color', 'w'); % Set figure background to white
+colormap(fig,.95*jet(1000))
+cb = colorbar(ax);
+cb.Layout.Tile = 'east';
+cb.Label.String = 'Activation weight';
+cb.Label.FontWeight = 'bold';
+title(layout,sprintf(['Labelled activation patterns | Component #%d | ' ...
+    'Frequency = %.3g %s'],component,frex,frequency_unit), ...
+    'FontSize',15,'FontWeight','bold')
 
 end
 
 
-%% Output #3: BODILY SPATIAL ACTIVATION PATTERNS (3D animation)
+%% Helper function: Plot static skeletal activation patterns
+function fig = plot_static_patterns(patterns,markData,x_idx,y_idx,z_idx, ...
+    bones,frex,frequency_unit,component)
 
-
-% Downsample for faster visualization (NOTE: it should scale with the N timepoints)
-dwn = 10 + 5*nsubs;
-ts2plot = ts2plot(1:dwn:end,:);
-x_comp2plot = x_comp2plot(:,1:dwn:end,:);
-y_comp2plot = y_comp2plot(:,1:dwn:end,:);
-z_comp2plot = z_comp2plot(:,1:dwn:end,:);
-xData = xData(:,1:dwn:end,:);
-yData = yData(:,1:dwn:end,:);
-zData = zData(:,1:dwn:end,:);
-npnts = floor(npnts/dwn);
-
-% Create time vector
-srate_anim = Patterns.srate/dwn;                       % updated sampling rate
-tvec = 1/srate_anim : 1/srate_anim : npnts/srate_anim; % create time vector
-idx_start = round(Patterns.start*npnts);               % where the animation should start
-
-% Ask the user if he wants the animation
-animate_flag = input('Please inspect the static representation of the motion patterns. Do you want to visualize the animations? (0 or 1)');
-
-% Run only if the flag is enables
-if animate_flag == 1
-
-    % NOTE: consider the following in case the animation lags
-    % If you use this approach, you'll have to adjust the bones structure
-    % % Re-shape to 3D scatter participants without a loop
-    % x_comp2plot = reshape(x_comp2plot, 2*(nmarks/3),[],1 );
-    % y_comp2plot = reshape(y_comp2plot, 2*(nmarks/3),[],1 );
-    % z_comp2plot = reshape(z_comp2plot, 2*(nmarks/3),[],1 );
-    % xData = reshape(xData, 2*(nmarks/3),[],1 );
-    % yData = reshape(yData, 2*(nmarks/3),[],1 );
-    % zData = reshape(zData, 2*(nmarks/3),[],1 );
-
-    % Attribute colors to participants
-    colors_subs = [0 0 1 ; 1 0 0];
-
-
-    % Check that there are not more than 1 frequency
-    if nfrex > 1
-        error(['The animation does not support more than 1 frequency.' ...
-            ' You may disable the animation or decrease the number of frequencies'])
-    end
-
-    % Pre-shifted links (1-based indexing)
-    bones = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10;7,11;11,12;12,13;
-        14,15;14,16;15,16;15,17;17,18;18,19;16,20;20,21;21,22];
-
-    % The animation goes all within the same figure
-    figure(3000), clf
-    set(gcf, 'Color', 'w'); % Set figure background to white
-
-    for i = idx_start:npnts
-        for frexi = 1:nfrex
-
-            % === Clear subplots once per frame ===
-            subplot(2,2,[1 2]), cla
-            subplot(2,2,3), cla
-            subplot(2,2,4), cla
-
-            for subi = 1:nsubs
-
-                % Time series display
-                subplot(2,2,[1 2])
-                plot(tvec, ts2plot(:,subi)', 'Color', colors_subs(subi,:), 'LineWidth', linewidth), hold on
-                plot(tvec(i), ts2plot(i,subi), 'o', 'MarkerSize', 10, 'MarkerFaceColor', .3*colors_subs(subi,:))
-                xlabel('Time (s)')
-                ylabel('Component scores (a.u.)')
-                title('Component activation timeseries')
-
-                % 3D scatter with links (movements component)
-                subplot(2,2,3)
-                scatter3(x_comp2plot(:,i,subi), y_comp2plot(:,i,subi), z_comp2plot(:,i,subi), marksize, 'filled', 'MarkerFaceColor', .7*colors_subs(subi,:));
-                hold on
-                % for k = 1:size(bones,1)
-                %     p1 = bones(k,1);
-                %     p2 = bones(k,2);
-                %     plot3([x_comp2plot(p1,i,subi), x_comp2plot(p2,i,subi)], ...
-                %         [y_comp2plot(p1,i,subi), y_comp2plot(p2,i,subi)], ...
-                %         [z_comp2plot(p1,i,subi), z_comp2plot(p2,i,subi)], 'k-', 'LineWidth', linewidth);
-                % end
-                xlim([min([xData(:);yData(:)]), max([xData(:);yData(:)])]);
-                ylim([min([xData(:);yData(:)]), max([xData(:);yData(:)])]);
-                zlim([min(zData(:)), .1*max(zData(:))+max(zData(:))+.1]);
-                xlabel('X'), ylabel('Y'), zlabel('Z')
-                title('Component backprojection')
-                axis square
-
-                % 3D scatter with links (marker data)
-                subplot(2,2,4)
-                scatter3(xData(:,i,subi), yData(:,i,subi), zData(:,i,subi), marksize, 'filled', 'MarkerFaceColor', .7*colors_subs(subi,:));
-                hold on
-                % for k = 1:size(bones,1)
-                %     p1 = bones(k,1);
-                %     p2 = bones(k,2);
-                %     plot3([xData(p1,i,subi), xData(p2,i,subi)], ...
-                %         [yData(p1,i,subi), yData(p2,i,subi)], ...
-                %         [zData(p1,i,subi), zData(p2,i,subi)], 'k-', 'LineWidth', linewidth);
-                % end
-                xlim([min([xData(:);yData(:)]), max([xData(:);yData(:)])]);
-                ylim([min([xData(:);yData(:)]), max([xData(:);yData(:)])]);
-                zlim([min(zData(:)), .1*max(max(zData(:)))+max(zData(:))+.1]);
-                xlabel('X'), ylabel('Y'), zlabel('Z')
-                title('Original data')
-                axis square
-
-            end
-
-            pause(0.1) %pause(0.001)
-
+nsubs = size(patterns,2);
+valid_patterns = patterns(isfinite(patterns));
+if isempty(valid_patterns)
+    global_max = 1;
+else
+    % Retain the Figure 2 normalization: one positive maximum across all
+    % markers and participants at the selected component and frequency.
+    global_max = max(valid_patterns);
+    if global_max <= 0
+        global_max = max(abs(valid_patterns));
+        if global_max == 0
+            global_max = 1;
         end
     end
+end
+patterns = patterns/global_max;
 
+fig = figure('Color','w','Units','pixels','Position',[50 90 1460 570]);
+axes_handles = gobjects(3,1);
+axis_titles = {'X-axis activation','Y-axis activation','Z-axis activation'};
+axis_indices = {x_idx,y_idx,z_idx};
+cmap = .95*jet(1000);
+
+for dimi = 1:3
+    axes_handles(dimi) = subplot(3,3,(dimi-1)*3+dimi,'Parent',fig);
+    ax = axes_handles(dimi);
+    hold(ax,'on')
+
+    for subi = 1:nsubs
+        x_pos = markData(x_idx,1,subi);
+        y_pos = markData(y_idx,1,subi);
+        z_pos = markData(z_idx,1,subi);
+        activation = patterns(axis_indices{dimi},subi);
+
+        scatter3(ax,x_pos,y_pos,z_pos,95,activation,'filled', ...
+            'MarkerEdgeColor','k','LineWidth',0.6);
+        plot_bones(ax,x_pos,y_pos,z_pos,bones,[0 0 0],2.6)
+    end
+
+    format_skeleton_axes(ax,markData,x_idx,y_idx,z_idx)
+    title(ax,axis_titles{dimi},'FontSize',13,'FontWeight','bold')
+    colormap(ax,cmap)
+    clim(ax,[-1 1])
+end
+
+cb = colorbar(axes_handles(3));
+cb.Position = [0.945 0.16 0.014 0.68];
+cb.Label.String = 'Normalized activation';
+cb.Label.FontWeight = 'bold';
+cb.FontSize = 10;
+sgtitle(fig,sprintf(['Bodily activation pattern | Component #%d | ' ...
+    'Frequency = %.3g %s'],component,frex,frequency_unit), ...
+    'FontSize',16,'FontWeight','bold')
+
+end
+
+
+%% Helper function: Animate component backprojection and original motion
+function fig = plot_motion_animation(GED,markData,frequency_index,component, ...
+    srate,start_fraction,duration,x_idx,y_idx,z_idx,bones,frex,frequency_unit)
+
+nsubs = size(markData,3);
+npnts = min(size(markData,2),size(GED.ts,2));
+booster = 10;
+
+xData = markData(x_idx,1:npnts,:);
+yData = markData(y_idx,1:npnts,:);
+zData = markData(z_idx,1:npnts,:);
+ts2plot = zeros(npnts,nsubs);
+x_component = zeros(numel(x_idx),npnts,nsubs);
+y_component = zeros(numel(y_idx),npnts,nsubs);
+z_component = zeros(numel(z_idx),npnts,nsubs);
+
+for subi = 1:nsubs
+    this_ts = squeeze(GED.ts(component,1:npnts,frequency_index,subi));
+    this_ts = booster*(this_ts(:)-mean(this_ts,'omitnan'));
+    ts2plot(:,subi) = this_ts;
+    remeaner = mean(markData(:,1:npnts,subi),2,'omitnan');
+
+    x_component(:,:,subi) = ...
+        GED.pats(x_idx,component,frequency_index,subi)*this_ts' + remeaner(x_idx);
+    y_component(:,:,subi) = ...
+        GED.pats(y_idx,component,frequency_index,subi)*this_ts' + remeaner(y_idx);
+    z_component(:,:,subi) = ...
+        GED.pats(z_idx,component,frequency_index,subi)*this_ts' + remeaner(z_idx);
+end
+
+dwn = max(1,10+5*nsubs);
+sample_idx = 1:dwn:npnts;
+ts2plot = ts2plot(sample_idx,:);
+x_component = x_component(:,sample_idx,:);
+y_component = y_component(:,sample_idx,:);
+z_component = z_component(:,sample_idx,:);
+xData = xData(:,sample_idx,:);
+yData = yData(:,sample_idx,:);
+zData = zData(:,sample_idx,:);
+
+srate_animation = srate/dwn;
+tvec = (0:numel(sample_idx)-1)/srate_animation;
+idx_start = max(1,min(numel(tvec),round(start_fraction*numel(tvec))+1));
+if isfinite(duration)
+    idx_end = min(numel(tvec),idx_start+round(duration*srate_animation)-1);
+else
+    idx_end = numel(tvec);
+end
+
+participant_colors = participant_colormap(nsubs);
+fig = figure('Color','w','Units','pixels','Position',[70 70 1280 780], ...
+    'Name','FREQNESS MoCap animation','NumberTitle','off');
+layout = tiledlayout(fig,2,2,'TileSpacing','compact','Padding','compact');
+ax_time = nexttile(layout,[1 2]);
+ax_component = nexttile(layout);
+ax_original = nexttile(layout);
+hold(ax_time,'on'); hold(ax_component,'on'); hold(ax_original,'on')
+
+cursor_handles = gobjects(nsubs,1);
+component_markers = gobjects(nsubs,1);
+original_markers = gobjects(nsubs,1);
+component_bones = cell(nsubs,1);
+original_bones = cell(nsubs,1);
+
+for subi = 1:nsubs
+    plot(ax_time,tvec,ts2plot(:,subi),'Color',participant_colors(subi,:), ...
+        'LineWidth',2,'DisplayName',sprintf('Participant #%d',subi));
+    cursor_handles(subi) = plot(ax_time,tvec(idx_start),ts2plot(idx_start,subi), ...
+        'o','MarkerSize',9,'MarkerFaceColor',participant_colors(subi,:), ...
+        'MarkerEdgeColor','k','LineWidth',0.6,'HandleVisibility','off');
+
+    component_markers(subi) = scatter3(ax_component, ...
+        x_component(:,idx_start,subi),y_component(:,idx_start,subi), ...
+        z_component(:,idx_start,subi),95,participant_colors(subi,:),'filled', ...
+        'MarkerEdgeColor','k','LineWidth',0.6);
+    original_markers(subi) = scatter3(ax_original, ...
+        xData(:,idx_start,subi),yData(:,idx_start,subi),zData(:,idx_start,subi), ...
+        95,participant_colors(subi,:),'filled', ...
+        'MarkerEdgeColor','k','LineWidth',0.6);
+
+    component_bones{subi} = initialize_bones(ax_component, ...
+        x_component(:,idx_start,subi),y_component(:,idx_start,subi), ...
+        z_component(:,idx_start,subi),bones);
+    original_bones{subi} = initialize_bones(ax_original, ...
+        xData(:,idx_start,subi),yData(:,idx_start,subi), ...
+        zData(:,idx_start,subi),bones);
+end
+
+xlabel(ax_time,'Time (s)','FontWeight','bold')
+ylabel(ax_time,'Component scores (a.u.)','FontWeight','bold')
+title(ax_time,sprintf('Component #%d activation at %.3g %s', ...
+    component,frex,frequency_unit),'FontSize',14,'FontWeight','bold')
+legend(ax_time,'Location','northeastoutside')
+format_figure_axes(ax_time)
+
+format_skeleton_axes(ax_component,markData,x_idx,y_idx,z_idx)
+format_skeleton_axes(ax_original,markData,x_idx,y_idx,z_idx)
+title(ax_component,'Component backprojection','FontSize',13,'FontWeight','bold')
+title(ax_original,'Original movement','FontSize',13,'FontWeight','bold')
+
+for timei = idx_start:idx_end
+    if ~isgraphics(fig)
+        break
+    end
+    for subi = 1:nsubs
+        set(cursor_handles(subi),'XData',tvec(timei), ...
+            'YData',ts2plot(timei,subi));
+        set(component_markers(subi), ...
+            'XData',x_component(:,timei,subi), ...
+            'YData',y_component(:,timei,subi), ...
+            'ZData',z_component(:,timei,subi));
+        set(original_markers(subi), ...
+            'XData',xData(:,timei,subi), ...
+            'YData',yData(:,timei,subi), ...
+            'ZData',zData(:,timei,subi));
+        update_bones(component_bones{subi},x_component(:,timei,subi), ...
+            y_component(:,timei,subi),z_component(:,timei,subi),bones)
+        update_bones(original_bones{subi},xData(:,timei,subi), ...
+            yData(:,timei,subi),zData(:,timei,subi),bones)
+    end
+    drawnow
+    pause(0.03)
+end
+
+end
+
+
+%% Helper function: Figure 2 component colors
+function colors = component_colors(ncolors)
+
+reference_colors = [0.90 0.22 0.16; ...
+                    0.36 0.69 0.88; ...
+                    0.22 0.45 0.78; ...
+                    0.12 0.25 0.55];
+if ncolors <= size(reference_colors,1)
+    colors = reference_colors(1:ncolors,:);
+else
+    colors = [reference_colors; .8*parula(ncolors-size(reference_colors,1))];
+end
+
+end
+
+
+%% Helper function: Distinct participant colors for animation
+function colors = participant_colormap(nsubs)
+
+colors = lines(max(nsubs,2));
+colors(1,:) = [0 0 1];
+colors(2,:) = [1 0 0];
+colors = colors(1:nsubs,:);
+
+end
+
+
+%% Helper function: Format frequency axis in log2 space
+function set_log2_frequency_axis(ax,frex)
+
+if isscalar(frex)
+    padding = 0.5;
+    xlim(ax,[log2(frex)-padding log2(frex)+padding])
+    xticks(ax,log2(frex))
+    xticklabels(ax,string(frex))
+    return
+end
+
+octave_set = 2.^(-6:8);
+octave_values = octave_set(octave_set >= min(frex) & octave_set <= max(frex));
+if numel(octave_values) >= 2
+    xticks(ax,log2(octave_values))
+    xticklabels(ax,string(octave_values))
+end
+xlim(ax,[log2(min(frex)) log2(max(frex))])
+xtickangle(ax,45)
+
+end
+
+
+%% Helper function: Shared axes aesthetics
+function format_figure_axes(ax)
+
+grid(ax,'on')
+grid(ax,'minor')
+box(ax,'on')
+set(ax,'FontSize',12,'LineWidth',1.2, ...
+    'GridAlpha',0.18,'MinorGridAlpha',0.10)
+
+end
+
+
+%% Helper function: Shared skeletal axes aesthetics
+function format_skeleton_axes(ax,markData,x_idx,y_idx,z_idx)
+
+x_values = markData(x_idx,:,:);
+y_values = markData(y_idx,:,:);
+z_values = markData(z_idx,:,:);
+xy_values = [x_values(:); y_values(:)];
+xy_padding = max(range(xy_values)*0.04,eps);
+z_padding = max(range(z_values(:))*0.04,eps);
+
+xlim(ax,[min(xy_values)-xy_padding max(xy_values)+xy_padding])
+ylim(ax,[min(xy_values)-xy_padding max(xy_values)+xy_padding])
+zlim(ax,[min(z_values(:))-z_padding max(z_values(:))+z_padding])
+xlabel(ax,'X'); ylabel(ax,'Y'); zlabel(ax,'Z')
+axis(ax,'vis3d')
+daspect(ax,[1 1 1])
+view(ax,60,30)
+box(ax,'on')
+grid(ax,'on')
+set(ax,'FontSize',11,'LineWidth',1.1, ...
+    'GridAlpha',0.12,'Projection','perspective')
+
+end
+
+
+%% Helper function: Plot skeleton links
+function plot_bones(ax,x,y,z,bones,color,linewidth)
+
+for bonei = 1:size(bones,1)
+    p1 = bones(bonei,1);
+    p2 = bones(bonei,2);
+    plot3(ax,[x(p1) x(p2)],[y(p1) y(p2)],[z(p1) z(p2)], ...
+        '-','Color',color,'LineWidth',linewidth,'HandleVisibility','off');
+end
+
+end
+
+
+%% Helper function: Initialize animation bones
+function handles = initialize_bones(ax,x,y,z,bones)
+
+handles = gobjects(size(bones,1),1);
+for bonei = 1:size(bones,1)
+    p1 = bones(bonei,1);
+    p2 = bones(bonei,2);
+    handles(bonei) = plot3(ax,[x(p1) x(p2)],[y(p1) y(p2)], ...
+        [z(p1) z(p2)],'k-','LineWidth',2.6,'HandleVisibility','off');
+end
+
+end
+
+
+%% Helper function: Update animation bones
+function update_bones(handles,x,y,z,bones)
+
+for bonei = 1:size(bones,1)
+    p1 = bones(bonei,1);
+    p2 = bones(bonei,2);
+    set(handles(bonei),'XData',[x(p1) x(p2)], ...
+        'YData',[y(p1) y(p2)],'ZData',[z(p1) z(p2)]);
+end
+
+end
+
+
+%% Helper function: Default Dance-study skeleton
+function bones = default_bones(nmarkers)
+
+if nmarkers == 22
+    bones = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10; ...
+        7,11;11,12;12,13;14,15;14,16;15,16;15,17;17,18;18,19; ...
+        16,20;20,21;21,22];
+else
+    bones = zeros(0,2);
+end
+
+end
+
+
+%% Helper function: Validate skeleton links
+function validate_bones(bones,nmarkers)
+
+if ~isnumeric(bones) || size(bones,2) ~= 2 || ...
+        any(~isfinite(bones(:))) || any(bones(:) ~= round(bones(:))) || ...
+        any(bones(:) < 1) || any(bones(:) > nmarkers)
+    error('Patterns.bones must contain valid one-based marker pairs.');
+end
+
+end
+
+
+%% Helper function: Validate frequency vector
+function frex = validate_frequency_vector(frex,name)
+
+if ~isnumeric(frex) || ~isreal(frex) || ~isvector(frex) || isempty(frex) || ...
+        any(~isfinite(frex)) || any(frex <= 0)
+    error('%s must be a non-empty vector of positive finite frequencies.',name);
+end
+frex = reshape(sort(frex(:)),1,[]);
+
+end
+
+
+%% Helper function: Validate component number
+function ncomps = validate_component_number(ncomps,name)
+
+if ~isnumeric(ncomps) || ~isreal(ncomps) || ~isscalar(ncomps) || ...
+        ~isfinite(ncomps) || ncomps ~= round(ncomps) || ncomps < 1
+    error('%s must be one positive integer.',name);
+end
+
+end
+
+
+%% Helper function: Map frequencies
+function [idx_frex,frex_actual] = map_frequencies(frex,frex_requested,label)
+
+idx_frex = zeros(1,numel(frex_requested));
+for freqi = 1:numel(frex_requested)
+    [~,idx_frex(freqi)] = min(abs(frex-frex_requested(freqi)));
+end
+frex_actual = frex(idx_frex);
+
+if ~all(ismembertol(frex_requested(:),frex(:),1e-3))
+    warning(['Some requested frequencies in ' label ...
+        '.frex are not present in GED.frex. Using closest matches instead.']);
+end
+
+end
+
+
+%% Helper function: Parse name-value pairs
+function opts = parse_name_value_pairs(opts,varargin)
+
+if mod(length(varargin),2) ~= 0
+    error('Arguments must be given as name-value pairs.');
+end
+
+for argi = 1:2:length(varargin)
+    if ~(ischar(varargin{argi}) || ...
+            (isstring(varargin{argi}) && isscalar(varargin{argi})))
+        error('Optional argument names must be text.');
+    end
+    name = lower(char(varargin{argi}));
+    if isfield(opts,name)
+        opts.(name) = varargin{argi+1};
+    else
+        error(['Unrecognized argument: ' name]);
+    end
 end
 
 end
