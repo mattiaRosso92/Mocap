@@ -8,11 +8,57 @@ clc
 % All raw inputs and all newly generated outputs stay on the local drive in
 % Dance_Data. The dedicated results root prevents this replication from
 % modifying any legacy analyses currently stored directly in Dance_Data.
-path_script = fileparts(mfilename('fullpath'));
+script_file = mfilename('fullpath');
+if isempty(script_file)
+    % MATLAB can return an empty mfilename when an editor section is run
+    % interactively rather than by running the complete script.
+    try
+        script_file = matlab.desktop.editor.getActiveFilename;
+    catch
+        script_file = '';
+    end
+end
+if isempty(script_file)
+    script_candidates = { ...
+        fullfile(pwd,'FREQNESS_DyadicDance_Mocap.m'), ...
+        fullfile(pwd,'Rosso_et_al_Dance_inPreparation', ...
+        'FREQNESS_DyadicDance_Mocap.m')};
+    candidate_idx = find(cellfun(@isfile,script_candidates),1);
+    assert(~isempty(candidate_idx), ...
+        ['Could not locate FREQNESS_DyadicDance_Mocap.m. Open the script ' ...
+        'in the MATLAB Editor or run it from the Mocap repository.']);
+    script_file = script_candidates{candidate_idx};
+end
+path_script = fileparts(script_file);
 path_repo = fileparts(path_script);
 
+% Locate the repository data folder robustly. Depending on how a script
+% section is launched, MATLAB may report the active file or working folder
+% differently, so validate candidates by their Dance metadata contents.
+required_metadata = {'cond_vis.csv','cond_mus.csv', ...
+    'song_subj_LEFT.csv','song_subj_RIGHT.csv'};
+data_candidates = unique({ ...
+    fullfile(path_repo,'Dance_Data'), ...
+    fullfile(path_script,'Dance_Data'), ...
+    fullfile(pwd,'Dance_Data'), ...
+    fullfile(fileparts(pwd),'Dance_Data'), ...
+    fullfile(getenv('HOME'),'Documents','GitHub','Mocap', ...
+    'Dance_Data')},'stable');
+valid_data_folder = false(size(data_candidates));
+for candidatei = 1:numel(data_candidates)
+    valid_data_folder(candidatei) = isfolder(data_candidates{candidatei}) && ...
+        all(cellfun(@(filename) isfile(fullfile( ...
+        data_candidates{candidatei},filename)),required_metadata));
+end
+data_idx = find(valid_data_folder,1);
+assert(~isempty(data_idx), ...
+    ['Dance_Data could not be located from the active script or current ' ...
+    'MATLAB folder.']);
+data_path = data_candidates{data_idx};
+path_repo = fileparts(data_path);
+
 CFG = [];
-CFG.common.data_path = fullfile(path_repo,'Dance_Data');
+CFG.common.data_path = data_path;
 CFG.common.results_folder = ...
     'FREQNESS_Results_Rosso_et_al_inPreparation';
 CFG.common.results_path = fullfile( ...
@@ -28,9 +74,11 @@ CFG.block2.overwrite_flag = false;
 CFG.block3.output_path = fullfile( ...
     CFG.common.results_path,'03_Coordination');
 CFG.block3.overwrite_flag = false;
+CFG.block3.components = 1:2;
 CFG.block4.output_path = fullfile( ...
     CFG.common.results_path,'04_PhaseSpaceRQA');
 CFG.block4.overwrite_flag = false;
+CFG.block4.components = 1:2;
 CFG.block5.output_path = fullfile( ...
     CFG.common.results_path,'05_Group');
 CFG.block5.figure_path = fullfile(CFG.block5.output_path,'Figures');
@@ -54,8 +102,6 @@ assert(~strcmp(CFG.common.results_path,path_home), ...
 assert(startsWith(CFG.common.results_path,[path_home filesep]), ...
     'The results root must be a child folder of Dance_Data.');
 
-required_metadata = {'cond_vis.csv','cond_mus.csv', ...
-    'song_subj_LEFT.csv','song_subj_RIGHT.csv'};
 for filei = 1:numel(required_metadata)
     assert(isfile(fullfile(path_home,required_metadata{filei})), ...
         'Missing Dance input file: %s',required_metadata{filei});
@@ -431,15 +477,19 @@ end
 
 clearvars -except CFG
 
-% Pick component
-which_comp = 2;
+% Coordination is intentionally configured independently of the number of
+% components retained by NetworkEstimation.
+components = CFG.block3.components;
+assert(all(components >= 1 & components <= CFG.common.ncomps & ...
+    components == fix(components)), ...
+    'CFG.block3.components must contain valid retained component indices.');
 
 % Choose wheteher you want to attune JRQA
 attune_flag = 0;
 
 % Restore repository-relative paths after clearing the large group arrays.
 path_home = CFG.common.data_path;
-path_repo = fileparts(fileparts(mfilename('fullpath')));
+path_repo = fileparts(CFG.common.data_path);
 path_toolbox = fullfile(path_repo,'FREQNESS_Mocap_Toolbox');
 addpath(path_toolbox)
 FREQNESS_Startup_Mocap();
@@ -477,6 +527,18 @@ lp_cutoff_norm = .8; % Normalized cutoff frequency (.8 of the nyquist, when norm
 
 % Define duration
 duration = [.15 .85];
+
+% Run each component independently so outputs can never be confused.
+for componenti = 1:numel(components)
+
+which_comp = components(componenti);
+component_output_path = fullfile( ...
+    CFG.block3.output_path,['Component_' num2str(which_comp)]);
+if ~isfolder(component_output_path)
+    mkdir(component_output_path)
+end
+
+disp(['BLOCK 3: Component #' num2str(which_comp)])
 
 % Optimize JRQA parameters (if requested)
 if attune_flag ==1
@@ -543,7 +605,7 @@ if attune_flag ==1
     JRQA.ps  = round(mean(ps(:)),1);
 
     % Save output
-    parameter_file = fullfile(CFG.block3.output_path, ...
+    parameter_file = fullfile(component_output_path, ...
         ['JRQA_Parameters_Comp#' num2str(which_comp) '.mat']);
     if ~isfile(parameter_file) || CFG.block3.overwrite_flag
         save(parameter_file,'JRQA')
@@ -552,7 +614,7 @@ if attune_flag ==1
 else
 
     % Import JRQA parapemeters
-    parameter_file = fullfile(CFG.block3.output_path, ...
+    parameter_file = fullfile(component_output_path, ...
         ['JRQA_Parameters_Comp#' num2str(which_comp) '.mat']);
     if isfile(parameter_file)
         load(parameter_file,'JRQA')
@@ -575,7 +637,7 @@ for condi = 1:nconds
         disp(['Condition#' num2str(condi) ' - Dyad #' num2str(dyadi)])
         for triali = 1:ntrials
 
-            coordination_file = fullfile(CFG.block3.output_path,sprintf( ...
+            coordination_file = fullfile(component_output_path,sprintf( ...
                 'FREQNESS_COORDINATION_D%d_C%d_T%d.mat', ...
                 dyadi,condi,triali));
             if isfile(coordination_file) && ~CFG.block3.overwrite_flag
@@ -586,6 +648,29 @@ for condi = 1:nconds
                     DET(dyadi,condi,metri,triali) = S.FREQjrqa(metri).DET;
                 end
                 continue
+            end
+
+            % Reuse the completed pre-component-folder Component 2 output.
+            % Its saved provenance is checked before it is accepted.
+            legacy_coordination_file = fullfile( ...
+                CFG.block3.output_path,sprintf( ...
+                'FREQNESS_COORDINATION_D%d_C%d_T%d.mat', ...
+                dyadi,condi,triali));
+            if which_comp == 2 && isfile(legacy_coordination_file) && ...
+                    ~CFG.block3.overwrite_flag
+                S = load(legacy_coordination_file, ...
+                    'FREQjrqa','FREQmirror','which_comp');
+                if S.which_comp == which_comp
+                    for metri = 1:nmeters
+                        MIRROR(dyadi,condi,metri,triali) = ...
+                            S.FREQmirror(metri);
+                        RR(dyadi,condi,metri,triali) = ...
+                            S.FREQjrqa(metri).RR;
+                        DET(dyadi,condi,metri,triali) = ...
+                            S.FREQjrqa(metri).DET;
+                    end
+                    continue
+                end
             end
 
             % Import GED output
@@ -640,16 +725,41 @@ for condi = 1:nconds
     end
 end
 
+% Save one compact component-level summary for visualization and statistics.
+coordination_summary_file = fullfile(component_output_path, ...
+    ['FREQNESS_COORDINATION_SUMMARY_Comp#' num2str(which_comp) '.mat']);
+save(coordination_summary_file,'MIRROR','RR','DET','which_comp', ...
+    'meter','list_dyads','nconds','ntrials','nmeters','-v7.3')
+
+end
+
 %% BLOCK 4 - PHASE-SPACE RQA (ALTERNATIVE TEMPORAL COORDINATION)
 
 % This is intentionally a separate analysis block following the current
 % GroupAnalyses workflow. It permits direct comparison with JRQA while
 % keeping the two temporal-coordination formulations independent.
 
+components = CFG.block4.components;
+assert(all(components >= 1 & components <= CFG.common.ncomps & ...
+    components == fix(components)), ...
+    'CFG.block4.components must contain valid retained component indices.');
+
+for componenti = 1:numel(components)
+
+which_comp = components(componenti);
+component_output_path = fullfile( ...
+    CFG.block4.output_path,['Component_' num2str(which_comp)]);
+if ~isfolder(component_output_path)
+    mkdir(component_output_path)
+end
+
+disp(['BLOCK 4: Component #' num2str(which_comp)])
+
 % Phase-space RQA settings
 PhaseRQA = [];
-% A scalar frequency/component is shared across the dyad; use one value per
-% participant to analyze participant-specific frequencies or components.
+% The block loop shares its selected component across the dyad. The toolbox
+% function itself also accepts one component per participant when called
+% independently.
 PhaseRQA.target_frex      = [];
 PhaseRQA.component        = which_comp;
 PhaseRQA.standardize      = true;
@@ -672,7 +782,7 @@ for condi = 1:nconds
             ' - dyad #' num2str(dyadi)])
         for triali = 1:ntrials
 
-            phase_rqa_file = fullfile(CFG.block4.output_path,sprintf( ...
+            phase_rqa_file = fullfile(component_output_path,sprintf( ...
                 'FREQNESS_PHASERQA_D%d_C%d_T%d.mat', ...
                 dyadi,condi,triali));
             if isfile(phase_rqa_file) && ~CFG.block4.overwrite_flag
@@ -688,6 +798,38 @@ for condi = 1:nconds
                     DIV_phase(dyadi,condi,metri,triali) = S.FREQrqa(metri).DIV;
                 end
                 continue
+            end
+
+            % Reuse the completed pre-component-folder Component 2 output.
+            legacy_phase_rqa_file = fullfile( ...
+                CFG.block4.output_path,sprintf( ...
+                'FREQNESS_PHASERQA_D%d_C%d_T%d.mat', ...
+                dyadi,condi,triali));
+            if which_comp == 2 && isfile(legacy_phase_rqa_file) && ...
+                    ~CFG.block4.overwrite_flag
+                S = load(legacy_phase_rqa_file,'FREQrqa','PhaseRQA');
+                if isfield(S,'PhaseRQA') && ...
+                        isequal(S.PhaseRQA.component,which_comp)
+                    for metri = 1:nmeters
+                        RR_phase(dyadi,condi,metri,triali) = ...
+                            S.FREQrqa(metri).RR;
+                        L_phase(dyadi,condi,metri,triali) = ...
+                            S.FREQrqa(metri).L;
+                        DET_phase(dyadi,condi,metri,triali) = ...
+                            S.FREQrqa(metri).DET;
+                        ENTR_phase(dyadi,condi,metri,triali) = ...
+                            S.FREQrqa(metri).ENTR;
+                        TT_phase(dyadi,condi,metri,triali) = ...
+                            S.FREQrqa(metri).TT;
+                        LAM_phase(dyadi,condi,metri,triali) = ...
+                            S.FREQrqa(metri).LAM;
+                        Vmax_phase(dyadi,condi,metri,triali) = ...
+                            S.FREQrqa(metri).Vmax;
+                        DIV_phase(dyadi,condi,metri,triali) = ...
+                            S.FREQrqa(metri).DIV;
+                    end
+                    continue
+                end
             end
 
             % Import the same FREQ network output used by GroupAnalyses
@@ -774,6 +916,13 @@ PhaseRQA.output.LAM  = LAM_phase;
 PhaseRQA.output.Vmax = Vmax_phase;
 PhaseRQA.output.DIV  = DIV_phase;
 
+phase_summary_file = fullfile(component_output_path, ...
+    ['FREQNESS_PHASERQA_SUMMARY_Comp#' num2str(which_comp) '.mat']);
+save(phase_summary_file,'PhaseRQA','which_comp','meter','list_dyads', ...
+    'nconds','ntrials','nmeters','-v7.3')
+
+end
+
 %% BLOCK 5 - GROUP-LEVEL VISUALIZATION
 
 % TODO: SEM are fixed, but still do the following for other plots:
@@ -817,7 +966,14 @@ for condi = 1:nconds
                 dyadi,condi,triali));
             assert(isfile(coordination_file), ...
                 'Missing BLOCK 3 output: %s',coordination_file);
-            S = load(coordination_file,'FREQjrqa','FREQmirror');
+            S = load(coordination_file, ...
+                'FREQjrqa','FREQmirror','which_comp');
+            if isempty(coordination_component)
+                coordination_component = S.which_comp;
+            elseif S.which_comp ~= coordination_component
+                error(['BLOCK 3 contains outputs from multiple components. ' ...
+                    'Keep each component analysis in a separate output set.']);
+            end
 
             phase_rqa_file = fullfile(CFG.block4.output_path,sprintf( ...
                 'FREQNESS_PHASERQA_D%d_C%d_T%d.mat', ...
@@ -842,6 +998,8 @@ for condi = 1:nconds
         end
     end
 end
+
+which_comp = coordination_component;
 
 % Select method: 'GED' or 'PCA'
 which_method = 'GED';
@@ -1244,8 +1402,9 @@ sgtitle('Spatial correlation between component#1 and component#2')
 
 %% VISUALIZATION: Grand-grandaverage Activation Patterns Across Conditions
 
-% Select component to visualize
-which_comp = 1;
+% Select spatial-pattern component to visualize without changing the
+% coordination component identifier used by the statistical export.
+which_pattern_comp = 1;
 
 % Average activation patterns across trials
 gg_pats = squeeze(mean(all_pats, 3));
@@ -1266,7 +1425,7 @@ Patterns_figure = [];
 Patterns_figure.frex = frex2plot(idx_frex);
 Patterns_figure.labels = marklabels;
 Patterns_figure.markerData = markData;
-Patterns_figure.comp = which_comp;
+Patterns_figure.comp = which_pattern_comp;
 Patterns_figure.srate = srate;
 Patterns_figure.start = 0.25;
 Patterns_figure.bones = bones;
@@ -1414,47 +1573,70 @@ close all
 
 %% BLOCK 6 - R-READY STATISTICAL EXPORT
 
-% Preallocate
-nRows = ndyads * nconds * nmeters;
-subject_col = zeros(nRows,1);
-visual_col = strings(nRows,1);
-music_col = strings(nRows,1);
-meter_col = strings(nRows,1);
-mirror_col = zeros(nRows,1);
-rr_col = zeros(nRows,1);
-det_col = zeros(nRows,1);
-
-% Labels
-meter_labels = "M" + string(1:nmeters);  % "M1", "M2", ..., "Mn"
+% This block is independent of the group-visualization workspace. It loads
+% each component summary saved by BLOCK 3 and exports one workbook per
+% component for the automated R workflow.
+components = CFG.block3.components;
 visual_labels = ["No", "No", "Yes", "Yes"];
 music_labels = ["Diff", "Same", "Diff", "Same"];
 
-% Fill rows
-row = 1;
-for dyadi = 1:ndyads
-    for condi = 1:nconds
-        for metri = 1:nmeters
-            subject_col(row) = list_dyads(dyadi);
-            visual_col(row) = visual_labels(condi);
-            music_col(row) = music_labels(condi);
-            meter_col(row) = meter_labels(metri);
-            mirror_col(row) = avg_MIRROR(dyadi, condi, metri);
-            rr_col(row) = avg_RR(dyadi, condi, metri);
-            det_col(row) = avg_DET(dyadi, condi, metri);
-            row = row + 1;
+for componenti = 1:numel(components)
+
+    which_comp = components(componenti);
+    component_output_path = fullfile( ...
+        CFG.block3.output_path,['Component_' num2str(which_comp)]);
+    coordination_summary_file = fullfile(component_output_path, ...
+        ['FREQNESS_COORDINATION_SUMMARY_Comp#' ...
+        num2str(which_comp) '.mat']);
+    assert(isfile(coordination_summary_file), ...
+        ['Missing Component %d coordination summary. Run BLOCK 3 before ' ...
+        'BLOCK 6.'],which_comp);
+
+    S = load(coordination_summary_file, ...
+        'MIRROR','RR','DET','meter','list_dyads', ...
+        'nconds','ntrials','nmeters');
+
+    % Average the eight trial-level dyadic measures before statistical
+    % modelling, matching the manuscript analysis and its 528 observations.
+    avg_MIRROR = squeeze(mean(S.MIRROR(S.list_dyads,:,:,:),4));
+    avg_RR = squeeze(mean(S.RR(S.list_dyads,:,:,:),4));
+    avg_DET = squeeze(mean(S.DET(S.list_dyads,:,:,:),4));
+
+    nRows = numel(S.list_dyads)*S.nconds*S.nmeters;
+    dyad_col = zeros(nRows,1);
+    visual_col = strings(nRows,1);
+    music_col = strings(nRows,1);
+    meter_col = strings(nRows,1);
+    mirror_col = zeros(nRows,1);
+    rr_col = zeros(nRows,1);
+    det_col = zeros(nRows,1);
+    meter_labels = "M" + string(1:S.nmeters);
+
+    row = 1;
+    for dyad_idx = 1:numel(S.list_dyads)
+        for condi = 1:S.nconds
+            for metri = 1:S.nmeters
+                dyad_col(row) = S.list_dyads(dyad_idx);
+                visual_col(row) = visual_labels(condi);
+                music_col(row) = music_labels(condi);
+                meter_col(row) = meter_labels(metri);
+                mirror_col(row) = avg_MIRROR(dyad_idx,condi,metri);
+                rr_col(row) = avg_RR(dyad_idx,condi,metri);
+                det_col(row) = avg_DET(dyad_idx,condi,metri);
+                row = row + 1;
+            end
         end
     end
-end
 
-% Create table
-T = table(subject_col, visual_col, music_col, meter_col, ...
-          mirror_col, rr_col, det_col, ...
-          'VariableNames', {'Subject', 'Visual', 'Music', 'Meter', ...
-                            'Mirror', 'RR', 'DET'});
+    T = table(dyad_col,visual_col,music_col,meter_col, ...
+        mirror_col,rr_col,det_col, ...
+        'VariableNames',{'Dyad','Visual','Music','Meter', ...
+        'Mirror','RR','DET'});
 
-% Export to Excel
-statistics_file = fullfile(CFG.block6.output_path, ...
-    ['OUT2R_Comp#' num2str(which_comp) '.xlsx']);
-if ~isfile(statistics_file) || CFG.block6.overwrite_flag
+    statistics_file = fullfile(CFG.block6.output_path, ...
+        ['OUT2R_Comp#' num2str(which_comp) '.xlsx']);
     writetable(T,statistics_file)
+    fprintf('Saved Component %d statistics: %s\n', ...
+        which_comp,statistics_file);
+
 end
