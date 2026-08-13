@@ -369,7 +369,10 @@ else
 end
 x_plot = log2(x_uniform);
 
-fig = figure('Color','w','Units','pixels','Position',[120 120 880 590]);
+fig = figure('Color','w','Units','pixels');
+if ~strcmp(fig.WindowStyle,'docked')
+    fig.Position = [120 120 880 590];
+end
 ax = axes('Parent',fig);
 hold(ax,'on')
 line_handles = gobjects(ncomps,1);
@@ -422,8 +425,10 @@ if max_abs <= 0 || ~isfinite(max_abs)
     max_abs = 1;
 end
 
-fig = figure('Color','w','Units','pixels', ...
-    'Position',[80 80 1050 max(430,250*nsubs)]);
+fig = figure('Color','w','Units','pixels');
+if ~strcmp(fig.WindowStyle,'docked')
+    fig.Position = [80 80 1050 max(430,250*nsubs)];
+end
 layout = tiledlayout(fig,nsubs,3,'TileSpacing','compact','Padding','compact');
 dimensions = {x_idx,y_idx,z_idx};
 dimension_labels = {'X','Y','Z'};
@@ -478,7 +483,10 @@ else
 end
 patterns = patterns/global_max;
 
-fig = figure('Color','w','Units','pixels','Position',[50 90 1460 570]);
+fig = figure('Color','w','Units','pixels');
+if ~strcmp(fig.WindowStyle,'docked')
+    fig.Position = [50 90 1460 570];
+end
 axes_handles = gobjects(3,1);
 axis_titles = {'X-axis activation','Y-axis activation','Z-axis activation'};
 axis_indices = {x_idx,y_idx,z_idx};
@@ -568,8 +576,11 @@ else
 end
 
 participant_colors = participant_colormap(nsubs);
-fig = figure('Color','w','Units','pixels','Position',[70 70 1280 780], ...
+fig = figure('Color','w','Units','pixels', ...
     'Name','FREQNESS MoCap animation','NumberTitle','off');
+if ~strcmp(fig.WindowStyle,'docked')
+    fig.Position = [70 70 1280 780];
+end
 layout = tiledlayout(fig,2,2,'TileSpacing','compact','Padding','compact');
 ax_time = nexttile(layout,[1 2]);
 ax_component = nexttile(layout);

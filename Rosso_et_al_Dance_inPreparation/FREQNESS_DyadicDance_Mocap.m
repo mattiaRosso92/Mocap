@@ -857,6 +857,7 @@ load(fullfile(path_data, ...
     'all_evals','all_pats','all_frex_norm','ED','list_dyads', ...
     'marker_reference')
 markData = marker_reference;
+nmarks = size(markData,1);
 
 
 % Remove excluded dyads while preserving their actual identifiers.
