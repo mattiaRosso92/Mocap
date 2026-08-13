@@ -739,6 +739,37 @@ end
 % GroupAnalyses workflow. It permits direct comparison with JRQA while
 % keeping the two temporal-coordination formulations independent.
 
+clearvars -except CFG
+
+% Restore all settings needed to resume this block independently after a
+% stopped MATLAB session.
+path_home = CFG.common.data_path;
+path_repo = fileparts(path_home);
+path_toolbox = fullfile(path_repo,'FREQNESS_Mocap_Toolbox');
+addpath(path_toolbox)
+FREQNESS_Startup_Mocap();
+
+ndyads = 35;
+nconds = 4;
+ntrials = 8;
+nsubs = 2;
+list_dyads = [1:12 14:31 33:ndyads];
+validation_flag = false;
+
+meter = [.25 .5 1 2];
+nmeters = length(meter);
+duration = [.15 .85];
+
+srate = 250;
+dwn = 10;
+srate = round(srate/dwn);
+lp_order = 4;
+lp_cutoff_norm = .8;
+[b_butt,a_butt] = butter(lp_order,lp_cutoff_norm,'low');
+
+assert(isfolder(CFG.block1.output_path), ...
+    'BLOCK 1 output folder is missing: %s',CFG.block1.output_path);
+
 components = CFG.block4.components;
 assert(all(components >= 1 & components <= CFG.common.ncomps & ...
     components == fix(components)), ...
@@ -918,8 +949,10 @@ PhaseRQA.output.DIV  = DIV_phase;
 
 phase_summary_file = fullfile(component_output_path, ...
     ['FREQNESS_PHASERQA_SUMMARY_Comp#' num2str(which_comp) '.mat']);
-save(phase_summary_file,'PhaseRQA','which_comp','meter','list_dyads', ...
-    'nconds','ntrials','nmeters','-v7.3')
+if ~isfile(phase_summary_file) || CFG.block4.overwrite_flag
+    save(phase_summary_file,'PhaseRQA','which_comp','meter', ...
+        'list_dyads','nconds','ntrials','nmeters','-v7.3')
+end
 
 end
 
@@ -957,6 +990,7 @@ bones = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10; ...
 [RR_phase,L_phase,DET_phase,ENTR_phase,TT_phase,LAM_phase, ...
     Vmax_phase,DIV_phase] = deal( ...
     nan(ndyads,nconds,nmeters,ntrials));
+coordination_component = [];
 
 for condi = 1:nconds
     for dyadi = list_dyads
