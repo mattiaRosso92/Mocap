@@ -6,7 +6,9 @@ function FREQmirror = FREQNESS_SpaceCoord_Mocap(FREQ,target_frex,varargin)
 %
 % ========================================================================
 %  This function estimates spatial coordination between two participants
-%  by correlating their frequency-resolved network activation patterns.
+%  by correlating the magnitudes of their frequency-resolved network
+%  activation patterns. Pattern magnitudes make the result invariant to
+%  the arbitrary polarity of eigendecomposition components.
 %  One mirroring coefficient is returned for every requested harmonic or
 %  subharmonic of the target movement frequency.
 %
@@ -126,9 +128,12 @@ for metri = 1:nmeters
     % Preserve the original combined-analysis behavior: both participants are
     % compared at the frequency selected for the last participant.
     shared_frex_idx = idx_frex(nsubs,metri);
+    % Component polarity is arbitrary in an eigendecomposition. Compare
+    % activation magnitudes so spatial coordination is invariant to an
+    % independent sign flip of either participant's component.
     FREQmirror(metri) = corr( ...
-        FREQ.pats(:,which_comp,shared_frex_idx,1), ...
-        FREQ.pats(:,which_comp,shared_frex_idx,2));
+        abs(FREQ.pats(:,which_comp,shared_frex_idx,1)), ...
+        abs(FREQ.pats(:,which_comp,shared_frex_idx,2)));
 
 end
 

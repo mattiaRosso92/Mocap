@@ -984,56 +984,34 @@ bones = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10; ...
     7,11;11,12;12,13;14,15;14,16;15,16;15,17;17,18;18,19; ...
     16,20;20,21;21,22];
 
-% Import the saved dyadic coordination outputs so this block aggregates
-% every completed analysis stage rather than relying on workspace state.
-[MIRROR,RR,DET] = deal(nan(ndyads,nconds,nmeters,ntrials));
-[RR_phase,L_phase,DET_phase,ENTR_phase,TT_phase,LAM_phase, ...
-    Vmax_phase,DIV_phase] = deal( ...
-    nan(ndyads,nconds,nmeters,ntrials));
-coordination_component = [];
-
-for condi = 1:nconds
-    for dyadi = list_dyads
-        for triali = 1:ntrials
-            coordination_file = fullfile(CFG.block3.output_path,sprintf( ...
-                'FREQNESS_COORDINATION_D%d_C%d_T%d.mat', ...
-                dyadi,condi,triali));
-            assert(isfile(coordination_file), ...
-                'Missing BLOCK 3 output: %s',coordination_file);
-            S = load(coordination_file, ...
-                'FREQjrqa','FREQmirror','which_comp');
-            if isempty(coordination_component)
-                coordination_component = S.which_comp;
-            elseif S.which_comp ~= coordination_component
-                error(['BLOCK 3 contains outputs from multiple components. ' ...
-                    'Keep each component analysis in a separate output set.']);
-            end
-
-            phase_rqa_file = fullfile(CFG.block4.output_path,sprintf( ...
-                'FREQNESS_PHASERQA_D%d_C%d_T%d.mat', ...
-                dyadi,condi,triali));
-            assert(isfile(phase_rqa_file), ...
-                'Missing BLOCK 4 output: %s',phase_rqa_file);
-            P = load(phase_rqa_file,'FREQrqa');
-
-            for metri = 1:nmeters
-                MIRROR(dyadi,condi,metri,triali) = S.FREQmirror(metri);
-                RR(dyadi,condi,metri,triali) = S.FREQjrqa(metri).RR;
-                DET(dyadi,condi,metri,triali) = S.FREQjrqa(metri).DET;
-                RR_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).RR;
-                L_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).L;
-                DET_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).DET;
-                ENTR_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).ENTR;
-                TT_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).TT;
-                LAM_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).LAM;
-                Vmax_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).Vmax;
-                DIV_phase(dyadi,condi,metri,triali) = P.FREQrqa(metri).DIV;
-            end
-        end
-    end
+% Import the compact component summaries saved by BLOCKS 3 and 4. Keeping
+% the component dimension here ensures that every requested coordination
+% analysis is represented in the consolidated group figures.
+coordination_components = CFG.block3.components;
+coordination_results = cell(1,numel(coordination_components));
+for componenti = 1:numel(coordination_components)
+    which_comp = coordination_components(componenti);
+    coordination_summary_file = fullfile(CFG.block3.output_path, ...
+        ['Component_' num2str(which_comp)], ...
+        ['FREQNESS_COORDINATION_SUMMARY_Comp#' ...
+        num2str(which_comp) '.mat']);
+    assert(isfile(coordination_summary_file), ...
+        'Missing BLOCK 3 summary: %s',coordination_summary_file);
+    coordination_results{componenti} = load(coordination_summary_file, ...
+        'MIRROR','RR','DET','which_comp');
 end
 
-which_comp = coordination_component;
+phase_components = CFG.block4.components;
+phase_results = cell(1,numel(phase_components));
+for componenti = 1:numel(phase_components)
+    which_comp = phase_components(componenti);
+    phase_summary_file = fullfile(CFG.block4.output_path, ...
+        ['Component_' num2str(which_comp)], ...
+        ['FREQNESS_PHASERQA_SUMMARY_Comp#' num2str(which_comp) '.mat']);
+    assert(isfile(phase_summary_file), ...
+        'Missing BLOCK 4 summary: %s',phase_summary_file);
+    phase_results{componenti} = load(phase_summary_file,'PhaseRQA');
+end
 
 % Select method: 'GED' or 'PCA'
 which_method = 'GED';
@@ -1473,116 +1451,68 @@ FREQNESS_Visualizer_Mocap(GED_figure,[],Patterns_figure);
 
 % GROUP-LEVEL COORDINATION VISUALIZATION
 
-% Average over trials dimension
-avg_MIRROR = squeeze( mean(MIRROR([1:12 14:31 33:ndyads],:,:,:), 4) ); 
-avg_RR  = squeeze( mean(RR([1:12 14:31 33:ndyads],:,:,:), 4) );
-avg_DET = squeeze( mean(DET([1:12 14:31 33:ndyads],:,:,:), 4) ); 
-
-% Update ndyads with factually analyzed dyads
-ndyads = size(avg_MIRROR,1);
-
-figure;
-for metri = 1:nmeters
-    subplot(ceil(nmeters/3), 3, metri);
-    
-    % Extract [nrep x nconds] data for this meter
-    meter_data = squeeze(avg_MIRROR(:,:,metri));  % 
-    
-    % Compute mean and SEM across dyads 
-    mu  = mean(meter_data, 1);                    
-    sem = std(meter_data, 0, 1) / sqrt(ndyads);     
-
-    % Plot with error bars
-    bar(mu);
-    hold on;
-    errorbar(1:nconds, mu, sem, '.k');
-    ylim([0 3*mean(avg_MIRROR(:))])
-    title(['Meter ' num2str(metri)]);
-    xlabel('Condition');
-    ylabel('Mean ± SEM');
-    xticks(1:nconds);
-    xtickangle(45)
-    xticklabels(condlabels)
-    sgtitle('Spatial correlation')
-end
-
-figure;
-for metri = 1:nmeters
-    subplot(ceil(nmeters/3), 3, metri);
-    
-    % Extract [nrep x nconds] data for this meter
-    meter_data = squeeze(avg_RR(:,:,metri));  % 
-    
-    % Compute mean and SEM across dyads 
-    mu  = mean(meter_data, 1);                    
-    sem = std(meter_data, 0, 1) / sqrt(ndyads);     
-
-    % Plot with error bars
-    bar(mu);
-    hold on;
-    errorbar(1:nconds, mu, sem, '.k');
-    ylim([0 1])
-    title(['Meter ' num2str(metri)]);
-    xlabel('Condition');
-    ylabel('Mean ± SEM');
-    xticks(1:nconds);
-    xtickangle(45)
-    xticklabels(condlabels)
-    sgtitle('Recurrence rate')
-end
-
-figure;
-for metri = 1:nmeters
-    subplot(ceil(nmeters/3), 3, metri);
-    
-    % Extract [nrep x nconds] data for this meter
-    meter_data = squeeze(avg_DET(:,:,metri));  % 
-    
-    % Compute mean and SEM across dyads 
-    mu  = mean(meter_data, 1);                    
-    sem = std(meter_data, 0, 1) / sqrt(ndyads);     
-
-    % Plot with error bars
-    bar(mu);
-    hold on;
-    errorbar(1:nconds, mu, sem, '.k');
-    ylim([0 1])
-    title(['Meter ' num2str(metri)]);
-    xlabel('Condition');
-    ylabel('Mean ± SEM');
-    xticks(1:nconds);
-    xtickangle(45)
-    xticklabels(condlabels)
-    sgtitle('Determinism')
+coordination_fields = {'MIRROR','RR','DET'};
+coordination_labels = {'Spatial correlation','Recurrence rate','Determinism'};
+for componenti = 1:numel(coordination_results)
+    which_comp = coordination_results{componenti}.which_comp;
+    for metrici = 1:numel(coordination_fields)
+        metric_data = coordination_results{componenti}.( ...
+            coordination_fields{metrici});
+        avg_metric = squeeze(mean(metric_data(list_dyads,:,:,:),4));
+        figure;
+        for metri = 1:nmeters
+            subplot(ceil(nmeters/3),3,metri);
+            meter_data = squeeze(avg_metric(:,:,metri));
+            mu = mean(meter_data,1);
+            sem = std(meter_data,0,1)/sqrt(size(meter_data,1));
+            bar(mu);
+            hold on;
+            errorbar(1:nconds,mu,sem,'.k');
+            if ~strcmp(coordination_fields{metrici},'MIRROR')
+                ylim([0 1])
+            end
+            title(['Meter ' num2str(metri)]);
+            xlabel('Condition');
+            ylabel('Mean ± SEM');
+            xticks(1:nconds);
+            xtickangle(45)
+            xticklabels(condlabels)
+            sgtitle([coordination_labels{metrici} ...
+                ' - Component #' num2str(which_comp)])
+        end
+    end
 end
 
 % GROUP-LEVEL PHASE-SPACE RQA VISUALIZATION
 
-phase_metric_data = {RR_phase,L_phase,DET_phase,ENTR_phase, ...
-    TT_phase,LAM_phase,Vmax_phase,DIV_phase};
+phase_metric_fields = {'RR','L','DET','ENTR','TT','LAM','Vmax','DIV'};
 phase_metric_labels = {'Recurrence rate','Average diagonal length', ...
     'Determinism','Diagonal-line entropy','Trapping time', ...
     'Laminarity','Maximum vertical length','Divergence'};
 
-for metrici = 1:numel(phase_metric_data)
-    avg_phase_metric = squeeze(mean( ...
-        phase_metric_data{metrici}([1:12 14:31 33:35],:,:,:),4));
-    figure;
-    for metri = 1:nmeters
-        subplot(ceil(nmeters/3),3,metri);
-        meter_data = squeeze(avg_phase_metric(:,:,metri));
-        mu = mean(meter_data,1);
-        sem = std(meter_data,0,1)/sqrt(size(meter_data,1));
-        bar(mu);
-        hold on;
-        errorbar(1:nconds,mu,sem,'.k');
-        title(['Meter ' num2str(metri)]);
-        xlabel('Condition');
-        ylabel('Mean ± SEM');
-        xticks(1:nconds);
-        xtickangle(45)
-        xticklabels(condlabels)
-        sgtitle(['Phase-space RQA: ' phase_metric_labels{metrici}])
+for componenti = 1:numel(phase_results)
+    for metrici = 1:numel(phase_metric_fields)
+        phase_metric = phase_results{componenti}.PhaseRQA.output.( ...
+            phase_metric_fields{metrici});
+        avg_phase_metric = squeeze(mean(phase_metric(list_dyads,:,:,:),4));
+        figure;
+        for metri = 1:nmeters
+            subplot(ceil(nmeters/3),3,metri);
+            meter_data = squeeze(avg_phase_metric(:,:,metri));
+            mu = mean(meter_data,1);
+            sem = std(meter_data,0,1)/sqrt(size(meter_data,1));
+            bar(mu);
+            hold on;
+            errorbar(1:nconds,mu,sem,'.k');
+            title(['Meter ' num2str(metri)]);
+            xlabel('Condition');
+            ylabel('Mean ± SEM');
+            xticks(1:nconds);
+            xtickangle(45)
+            xticklabels(condlabels)
+            sgtitle(['Phase-space RQA: ' phase_metric_labels{metrici} ...
+                ' - Component #' num2str(phase_components(componenti))])
+        end
     end
 end
 
