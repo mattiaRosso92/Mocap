@@ -80,7 +80,7 @@ verifySize(testCase,recording.coordinates,[6 nFrames]);
 end
 
 
-function testRemainingGapExcludesDyad(testCase)
+function testRemainingGapBecomesBadSegment(testCase)
 
 config = EmpaticMirroring_Config();
 nTeacher = 40*config.sampling.teacherHz;
@@ -91,9 +91,81 @@ participant = syntheticRecording(zeros(1,nParticipant), ...
     config.sampling.participantHz,"participant.mat");
 participant.coordinates(1:3,100) = NaN;
 
-verifyError(testCase,@() EmpaticMirroring_AlignArtificialDyad( ...
-    teacher,participant,config), ...
-    'EmpaticMirroring:ParticipantMissingData');
+dyad = EmpaticMirroring_AlignArtificialDyad(teacher,participant,config);
+
+verifyTrue(testCase,all(isfinite(dyad.data),'all'));
+verifyEqual(testCase,dyad.badSegmentsByParticipant{1},zeros(1,0));
+verifyEqual(testCase,dyad.badSegmentsByParticipant{2},100);
+verifyEqual(testCase,dyad.badSegments,100);
+verifyTrue(testCase,all(dyad.data(:,100,2) == 0,'all'));
+
+end
+
+
+function testTeacherGapMaskSurvivesResampling(testCase)
+
+config = EmpaticMirroring_Config();
+nTeacher = 40*config.sampling.teacherHz;
+nParticipant = 40*config.sampling.participantHz;
+teacher = syntheticRecording(ones(1,nTeacher), ...
+    config.sampling.teacherHz,"teacher.mat");
+participant = syntheticRecording(ones(1,nParticipant), ...
+    config.sampling.participantHz,"participant.mat");
+teacher.coordinates(1:3,300:315) = NaN;
+
+dyad = EmpaticMirroring_AlignArtificialDyad(teacher,participant,config);
+
+verifyNotEmpty(testCase,dyad.badSegmentsByParticipant{1});
+verifyEmpty(testCase,dyad.badSegmentsByParticipant{2});
+verifyEqual(testCase,dyad.badSegments, ...
+    dyad.badSegmentsByParticipant{1});
+verifyTrue(testCase,all(dyad.data(:,dyad.badSegments,1) == 0,'all'));
+
+end
+
+
+function testPreparedTeacherCanBeReusedWithoutRawTeacher(testCase)
+
+config = EmpaticMirroring_Config();
+nTeacher = 40*config.sampling.teacherHz;
+nParticipant = 40*config.sampling.participantHz;
+teacher = syntheticRecording(ones(1,nTeacher), ...
+    config.sampling.teacherHz,"teacher.mat");
+participant = syntheticRecording(ones(1,nParticipant), ...
+    config.sampling.participantHz,"participant.mat");
+teacher.coordinates(1:3,300:315) = NaN;
+
+[emptyDyad,preparedTeacher] = EmpaticMirroring_AlignArtificialDyad( ...
+    teacher,[],config);
+reusedDyad = EmpaticMirroring_AlignArtificialDyad( ...
+    [],participant,config,preparedTeacher);
+
+verifyEmpty(testCase,emptyDyad);
+verifySize(testCase,reusedDyad.data,[6 3960 2]);
+verifyEqual(testCase,reusedDyad.data(:,:,1),preparedTeacher.data);
+verifyEqual(testCase,reusedDyad.badSampleMask(:,1), ...
+    preparedTeacher.badMask(:));
+
+end
+
+
+function testParticipantResultsAreRoutedBesideMatFolder(testCase)
+
+temporaryRoot = string(tempname);
+mkdir(temporaryRoot);
+cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
+config = EmpaticMirroring_Config();
+config.paths.dataRoot = temporaryRoot;
+config.paths.participantsOutputRoot = fullfile(temporaryRoot,'outputs', ...
+    'participants');
+participantFile = fullfile(temporaryRoot,'001','1_mat', ...
+    '1_mir_low_v1_mov1.mat');
+
+resultsFolder = EmpaticMirroring_ParticipantResultsFolder( ...
+    participantFile,config);
+
+verifyEqual(testCase,string(resultsFolder), ...
+    fullfile(temporaryRoot,'outputs','participants','001'));
 
 end
 

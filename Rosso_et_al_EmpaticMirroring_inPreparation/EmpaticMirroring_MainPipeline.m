@@ -22,6 +22,12 @@ addpath(config.paths.toolboxRoot);
 addpath(fullfile(config.paths.toolboxRoot,'FREQNESS_Functions'));
 addpath(fullfile(config.paths.toolboxRoot,'FREQNESS_ExternalFunctions'));
 
+% CRITICAL CONTRACT CHECK: the dyad files use the optional bad_segments
+% convention. Network analysis must remain blocked until the MoCap estimator
+% accepts that option and excludes it from both covariance matrices.
+networkEstimatorContract = ...
+    EmpaticMirroring_CheckNetworkEstimatorContract(config);
+
 %% 1. Frame-count and file-structure quality control
 % FRAME-COUNT QC: Recordings started automatically from the shared trigger
 % but were stopped manually. Acquisition had a 3 s participant cue/wait;
@@ -72,7 +78,24 @@ fprintf('Participants excluded entirely: %d\n', ...
     height(exclusionReports.participantExclusions));
 fprintf('Review QC outputs in: %s\n\n',config.paths.qcOutputRoot);
 
-%% 4. Alignment and FREQ-NESS analysis
+%% 4. Materialize artificial dyads in the DyadicDance input format
+
+% markData is [XYZ marker coordinates x time x participants], ordered model
+% then participant. bad_segments is the synchronized union of the two
+% participant-specific lists, so both covariance matrices use the same times.
+% Each condition-labelled model file is imported, downsampled, aligned, and
+% assigned its post-resampling bad-sample mask once, then reused for all dyads.
+% Each dyad (including its bad-sample lists) is saved in that participant's
+% outputs/participants/<ID> folder; future core FREQ outputs use it as well.
+[dyadManifest,dyadSummary] = ...
+    EmpaticMirroring_CreateArtificialDyads(dyadManifest,config,frameQC);
+
+fprintf('Artificial dyads available: %d\n',dyadSummary.availableCount);
+fprintf('Network estimator compatible with bad_segments: %d\n', ...
+    networkEstimatorContract.ReadyForNetworkEstimation);
+
+%% 5. FREQ-NESS analysis
 % EmpaticMirroring_LoadRecording and EmpaticMirroring_AlignArtificialDyad
-% implement the reviewed loading/alignment contract. Batch analysis will be
-% enabled after the frame-count and pairing manifests have been reviewed.
+% implement the reviewed loading/alignment contract. Network estimation is
+% intentionally blocked by the contract check above until the MoCap toolbox
+% supports bad_segments in both covariance computations.

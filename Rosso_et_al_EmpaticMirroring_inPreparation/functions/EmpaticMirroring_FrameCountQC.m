@@ -25,6 +25,8 @@ role = strings(nFiles,1);
 folderStatus = strings(nFiles,1);
 matrixPath = strings(nFiles,1);
 matrixSize = strings(nFiles,1);
+markerCount = nan(nFiles,1);
+markerStatus = strings(nFiles,1);
 numberFrames = nan(nFiles,1);
 declaredFrames = nan(nFiles,1);
 sampleRate = nan(nFiles,1);
@@ -46,6 +48,7 @@ preferredFrames = nan(nFiles,1);
 readyForAlignment = false(nFiles,1);
 hasMissingCoordinates = false(nFiles,1);
 missingMarkerSamples = nan(nFiles,1);
+badTimepointCount = nan(nFiles,1);
 missingGapCount = nan(nFiles,1);
 longestMissingGapFrames = nan(nFiles,1);
 longestMissingGapMilliseconds = nan(nFiles,1);
@@ -105,6 +108,14 @@ for iFile = 1:nFiles
             matrixPath(iFile) = candidatePaths(1);
             thisSize = candidateSizes(1,:);
             matrixSize(iFile) = sprintf('%dx%dx%d',thisSize);
+            markerCount(iFile) = thisSize(1);
+            if markerCount(iFile) == config.markers.expectedCount
+                markerStatus(iFile) = "ok";
+            else
+                markerStatus(iFile) = "expected " + ...
+                    config.markers.expectedCount + ", found " + ...
+                    markerCount(iFile);
+            end
             numberFrames(iFile) = thisSize(3);
 
             [sampleRate(iFile),declaredFrames(iFile)] = ...
@@ -174,6 +185,8 @@ for iFile = 1:nFiles
                 analysisGapSummary.hasMissingCoordinates;
             missingMarkerSamples(iFile) = ...
                 analysisGapSummary.missingMarkerSamples;
+            badTimepointCount(iFile) = ...
+                analysisGapSummary.badTimepointCount;
             missingGapCount(iFile) = analysisGapSummary.missingGapCount;
             longestMissingGapFrames(iFile) = ...
                 analysisGapSummary.longestMissingGapFrames;
@@ -196,10 +209,16 @@ for iFile = 1:nFiles
         overallStatus(iFile) = "invalid subject folder";
     elseif nameStatus(iFile) ~= "ok"
         overallStatus(iFile) = nameStatus(iFile);
+    elseif markerStatus(iFile) ~= "ok"
+        overallStatus(iFile) = "invalid marker layout";
     elseif ~isfinite(offsetSeconds)
         overallStatus(iFile) = "unexpected sample rate for role";
+    elseif lengthStatus(iFile) == "too short"
+        overallStatus(iFile) = lengthStatus(iFile);
+    elseif badTimepointCount(iFile) >= requiredFrames(iFile)-1
+        overallStatus(iFile) = "insufficient valid samples";
     elseif hasMissingCoordinates(iFile)
-        overallStatus(iFile) = "remaining trajectory gaps";
+        overallStatus(iFile) = "usable with bad samples";
     else
         overallStatus(iFile) = lengthStatus(iFile);
     end
@@ -207,7 +226,8 @@ for iFile = 1:nFiles
     exclusionReasons(iFile) = buildExclusionReasons( ...
         loadStatus(iFile),folderStatus(iFile),nameStatus(iFile), ...
         note(iFile),role(iFile),sampleRate(iFile),lengthStatus(iFile), ...
-        hasMissingCoordinates(iFile),config);
+        markerStatus(iFile),badTimepointCount(iFile),requiredFrames(iFile), ...
+        config);
     excludeRecording(iFile) = strlength(exclusionReasons(iFile)) > 0;
     readyForAlignment(iFile) = ~excludeRecording(iFile);
 
@@ -219,8 +239,10 @@ end
 frameQC = table(filePaths,relativePath,subject,role,folderStatus, ...
     trialIndex,instruction, ...
     complexity,version,movement,note,pairingKey,matrixPath,matrixSize, ...
+    markerCount,markerStatus, ...
     numberFrames,declaredFrames,sampleRate,durationSeconds,requiredFrames, ...
     preferredFrames,hasMissingCoordinates,missingMarkerSamples, ...
+    badTimepointCount, ...
     missingGapCount,longestMissingGapFrames, ...
     longestMissingGapMilliseconds,affectedMarkerCount, ...
     fullRecordingHasMissingCoordinates,fullRecordingMissingMarkerSamples, ...
@@ -231,9 +253,11 @@ frameQC = table(filePaths,relativePath,subject,role,folderStatus, ...
     'VariableNames',{'File','RelativePath','Subject','Role','FolderStatus', ...
     'TrialIndex', ...
     'Instruction','Complexity','Version','Movement','Note','PairingKey', ...
-    'MatrixPath','MatrixSize','NumberFrames','DeclaredFrames', ...
+    'MatrixPath','MatrixSize','MarkerCount','MarkerStatus', ...
+    'NumberFrames','DeclaredFrames', ...
     'SampleRate','DurationSeconds','RequiredFrames','PreferredFrames', ...
-    'HasMissingCoordinates','MissingMarkerSamples','MissingGapCount', ...
+    'HasMissingCoordinates','MissingMarkerSamples','BadTimepointCount', ...
+    'MissingGapCount', ...
     'LongestMissingGapFrames','LongestMissingGapMilliseconds', ...
     'AffectedMarkerCount', ...
     'FullRecordingHasMissingCoordinates', ...
@@ -245,48 +269,6 @@ frameQC = table(filePaths,relativePath,subject,role,folderStatus, ...
 
 if ~isfolder(outputRoot)
     mkdir(outputRoot);
-end
-
-
-function reasons = buildExclusionReasons(loadStatus,folderStatus, ...
-    nameStatus,note,role,sampleRate,lengthStatus,hasMissing,config)
-
-parts = strings(0,1);
-if loadStatus ~= "ok"
-    parts(end+1,1) = "load/structure: " + loadStatus;
-end
-if folderStatus ~= "ok"
-    parts(end+1,1) = "folder: " + folderStatus;
-end
-if nameStatus ~= "ok"
-    if nameStatus == "annotated filename" && strlength(strtrim(note)) > 0
-        parts(end+1,1) = "filename annotation: " + strtrim(note);
-    else
-        parts(end+1,1) = "filename: " + nameStatus;
-    end
-end
-if role == "unknown"
-    parts(end+1,1) = "role: unrecognized data location";
-elseif loadStatus == "ok"
-    if role == "participant"
-        expectedRate = config.sampling.participantHz;
-    else
-        expectedRate = config.sampling.teacherHz;
-    end
-    if ~approximatelyEqual(sampleRate,expectedRate)
-        parts(end+1,1) = "sample rate: expected " + expectedRate + ...
-            " Hz, found " + sampleRate + " Hz";
-    end
-end
-if lengthStatus == "too short"
-    parts(end+1,1) = "length: too short for configured 33 s window";
-end
-if hasMissing
-    parts(end+1,1) = "trajectory: gaps remain after upstream preprocessing";
-end
-
-reasons = strjoin(unique(parts,'stable'),"; ");
-
 end
 writetable(frameQC,fullfile(outputRoot,'frame_count_qc.csv'));
 
@@ -311,6 +293,53 @@ fprintf(['Remaining-gap QC: %d/%d assessed participant files and ' ...
     nnz(participantAssessed), ...
     nnz(teacherAssessed & frameQC.HasMissingCoordinates), ...
     nnz(teacherAssessed));
+
+end
+
+
+function reasons = buildExclusionReasons(loadStatus,folderStatus, ...
+    nameStatus,note,role,sampleRate,lengthStatus,markerStatus, ...
+    badTimepointCount,requiredFrames,config)
+
+parts = strings(0,1);
+if loadStatus ~= "ok"
+    parts(end+1,1) = "load/structure: " + loadStatus;
+end
+if folderStatus ~= "ok"
+    parts(end+1,1) = "folder: " + folderStatus;
+end
+if nameStatus ~= "ok"
+    if nameStatus == "annotated filename" && strlength(strtrim(note)) > 0
+        parts(end+1,1) = "filename annotation: " + strtrim(note);
+    else
+        parts(end+1,1) = "filename: " + nameStatus;
+    end
+end
+if markerStatus ~= "ok" && strlength(markerStatus) > 0
+    parts(end+1,1) = "marker layout: " + markerStatus;
+end
+if role == "unknown"
+    parts(end+1,1) = "role: unrecognized data location";
+elseif loadStatus == "ok"
+    if role == "participant"
+        expectedRate = config.sampling.participantHz;
+    else
+        expectedRate = config.sampling.teacherHz;
+    end
+    if ~approximatelyEqual(sampleRate,expectedRate)
+        parts(end+1,1) = "sample rate: expected " + expectedRate + ...
+            " Hz, found " + sampleRate + " Hz";
+    end
+end
+if lengthStatus == "too short"
+    parts(end+1,1) = "length: too short for configured 33 s window";
+end
+if isfinite(badTimepointCount) && isfinite(requiredFrames) && ...
+        badTimepointCount >= requiredFrames-1
+    parts(end+1,1) = ...
+        "missing data: fewer than two valid covariance samples";
+end
+reasons = strjoin(unique(parts,'stable'),"; ");
 
 end
 
@@ -424,6 +453,7 @@ if size(trajectory,2) < 3
     summary = struct( ...
         'hasMissingCoordinates',true, ...
         'missingMarkerSamples',NaN, ...
+        'badTimepointCount',NaN, ...
         'missingGapCount',NaN, ...
         'longestMissingGapFrames',NaN, ...
         'longestMissingGapMilliseconds',NaN, ...
@@ -459,6 +489,7 @@ end
 summary = struct( ...
     'hasMissingCoordinates',any(missing,'all'), ...
     'missingMarkerSamples',nnz(missing), ...
+    'badTimepointCount',nnz(any(missing,1)), ...
     'missingGapCount',gapCount, ...
     'longestMissingGapFrames',longestGap, ...
     'longestMissingGapMilliseconds',longestGapMilliseconds, ...
