@@ -54,6 +54,10 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 %  - 'ncomps'          : Number of components to retain per frequency.
 %                        Default: 30.
 %
+%  - 'bad_segments'    : Vector of sample indices (e.g., 1-based timepoints)
+%                        to be excluded from the analysis.
+%                        These will be removed from covariance computations.
+%
 % ------------------------------------------------------------------------
 %  OUTPUT ARGUMENTS:
 % ------------------------------------------------------------------------
@@ -90,7 +94,8 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 %% Handle Optional Arguments
 
 % Define default values
-opts = struct('duration', [], 'fwidth', [], 'filter', 'logarithmic', 'regularisation', 0.01, 'ncomps', 30);
+opts = struct('duration', [], 'fwidth', [], 'filter', 'logarithmic', ...
+    'regularisation', 0.01, 'ncomps', 30, 'bad_segments',[]);
 
 % Parse name-value pair arguments
 opts = parse_name_value_pairs(opts, varargin{:});
@@ -107,6 +112,7 @@ fwidth         = opts.fwidth;
 filter         = opts.filter;
 regularisation = opts.regularisation;
 ncomps         = opts.ncomps;
+idx2remove     = opts.bad_segments; % in the current version, these apply to all subjects in the input
 
 if ~isnumeric(ncomps) || ~isreal(ncomps) || ~isscalar(ncomps) || ...
         ~isfinite(ncomps) || ncomps ~= round(ncomps) || ncomps < 1 || ...
@@ -116,6 +122,26 @@ end
 
 % Compute necessary parameters
 pnts2keep = duration * srate;
+
+if ~isempty(idx2remove) && (~isnumeric(idx2remove) || ...
+        ~isreal(idx2remove) || ~isvector(idx2remove) || ...
+        any(~isfinite(idx2remove)) || ...
+        any(idx2remove ~= round(idx2remove)))
+    error('bad_segments must contain finite integer sample indices.');
+end
+
+idx2remove = unique(idx2remove(:)','stable');
+
+% Check that the range of the bad segments falls within the requested duration
+if any(idx2remove < 1) || any(idx2remove > pnts2keep)
+    error('One or more indices in bad_segments fall outside the analyzed time range.');
+end
+
+% Define good indexes to keep for computing the covariance matrices
+idx2cov = setdiff(1:pnts2keep,idx2remove);
+if numel(idx2cov) < 2
+    error('Fewer than two samples remain for covariance estimation.');
+end
 
 % Check input size to verify if more than one participant is being analyzed
 if ndims(data) < 3
@@ -204,6 +230,13 @@ for subi = 1:nsubs
     % Assign broadband marker data from each participant
     broadData = data(:, 1:pnts2keep, subi); % subi indexing works even if singleton
 
+    % Remove bad segments, if any bad segments is provided as input
+    if ~isempty(idx2remove)
+        pct_removed = 100 * length(idx2remove) / pnts2keep;
+        disp(['Removing ' num2str(length(idx2remove)) ' bad timepoints ' ...
+            '(' num2str(pct_removed) '% of the input data).']);
+    end
+
     % Perform frequency-resolved brain network separation via GED
     for frexi = 1:nfrex % loop over input frequencies
         % display(['Processing frequency #' num2str(frexi)])
@@ -213,8 +246,8 @@ for subi = 1:nsubs
             frex_by_participant(frexi,subi),fwidth_all(frexi,subi),0);
 
         % Compute covariance matrices
-        covS = cov(narrowData');
-        covR = cov(broadData');
+        covS = cov(narrowData(:,idx2cov)');
+        covR = cov(broadData(:,idx2cov)');
 
         % Regularisation (to bring covariance matrices to full rank)
         covS = covS  + 1e-6*eye(size(covS)); % regularise the S covariance matrix by adding a small perturbation/noise
@@ -276,6 +309,7 @@ else
     FREQ.frex = frex_by_participant;
 end
 FREQ.fwhm = fwidth_all;
+FREQ.bad_segments = idx2remove;         % excluded sample indices
 
 
 end
