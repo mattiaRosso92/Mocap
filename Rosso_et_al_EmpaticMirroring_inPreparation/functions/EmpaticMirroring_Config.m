@@ -24,9 +24,9 @@ config.timing.participantOffsetSeconds = 3;
 config.timing.analysisDurationSeconds = 33;
 config.timing.filterPaddingSeconds = 1;
 
-% Provisional study-level missing-data rule. Review the empirical gap-length
-% distribution before batch analysis; longer or edge gaps remain invalid.
-config.preprocessing.maxInterpolatedGapSeconds = 0.25;
+% QTM preprocessing already filled gaps <=50 ms. Do not interpolate again:
+% any remaining missing trajectory data are reported and excluded.
+config.preprocessing.upstreamFilledGapLimitSeconds = 0.050;
 
 config.naming.teacherFolder = "Michalina";
 config.output.figureVisible = "on";

@@ -80,20 +80,61 @@ verifySize(testCase,recording.coordinates,[6 nFrames]);
 end
 
 
-function testShortGapInterpolation(testCase)
+function testRemainingGapExcludesDyad(testCase)
 
-sampleRate = 120;
-coordinates = repmat(1:20,6,1);
-coordinates(1:3,8:9) = NaN;
+config = EmpaticMirroring_Config();
+nTeacher = 40*config.sampling.teacherHz;
+nParticipant = 40*config.sampling.participantHz;
+teacher = syntheticRecording(zeros(1,nTeacher), ...
+    config.sampling.teacherHz,"teacher.mat");
+participant = syntheticRecording(zeros(1,nParticipant), ...
+    config.sampling.participantHz,"participant.mat");
+participant.coordinates(1:3,100) = NaN;
 
-[cleaned,report] = EmpaticMirroring_InterpolateShortGaps( ...
-    coordinates,sampleRate,0.025);
+verifyError(testCase,@() EmpaticMirroring_AlignArtificialDyad( ...
+    teacher,participant,config), ...
+    'EmpaticMirroring:ParticipantMissingData');
 
-verifyTrue(testCase,all(isfinite(cleaned),'all'));
-verifyEqual(testCase,cleaned(1:3,8:9), ...
-    repmat(8:9,3,1),'AbsTol',eps);
-verifyEqual(testCase,report.interpolatedGapCount,1);
-verifyEqual(testCase,report.remainingInvalidSampleCount,0);
+end
+
+
+function testManifestExcludesAnnotationsAndMatchesStimulus(testCase)
+
+temporaryRoot = string(tempname);
+mkdir(temporaryRoot);
+cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
+
+config = EmpaticMirroring_Config();
+config.paths.qcOutputRoot = temporaryRoot;
+
+file = ["participant.mat";"participant_noted.mat";"model.mat"];
+role = ["participant";"participant";"teacher"];
+folderStatus = ["ok";"ok";"ok"];
+nameStatus = ["ok";"annotated filename";"ok"];
+subject = ["001";"001";"Michalina"];
+trialIndex = [17;18;7];
+instruction = ["obs";"mir";"mir"];
+complexity = ["high";"high";"high"];
+version = [2;2;2];
+movement = [1;1;1];
+pairingKey = ["high_v2_mov1";"high_v2_mov1";"high_v2_mov1"];
+numberFrames = [4320;4320;9900];
+overallStatus = ["ok";"annotated filename";"ok"];
+readyForAlignment = [true;false;true];
+frameQC = table(file,role,folderStatus,nameStatus,subject,trialIndex, ...
+    instruction,complexity,version,movement,pairingKey,numberFrames, ...
+    overallStatus,readyForAlignment, ...
+    'VariableNames',{'File','Role','FolderStatus','NameStatus','Subject', ...
+    'TrialIndex','Instruction','Complexity','Version','Movement', ...
+    'PairingKey','NumberFrames','OverallStatus','ReadyForAlignment'});
+
+manifest = EmpaticMirroring_BuildDyadManifest(frameQC,config);
+
+verifyEqual(testCase,height(manifest),1);
+verifyEqual(testCase,manifest.ParticipantFile,"participant.mat");
+verifyEqual(testCase,manifest.TeacherFile,"model.mat");
+verifyEqual(testCase,manifest.PairingStatus,"matched");
+verifyTrue(testCase,manifest.ReadyForAlignment);
 
 end
 

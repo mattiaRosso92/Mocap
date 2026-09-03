@@ -22,6 +22,7 @@ nFiles = numel(files);
 relativePath = strings(nFiles,1);
 subject = strings(nFiles,1);
 role = strings(nFiles,1);
+folderStatus = strings(nFiles,1);
 matrixPath = strings(nFiles,1);
 matrixSize = strings(nFiles,1);
 numberFrames = nan(nFiles,1);
@@ -29,8 +30,8 @@ declaredFrames = nan(nFiles,1);
 sampleRate = nan(nFiles,1);
 durationSeconds = nan(nFiles,1);
 trialIndex = nan(nFiles,1);
-condition = strings(nFiles,1);
-intensity = strings(nFiles,1);
+instruction = strings(nFiles,1);
+complexity = strings(nFiles,1);
 version = nan(nFiles,1);
 movement = nan(nFiles,1);
 note = strings(nFiles,1);
@@ -43,6 +44,12 @@ errorMessage = strings(nFiles,1);
 requiredFrames = nan(nFiles,1);
 preferredFrames = nan(nFiles,1);
 readyForAlignment = false(nFiles,1);
+hasMissingCoordinates = false(nFiles,1);
+missingMarkerSamples = nan(nFiles,1);
+missingGapCount = nan(nFiles,1);
+longestMissingGapFrames = nan(nFiles,1);
+longestMissingGapMilliseconds = nan(nFiles,1);
+affectedMarkerCount = nan(nFiles,1);
 
 dataRootPrefix = string(dataRoot) + filesep;
 
@@ -53,26 +60,34 @@ for iFile = 1:nFiles
     [matFolder,stem] = fileparts(filePaths(iFile));
     [subjectFolder,~] = fileparts(matFolder);
     [~,subjectName] = fileparts(subjectFolder);
-    subject(iFile) = string(subjectName);
+    [role(iFile),subject(iFile),folderStatus(iFile)] = ...
+        parseRecordingFolders(subjectName,matFolder,config);
 
     token = parseRecordingName(stem);
     if isempty(token)
         nameStatus(iFile) = "invalid filename";
     else
         trialIndex(iFile) = str2double(token.trial);
-        condition(iFile) = lower(string(token.condition));
-        intensity(iFile) = lower(string(token.intensity));
+        instruction(iFile) = lower(string(token.instruction));
+        complexity(iFile) = lower(string(token.complexity));
         version(iFile) = str2double(token.version);
         movement(iFile) = str2double(token.movement);
         note(iFile) = string(token.note);
-        pairingKey(iFile) = intensity(iFile) + "_v" + ...
+        pairingKey(iFile) = complexity(iFile) + "_v" + ...
             version(iFile) + "_mov" + movement(iFile);
-        nameStatus(iFile) = "ok";
+        if strlength(strtrim(note(iFile))) > 0
+            nameStatus(iFile) = "annotated filename";
+        elseif trialIndex(iFile) < 1 || trialIndex(iFile) > 48
+            nameStatus(iFile) = "trial index outside 1-48";
+        else
+            nameStatus(iFile) = "ok";
+        end
     end
 
     try
         loaded = load(char(filePaths(iFile)));
-        [candidatePaths,candidateSizes] = findNumeric3DMatrices(loaded,"");
+        [candidatePaths,candidateSizes,candidateMatrices] = ...
+            findNumeric3DMatrices(loaded,"");
 
         if isempty(candidatePaths)
             loadStatus(iFile) = "no numeric 3-D matrix";
@@ -87,6 +102,17 @@ for iFile = 1:nFiles
 
             [sampleRate(iFile),declaredFrames(iFile)] = ...
                 readQtmMetadata(loaded);
+
+            gapSummary = summarizeMissingCoordinates( ...
+                candidateMatrices{1},sampleRate(iFile));
+            hasMissingCoordinates(iFile) = gapSummary.hasMissingCoordinates;
+            missingMarkerSamples(iFile) = gapSummary.missingMarkerSamples;
+            missingGapCount(iFile) = gapSummary.missingGapCount;
+            longestMissingGapFrames(iFile) = ...
+                gapSummary.longestMissingGapFrames;
+            longestMissingGapMilliseconds(iFile) = ...
+                gapSummary.longestMissingGapMilliseconds;
+            affectedMarkerCount(iFile) = gapSummary.affectedMarkerCount;
 
             if ~isfinite(sampleRate(iFile)) || sampleRate(iFile) <= 0
                 loadStatus(iFile) = "missing frame rate";
@@ -104,16 +130,13 @@ for iFile = 1:nFiles
         errorMessage(iFile) = string(exception.message);
     end
 
-    if approximatelyEqual(sampleRate(iFile),config.sampling.teacherHz)
-        role(iFile) = "teacher";
-        subject(iFile) = config.naming.teacherFolder;
+    if role(iFile) == "teacher" && approximatelyEqual( ...
+            sampleRate(iFile),config.sampling.teacherHz)
         offsetSeconds = config.timing.teacherOffsetSeconds;
-    elseif approximatelyEqual( ...
+    elseif role(iFile) == "participant" && approximatelyEqual( ...
             sampleRate(iFile),config.sampling.participantHz)
-        role(iFile) = "participant";
         offsetSeconds = config.timing.participantOffsetSeconds;
     else
-        role(iFile) = "unknown";
         offsetSeconds = NaN;
     end
 
@@ -139,16 +162,24 @@ for iFile = 1:nFiles
 
     if loadStatus(iFile) ~= "ok"
         overallStatus(iFile) = loadStatus(iFile);
+    elseif folderStatus(iFile) ~= "ok"
+        overallStatus(iFile) = folderStatus(iFile);
     elseif role(iFile) == "unknown"
-        overallStatus(iFile) = "unsupported sample rate";
+        overallStatus(iFile) = "invalid subject folder";
     elseif nameStatus(iFile) ~= "ok"
         overallStatus(iFile) = nameStatus(iFile);
+    elseif ~isfinite(offsetSeconds)
+        overallStatus(iFile) = "unexpected sample rate for role";
+    elseif hasMissingCoordinates(iFile)
+        overallStatus(iFile) = "remaining trajectory gaps";
     else
         overallStatus(iFile) = lengthStatus(iFile);
     end
 
     readyForAlignment(iFile) = loadStatus(iFile) == "ok" && ...
-        nameStatus(iFile) == "ok" && role(iFile) ~= "unknown" && ...
+        folderStatus(iFile) == "ok" && nameStatus(iFile) == "ok" && ...
+        role(iFile) ~= "unknown" && isfinite(requiredFrames(iFile)) && ...
+        ~hasMissingCoordinates(iFile) && ...
         numberFrames(iFile) >= requiredFrames(iFile);
 
     if mod(iFile,100) == 0 || iFile == nFiles
@@ -156,15 +187,23 @@ for iFile = 1:nFiles
     end
 end
 
-frameQC = table(filePaths,relativePath,subject,role,trialIndex,condition, ...
-    intensity,version,movement,note,pairingKey,matrixPath,matrixSize, ...
+frameQC = table(filePaths,relativePath,subject,role,folderStatus, ...
+    trialIndex,instruction, ...
+    complexity,version,movement,note,pairingKey,matrixPath,matrixSize, ...
     numberFrames,declaredFrames,sampleRate,durationSeconds,requiredFrames, ...
-    preferredFrames,loadStatus,nameStatus,lengthStatus,overallStatus, ...
+    preferredFrames,hasMissingCoordinates,missingMarkerSamples, ...
+    missingGapCount,longestMissingGapFrames, ...
+    longestMissingGapMilliseconds,affectedMarkerCount, ...
+    loadStatus,nameStatus,lengthStatus,overallStatus, ...
     readyForAlignment,errorMessage, ...
-    'VariableNames',{'File','RelativePath','Subject','Role','TrialIndex', ...
-    'Condition','Intensity','Version','Movement','Note','PairingKey', ...
+    'VariableNames',{'File','RelativePath','Subject','Role','FolderStatus', ...
+    'TrialIndex', ...
+    'Instruction','Complexity','Version','Movement','Note','PairingKey', ...
     'MatrixPath','MatrixSize','NumberFrames','DeclaredFrames', ...
     'SampleRate','DurationSeconds','RequiredFrames','PreferredFrames', ...
+    'HasMissingCoordinates','MissingMarkerSamples','MissingGapCount', ...
+    'LongestMissingGapFrames','LongestMissingGapMilliseconds', ...
+    'AffectedMarkerCount', ...
     'LoadStatus','NameStatus','LengthStatus','OverallStatus', ...
     'ReadyForAlignment','ErrorMessage'});
 
@@ -184,28 +223,92 @@ fprintf('Frame-count QC complete: %d ready, %d too short, %d other issues.\n', .
     nnz(~frameQC.ReadyForAlignment & ...
         frameQC.LengthStatus ~= "too short"));
 
+participantAssessed = frameQC.Role == "participant" & ...
+    isfinite(frameQC.MissingMarkerSamples);
+teacherAssessed = frameQC.Role == "teacher" & ...
+    isfinite(frameQC.MissingMarkerSamples);
+fprintf(['Remaining-gap QC: %d/%d assessed participant files and ' ...
+    '%d/%d assessed model files contain gaps.\n'], ...
+    nnz(participantAssessed & frameQC.HasMissingCoordinates), ...
+    nnz(participantAssessed), ...
+    nnz(teacherAssessed & frameQC.HasMissingCoordinates), ...
+    nnz(teacherAssessed));
+
 end
 
 
 function token = parseRecordingName(stem)
 
-expression = ['^(?<trial>\d+)_(?<condition>obs|mir)_' ...
-    '(?<intensity>low|medium|high)_(?:v)?(?<version>\d+)_' ...
-    '(?:mov)?(?<movement>\d+)(?<note>.*)$'];
+expression = ['^(?<trial>\d+)_(?<instruction>obs|mir)_' ...
+    '(?<complexity>low|medium|high)_(?:v)?(?<version>\d+)_' ...
+    '(?:mov)?(?<movement>[12])(?<note>.*)$'];
 token = regexpi(char(stem),expression,'names','once');
 
 end
 
 
-function [paths,sizes] = findNumeric3DMatrices(value,currentPath)
+function [role,subject,status] = parseRecordingFolders( ...
+    subjectFolderName,matFolder,config)
+
+subjectFolderName = string(subjectFolderName);
+[~,matFolderName] = fileparts(matFolder);
+matFolderName = string(matFolderName);
+
+if strcmpi(subjectFolderName,config.naming.teacherFolder)
+    role = "teacher";
+    subject = string(config.naming.teacherFolder);
+    expectedMatFolder = "data_" + string(config.naming.teacherFolder) + "_mat";
+    if matFolderName == expectedMatFolder
+        status = "ok";
+    else
+        status = "invalid teacher data folder";
+    end
+    return
+end
+
+leadingSubject = regexp(char(subjectFolderName),'^\d{3}','match','once');
+if isempty(leadingSubject)
+    directSubject = regexp(char(matFolderName),'^\d{3}$','match','once');
+    if ~isempty(directSubject)
+        role = "participant";
+        subject = string(directSubject);
+        status = "missing participant *_mat subfolder";
+        return
+    end
+    role = "unknown";
+    subject = "";
+    status = "invalid subject folder";
+    return
+end
+
+role = "participant";
+subject = string(leadingSubject);
+if subjectFolderName ~= subject
+    status = "annotated subject folder";
+    return
+end
+
+expectedMatFolder = string(str2double(subject)) + "_mat";
+if matFolderName ~= expectedMatFolder
+    status = "invalid participant data folder";
+else
+    status = "ok";
+end
+
+end
+
+
+function [paths,sizes,matrices] = findNumeric3DMatrices(value,currentPath)
 
 paths = strings(0,1);
 sizes = zeros(0,3);
+matrices = cell(0,1);
 
 if isnumeric(value)
     if ndims(value) == 3 && size(value,3) > 1
         paths(end+1,1) = currentPath;
         sizes(end+1,:) = size(value);
+        matrices{end+1,1} = value;
     end
     return
 end
@@ -226,12 +329,62 @@ for elementIndex = 1:numel(value)
         if numel(value) > 1
             nextPath = nextPath + "(" + elementIndex + ")";
         end
-        [childPaths,childSizes] = findNumeric3DMatrices( ...
+        [childPaths,childSizes,childMatrices] = findNumeric3DMatrices( ...
             value(elementIndex).(fieldName),nextPath);
         paths = [paths; childPaths]; %#ok<AGROW>
         sizes = [sizes; childSizes]; %#ok<AGROW>
+        matrices = [matrices; childMatrices]; %#ok<AGROW>
     end
 end
+
+end
+
+
+function summary = summarizeMissingCoordinates(trajectory,sampleRate)
+
+if size(trajectory,2) < 3
+    summary = struct( ...
+        'hasMissingCoordinates',true, ...
+        'missingMarkerSamples',NaN, ...
+        'missingGapCount',NaN, ...
+        'longestMissingGapFrames',NaN, ...
+        'longestMissingGapMilliseconds',NaN, ...
+        'affectedMarkerCount',NaN);
+    return
+end
+
+coordinateData = trajectory(:,1:3,:);
+missing = squeeze(any(~isfinite(coordinateData),2));
+if isvector(missing)
+    missing = reshape(missing,size(trajectory,1),size(trajectory,3));
+end
+
+gapCount = 0;
+longestGap = 0;
+for markerIndex = 1:size(missing,1)
+    transitions = diff([false missing(markerIndex,:) false]);
+    gapStarts = find(transitions == 1);
+    gapEnds = find(transitions == -1)-1;
+    gapLengths = gapEnds-gapStarts+1;
+    gapCount = gapCount + numel(gapLengths);
+    if ~isempty(gapLengths)
+        longestGap = max(longestGap,max(gapLengths));
+    end
+end
+
+if isfinite(sampleRate) && sampleRate > 0
+    longestGapMilliseconds = 1000*longestGap/sampleRate;
+else
+    longestGapMilliseconds = NaN;
+end
+
+summary = struct( ...
+    'hasMissingCoordinates',any(missing,'all'), ...
+    'missingMarkerSamples',nnz(missing), ...
+    'missingGapCount',gapCount, ...
+    'longestMissingGapFrames',longestGap, ...
+    'longestMissingGapMilliseconds',longestGapMilliseconds, ...
+    'affectedMarkerCount',nnz(any(missing,2)));
 
 end
 

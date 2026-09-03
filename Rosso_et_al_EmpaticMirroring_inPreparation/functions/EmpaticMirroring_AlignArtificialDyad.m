@@ -2,7 +2,9 @@ function dyad = EmpaticMirroring_AlignArtificialDyad(teacher,participant,config)
 %EMPATICMIRRORING_ALIGNARTIFICIALDYAD Trigger-align one artificial dyad.
 %   Teacher data use [trigger, trigger+33 s). Participant data use
 %   [trigger+3 s, trigger+36 s), excluding the cue/wait period. Both are
-%   returned at 120 Hz in coordinates-by-time-by-participant format.
+%   returned at 120 Hz in coordinates-by-time-by-participant format. Gaps
+%   <=50 ms were already filled upstream; any remaining gap excludes the
+%   recording and no further interpolation is performed here.
 
 if nargin < 3 || isempty(config)
     config = EmpaticMirroring_Config();
@@ -18,22 +20,21 @@ assertRate(participant.sampleRate, ...
 [participantCoordinates,participantLabels] = reorderMarkers( ...
     participant.coordinates,participant.labels,teacher.labels);
 
-[teacherCoordinates,teacherGapReport] = ...
-    EmpaticMirroring_InterpolateShortGaps(teacher.coordinates, ...
-    teacher.sampleRate,config.preprocessing.maxInterpolatedGapSeconds);
-[participantCoordinates,participantGapReport] = ...
-    EmpaticMirroring_InterpolateShortGaps(participantCoordinates, ...
-    participant.sampleRate,config.preprocessing.maxInterpolatedGapSeconds);
+teacherCoordinates = teacher.coordinates;
+teacherGapReport = summarizeMissingCoordinates(teacherCoordinates, ...
+    teacher.sampleRate);
+participantGapReport = summarizeMissingCoordinates(participantCoordinates, ...
+    participant.sampleRate);
 
 if any(~isfinite(teacherCoordinates(:)))
     error('EmpaticMirroring:TeacherMissingData', ...
-        ['Teacher coordinates still contain nonfinite values after ' ...
-         'short-gap interpolation; review or exclude this recording.']);
+        ['Teacher coordinates contain gaps remaining after upstream ' ...
+         'preprocessing; exclude this recording.']);
 end
 if any(~isfinite(participantCoordinates(:)))
     error('EmpaticMirroring:ParticipantMissingData', ...
-        ['Participant coordinates still contain nonfinite values after ' ...
-         'short-gap interpolation; review or exclude this recording.']);
+        ['Participant coordinates contain gaps remaining after upstream ' ...
+         'preprocessing; exclude this recording.']);
 end
 
 [teacherAligned,teacherInfo] = alignWindow( ...
@@ -70,6 +71,38 @@ dyad.teacherAlignment = teacherInfo;
 dyad.participantAlignment = participantInfo;
 dyad.teacherGapReport = teacherGapReport;
 dyad.participantGapReport = participantGapReport;
+
+end
+
+
+function report = summarizeMissingCoordinates(coordinates,sampleRate)
+
+nMarkers = size(coordinates,1)/3;
+missing = false(nMarkers,size(coordinates,2));
+for markerIndex = 1:nMarkers
+    rows = 3*(markerIndex-1) + (1:3);
+    missing(markerIndex,:) = any(~isfinite(coordinates(rows,:)),1);
+end
+
+gapCount = 0;
+longestGapFrames = 0;
+for markerIndex = 1:nMarkers
+    transitions = diff([false missing(markerIndex,:) false]);
+    gapStarts = find(transitions == 1);
+    gapEnds = find(transitions == -1)-1;
+    lengths = gapEnds-gapStarts+1;
+    gapCount = gapCount + numel(lengths);
+    if ~isempty(lengths)
+        longestGapFrames = max(longestGapFrames,max(lengths));
+    end
+end
+
+report = struct( ...
+    'missingMarkerSamples',nnz(missing), ...
+    'missingGapCount',gapCount, ...
+    'longestMissingGapFrames',longestGapFrames, ...
+    'longestMissingGapMilliseconds',1000*longestGapFrames/sampleRate, ...
+    'affectedMarkerCount',nnz(any(missing,2)));
 
 end
 
