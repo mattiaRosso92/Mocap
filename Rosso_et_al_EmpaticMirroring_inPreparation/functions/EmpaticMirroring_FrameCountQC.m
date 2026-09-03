@@ -50,12 +50,19 @@ missingGapCount = nan(nFiles,1);
 longestMissingGapFrames = nan(nFiles,1);
 longestMissingGapMilliseconds = nan(nFiles,1);
 affectedMarkerCount = nan(nFiles,1);
+fullRecordingHasMissingCoordinates = false(nFiles,1);
+fullRecordingMissingMarkerSamples = nan(nFiles,1);
+fullRecordingMissingGapCount = nan(nFiles,1);
+fullRecordingLongestMissingGapMilliseconds = nan(nFiles,1);
+excludeRecording = false(nFiles,1);
+exclusionReasons = strings(nFiles,1);
 
 dataRootPrefix = string(dataRoot) + filesep;
 
 fprintf('\nInspecting frame counts in %d MAT files...\n',nFiles);
 
 for iFile = 1:nFiles
+    trajectory = [];
     relativePath(iFile) = erase(filePaths(iFile),dataRootPrefix);
     [matFolder,stem] = fileparts(filePaths(iFile));
     [subjectFolder,~] = fileparts(matFolder);
@@ -103,16 +110,17 @@ for iFile = 1:nFiles
             [sampleRate(iFile),declaredFrames(iFile)] = ...
                 readQtmMetadata(loaded);
 
-            gapSummary = summarizeMissingCoordinates( ...
+            trajectory = candidateMatrices{1};
+            fullGapSummary = summarizeMissingCoordinates( ...
                 candidateMatrices{1},sampleRate(iFile));
-            hasMissingCoordinates(iFile) = gapSummary.hasMissingCoordinates;
-            missingMarkerSamples(iFile) = gapSummary.missingMarkerSamples;
-            missingGapCount(iFile) = gapSummary.missingGapCount;
-            longestMissingGapFrames(iFile) = ...
-                gapSummary.longestMissingGapFrames;
-            longestMissingGapMilliseconds(iFile) = ...
-                gapSummary.longestMissingGapMilliseconds;
-            affectedMarkerCount(iFile) = gapSummary.affectedMarkerCount;
+            fullRecordingHasMissingCoordinates(iFile) = ...
+                fullGapSummary.hasMissingCoordinates;
+            fullRecordingMissingMarkerSamples(iFile) = ...
+                fullGapSummary.missingMarkerSamples;
+            fullRecordingMissingGapCount(iFile) = ...
+                fullGapSummary.missingGapCount;
+            fullRecordingLongestMissingGapMilliseconds(iFile) = ...
+                fullGapSummary.longestMissingGapMilliseconds;
 
             if ~isfinite(sampleRate(iFile)) || sampleRate(iFile) <= 0
                 loadStatus(iFile) = "missing frame rate";
@@ -154,6 +162,26 @@ for iFile = 1:nFiles
         else
             lengthStatus(iFile) = "ok";
         end
+
+        if numberFrames(iFile) >= requiredFrames(iFile)
+            analysisStart = 1 + round(offsetSeconds*sampleRate(iFile));
+            analysisEnd = analysisStart + round( ...
+                config.timing.analysisDurationSeconds*sampleRate(iFile))-1;
+            analysisGapSummary = summarizeMissingCoordinates( ...
+                trajectory(:,:,analysisStart:analysisEnd), ...
+                sampleRate(iFile));
+            hasMissingCoordinates(iFile) = ...
+                analysisGapSummary.hasMissingCoordinates;
+            missingMarkerSamples(iFile) = ...
+                analysisGapSummary.missingMarkerSamples;
+            missingGapCount(iFile) = analysisGapSummary.missingGapCount;
+            longestMissingGapFrames(iFile) = ...
+                analysisGapSummary.longestMissingGapFrames;
+            longestMissingGapMilliseconds(iFile) = ...
+                analysisGapSummary.longestMissingGapMilliseconds;
+            affectedMarkerCount(iFile) = ...
+                analysisGapSummary.affectedMarkerCount;
+        end
     elseif loadStatus(iFile) == "ok"
         lengthStatus(iFile) = "unknown sample rate";
     else
@@ -176,11 +204,12 @@ for iFile = 1:nFiles
         overallStatus(iFile) = lengthStatus(iFile);
     end
 
-    readyForAlignment(iFile) = loadStatus(iFile) == "ok" && ...
-        folderStatus(iFile) == "ok" && nameStatus(iFile) == "ok" && ...
-        role(iFile) ~= "unknown" && isfinite(requiredFrames(iFile)) && ...
-        ~hasMissingCoordinates(iFile) && ...
-        numberFrames(iFile) >= requiredFrames(iFile);
+    exclusionReasons(iFile) = buildExclusionReasons( ...
+        loadStatus(iFile),folderStatus(iFile),nameStatus(iFile), ...
+        note(iFile),role(iFile),sampleRate(iFile),lengthStatus(iFile), ...
+        hasMissingCoordinates(iFile),config);
+    excludeRecording(iFile) = strlength(exclusionReasons(iFile)) > 0;
+    readyForAlignment(iFile) = ~excludeRecording(iFile);
 
     if mod(iFile,100) == 0 || iFile == nFiles
         fprintf('  inspected %d/%d files\n',iFile,nFiles);
@@ -194,8 +223,11 @@ frameQC = table(filePaths,relativePath,subject,role,folderStatus, ...
     preferredFrames,hasMissingCoordinates,missingMarkerSamples, ...
     missingGapCount,longestMissingGapFrames, ...
     longestMissingGapMilliseconds,affectedMarkerCount, ...
+    fullRecordingHasMissingCoordinates,fullRecordingMissingMarkerSamples, ...
+    fullRecordingMissingGapCount, ...
+    fullRecordingLongestMissingGapMilliseconds, ...
     loadStatus,nameStatus,lengthStatus,overallStatus, ...
-    readyForAlignment,errorMessage, ...
+    excludeRecording,exclusionReasons,readyForAlignment,errorMessage, ...
     'VariableNames',{'File','RelativePath','Subject','Role','FolderStatus', ...
     'TrialIndex', ...
     'Instruction','Complexity','Version','Movement','Note','PairingKey', ...
@@ -204,11 +236,57 @@ frameQC = table(filePaths,relativePath,subject,role,folderStatus, ...
     'HasMissingCoordinates','MissingMarkerSamples','MissingGapCount', ...
     'LongestMissingGapFrames','LongestMissingGapMilliseconds', ...
     'AffectedMarkerCount', ...
+    'FullRecordingHasMissingCoordinates', ...
+    'FullRecordingMissingMarkerSamples','FullRecordingMissingGapCount', ...
+    'FullRecordingLongestMissingGapMilliseconds', ...
     'LoadStatus','NameStatus','LengthStatus','OverallStatus', ...
-    'ReadyForAlignment','ErrorMessage'});
+    'ExcludeRecording','ExclusionReasons','ReadyForAlignment', ...
+    'ErrorMessage'});
 
 if ~isfolder(outputRoot)
     mkdir(outputRoot);
+end
+
+
+function reasons = buildExclusionReasons(loadStatus,folderStatus, ...
+    nameStatus,note,role,sampleRate,lengthStatus,hasMissing,config)
+
+parts = strings(0,1);
+if loadStatus ~= "ok"
+    parts(end+1,1) = "load/structure: " + loadStatus;
+end
+if folderStatus ~= "ok"
+    parts(end+1,1) = "folder: " + folderStatus;
+end
+if nameStatus ~= "ok"
+    if nameStatus == "annotated filename" && strlength(strtrim(note)) > 0
+        parts(end+1,1) = "filename annotation: " + strtrim(note);
+    else
+        parts(end+1,1) = "filename: " + nameStatus;
+    end
+end
+if role == "unknown"
+    parts(end+1,1) = "role: unrecognized data location";
+elseif loadStatus == "ok"
+    if role == "participant"
+        expectedRate = config.sampling.participantHz;
+    else
+        expectedRate = config.sampling.teacherHz;
+    end
+    if ~approximatelyEqual(sampleRate,expectedRate)
+        parts(end+1,1) = "sample rate: expected " + expectedRate + ...
+            " Hz, found " + sampleRate + " Hz";
+    end
+end
+if lengthStatus == "too short"
+    parts(end+1,1) = "length: too short for configured 33 s window";
+end
+if hasMissing
+    parts(end+1,1) = "trajectory: gaps remain after upstream preprocessing";
+end
+
+reasons = strjoin(unique(parts,'stable'),"; ");
+
 end
 writetable(frameQC,fullfile(outputRoot,'frame_count_qc.csv'));
 

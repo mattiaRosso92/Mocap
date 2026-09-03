@@ -16,11 +16,12 @@ config.sampling.teacherHz = 300;
 config.sampling.participantHz = 120;
 config.sampling.outputHz = 120;
 
-% ALIGNMENT CONTRACT: both recordings start from the shared trigger.
-% Teacher video time is trigger+0 s; participant video time is trigger+3 s
-% after the cue/wait interval. Analyze the following 33 seconds.
+% ALIGNMENT CONTRACT FOR PREPROCESSED MAT EXPORTS: acquisition included a
+% 3 s participant cue/wait, but the exported participant files cluster at
+% 33.45 s and almost none contain 36 s. Treat MAT sample 1 as video onset
+% for both roles and analyze the same following 33 s without time warping.
 config.timing.teacherOffsetSeconds = 0;
-config.timing.participantOffsetSeconds = 3;
+config.timing.participantOffsetSeconds = 0;
 config.timing.analysisDurationSeconds = 33;
 config.timing.filterPaddingSeconds = 1;
 

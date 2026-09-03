@@ -1,8 +1,8 @@
 function dyad = EmpaticMirroring_AlignArtificialDyad(teacher,participant,config)
 %EMPATICMIRRORING_ALIGNARTIFICIALDYAD Trigger-align one artificial dyad.
-%   Teacher data use [trigger, trigger+33 s). Participant data use
-%   [trigger+3 s, trigger+36 s), excluding the cue/wait period. Both are
-%   returned at 120 Hz in coordinates-by-time-by-participant format. Gaps
+%   In the preprocessed MAT exports, sample 1 is treated as video onset for
+%   both roles; both use [0,33 s) and are returned at 120 Hz in
+%   coordinates-by-time-by-participant format. Gaps
 %   <=50 ms were already filled upstream; any remaining gap excludes the
 %   recording and no further interpolation is performed here.
 
