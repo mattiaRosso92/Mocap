@@ -22,3 +22,11 @@ FREQNESS_Output/
 
 # Local validation datasets
 Dance_Data/
+
+# Motion-capture data exports
+*.mat
+*.qtm
+*.avi
+
+# Empatic mirroring generated analysis output
+Rosso_et_al_EmpaticMirroring_inPreparation/outputs/
