@@ -96,6 +96,55 @@ verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
 end
 
 
+function testShorterDurationUsesOnlyRequestedSamples(testCase)
+
+rng(53);
+srate = 120;
+duration = 2;
+nSamples = 480;
+pnts2keep = duration*srate;
+data = randn(6,nSamples,2);
+arguments = {2,srate,'fwidth',0.3,'ncomps',2};
+
+withDuration = FREQNESS_NetworkEstimation_Mocap( ...
+    data,arguments{:},'duration',duration);
+physicallyTruncated = FREQNESS_NetworkEstimation_Mocap( ...
+    data(:,1:pnts2keep,:),arguments{:});
+
+verifyEqual(testCase,withDuration.evals,physicallyTruncated.evals);
+verifyEqual(testCase,withDuration.evecs,physicallyTruncated.evecs);
+verifyEqual(testCase,withDuration.pats,physicallyTruncated.pats);
+verifyEqual(testCase,withDuration.ts,physicallyTruncated.ts);
+verifySize(testCase,withDuration.ts,[2 pnts2keep 1 2]);
+verifyEqual(testCase,withDuration.duration,duration);
+
+end
+
+
+function testDurationValidation(testCase)
+
+data = randn(6,240,2);
+baseArguments = {2,120,'fwidth',0.3,'ncomps',2};
+
+verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+    data,baseArguments{:},'duration',0), ...
+    'duration must be one positive finite scalar expressed in seconds.');
+verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+    data,baseArguments{:},'duration',[1 2]), ...
+    'duration must be one positive finite scalar expressed in seconds.');
+verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+    data,baseArguments{:},'duration',1/7), ...
+    'duration multiplied by srate must define an integer number of samples.');
+verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+    data,baseArguments{:},'duration',3), ...
+    'Requested duration exceeds the length of the data.');
+verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+    data,baseArguments{:},'duration',1/120), ...
+    'The requested duration must contain at least two samples.');
+
+end
+
+
 function verifyFailureMessage(testCase,functionHandle,expectedMessage)
 
 didThrow = false;

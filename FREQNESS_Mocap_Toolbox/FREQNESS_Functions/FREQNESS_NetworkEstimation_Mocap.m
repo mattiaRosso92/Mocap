@@ -102,7 +102,6 @@ opts = parse_name_value_pairs(opts, varargin{:});
 
 % If duration is empty, use full data duration
 if isempty(opts.duration)
-    % disp("Duration not provided. Using full data duration.");
     opts.duration = size(data, 2) / srate;
 end
 
@@ -114,6 +113,12 @@ regularisation = opts.regularisation;
 ncomps         = opts.ncomps;
 idx2remove     = opts.bad_segments; % in the current version, these apply to all subjects in the input
 
+% Validate optional inputs
+if ~isempty(duration) && (~isnumeric(duration) || ~isreal(duration) || ...
+        ~isscalar(duration) || ~isfinite(duration) || duration <= 0)
+    error('duration must be one positive finite scalar expressed in seconds.');
+end
+
 if ~isnumeric(ncomps) || ~isreal(ncomps) || ~isscalar(ncomps) || ...
         ~isfinite(ncomps) || ncomps ~= round(ncomps) || ncomps < 1 || ...
         ncomps > size(data,1)
@@ -122,6 +127,20 @@ end
 
 % Compute necessary parameters
 pnts2keep = duration * srate;
+
+if abs(pnts2keep - round(pnts2keep)) > eps(max(1,pnts2keep))
+    error('duration multiplied by srate must define an integer number of samples.');
+end
+pnts2keep = round(pnts2keep);
+
+% Check duration
+if pnts2keep > size(data,2)
+    error('Requested duration exceeds the length of the data.');
+end
+
+if pnts2keep < 2
+    error('The requested duration must contain at least two samples.');
+end
 
 if ~isempty(idx2remove) && (~isnumeric(idx2remove) || ...
         ~isreal(idx2remove) || ~isvector(idx2remove) || ...
@@ -222,7 +241,7 @@ end
 FREQ = []; % output structure
 GEDevals = zeros(size(data,1), nfrex, nsubs);
 [GEDevecs, GEDpats] = deal(zeros(size(data,1), ncomps, nfrex, nsubs));
-GEDts = zeros(ncomps, size(data,2), nfrex, nsubs);
+GEDts = zeros(ncomps, pnts2keep, nfrex, nsubs);
 
 % Run FREQ-NESS on each subject, separately
 for subi = 1:nsubs
@@ -309,6 +328,7 @@ else
     FREQ.frex = frex_by_participant;
 end
 FREQ.fwhm = fwidth_all;
+FREQ.duration = pnts2keep/srate;        % analyzed duration in seconds
 FREQ.bad_segments = idx2remove;         % excluded sample indices
 
 
