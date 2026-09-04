@@ -22,6 +22,7 @@ function [FREQrqa,figures] = FREQNESS_PhaseSpaceRQA_Mocap( ...
 %      - FREQ.ts   : [nComponents x nTime x nFrex x nParticipants]
 %      - FREQ.frex : shared frequency vector, or participant-specific
 %                    [nFrex x nParticipants] frequency matrix.
+%      - FREQ.bad_segments : optional shared sample indices to exclude.
 %
 %  - target_frex : positive target frequency. A scalar is reused for all
 %                  participants; a vector assigns one value per participant.
@@ -33,6 +34,8 @@ function [FREQrqa,figures] = FREQNESS_PhaseSpaceRQA_Mocap( ...
 %                         participant. Default: component 1 for everyone.
 %  - 'duration'         : proportional interval in [0,1]. Default: full.
 %  - 'downsample'       : positive integer decimation factor. Default: 1.
+%  - 'bad_segments'     : additional shared sample indices to exclude.
+%                         These are combined with FREQ.bad_segments.
 %  - 'standardize'      : z-score each participant dimension. Default: true.
 %  - 'threshold_method' : 'max_fraction' (BROADNESS) or 'fixed_rr'.
 %                         Default: 'max_fraction'.
@@ -55,7 +58,7 @@ function [FREQrqa,figures] = FREQNESS_PhaseSpaceRQA_Mocap( ...
 %  - FREQrqa : structure array, one element per metric level, containing
 %              RR, L, DET, ENTR, TT, LAM, Vmax, DIV, PhaseSpace,
 %              SelectedFrequencies, SelectedComponents, Threshold, Time,
-%              and optional matrices.
+%              bad-sample coverage, and optional matrices.
 %  - figures : handles to phase-space, distance, recurrence, and animation
 %              figures.
 %
@@ -76,10 +79,11 @@ function [FREQrqa,figures] = FREQNESS_PhaseSpaceRQA_Mocap( ...
 %% Handle optional arguments
 
 opts = struct('metric_levels',1,'component',1,'duration',[], ...
-    'downsample',1,'standardize',true,'threshold_method','max_fraction', ...
-    'threshold',0.1,'theiler_window',0,'lmin',2,'vmin',2, ...
-    'store_matrices',false,'figure',false,'animate',false, ...
-    'srate',[],'animation_pause',0.01);
+    'downsample',1,'bad_segments',[],'standardize',true, ...
+    'threshold_method','max_fraction','threshold',0.1, ...
+    'theiler_window',0,'lmin',2,'vmin',2,'store_matrices',false, ...
+    'figure',false,'animate',false,'srate',[], ...
+    'animation_pause',0.01);
 opts = parse_name_value_pairs(opts,varargin{:});
 
 
@@ -94,6 +98,17 @@ if ~isnumeric(FREQ.ts) || ~isreal(FREQ.ts) || ...
     error(['FREQ.ts must be a real finite numeric array in ' ...
         '[nComponents x nTime x nFrex x nParticipants] format.']);
 end
+ntime_original = size(FREQ.ts,2);
+
+stored_bad_segments = [];
+if isfield(FREQ,'bad_segments')
+    stored_bad_segments = validate_bad_segments( ...
+        FREQ.bad_segments,ntime_original,'FREQ.bad_segments');
+end
+additional_bad_segments = validate_bad_segments( ...
+    opts.bad_segments,ntime_original,'bad_segments');
+bad_segments = unique( ...
+    [stored_bad_segments additional_bad_segments],'stable');
 
 nsubs = size(FREQ.ts,4);
 if nsubs < 2
@@ -171,7 +186,6 @@ end
 
 %% Select duration and construct time vector
 
-ntime_original = size(FREQ.ts,2);
 if isempty(opts.duration)
     first_point = 1;
     last_point = ntime_original;
@@ -187,6 +201,13 @@ end
 if ntime > 10000
     error(['Phase-space RQA would require a distance matrix larger than ' ...
         '10000 x 10000. Increase the downsample factor or shorten duration.']);
+end
+valid_original = true(1,ntime_original);
+valid_original(bad_segments) = false;
+valid_sample_mask = valid_original(sample_indices);
+if nnz(valid_sample_mask) < 3
+    error(['The selected duration and downsample factor retain fewer than ' ...
+        'three valid samples after bad_segments exclusion.']);
 end
 
 if isempty(opts.srate)
@@ -227,7 +248,11 @@ empty_output = struct('RR',[],'L',[],'DET',[],'ENTR',[], ...
     'SelectedFrequencies',[],'SelectedComponents',[], ...
     'MetricLevel',[],'Threshold',[], ...
     'ThresholdMethod','','ActualRR',[],'Time',[], ...
-    'DistanceMatrix',[],'RecurrencePlot',[]);
+    'BadSegments',[],'SelectedSampleIndices',[], ...
+    'ValidSampleMask',[],'ValidSampleCount',[], ...
+    'ExcludedSampleCount',[],'EligiblePairCount',[], ...
+    'EligiblePairFraction',[],'DistanceMatrix',[], ...
+    'RecurrencePlot',[],'EligiblePairMask',[]);
 FREQrqa = repmat(empty_output,1,nlevels);
 figures = struct('phase_space',gobjects(0),'distance_matrix',gobjects(0), ...
     'recurrence_plot',gobjects(0),'animation',gobjects(0));
@@ -237,29 +262,40 @@ figures = struct('phase_space',gobjects(0),'distance_matrix',gobjects(0), ...
 
 for leveli = 1:nlevels
 
-    phase_space = zeros(ntime,nsubs);
+    % Keep the original time grid: NaN rows exclude bad states without
+    % concatenating valid runs across gaps.
+    phase_space = nan(ntime,nsubs);
     for subi = 1:nsubs
-        phase_space(:,subi) = squeeze(FREQ.ts(selected_components(subi), ...
+        selected_ts = squeeze(FREQ.ts(selected_components(subi), ...
             sample_indices,idx_frex(subi,leveli),subi));
+        phase_space(valid_sample_mask,subi) = ...
+            selected_ts(valid_sample_mask);
     end
 
     if opts.standardize
-        phase_mean = mean(phase_space,1);
-        phase_sd = std(phase_space,0,1);
+        phase_mean = mean(phase_space(valid_sample_mask,:),1);
+        phase_sd = std(phase_space(valid_sample_mask,:),0,1);
         if any(phase_sd == 0)
             error(['Cannot standardize metric level %g because at least one ' ...
                 'participant time series has zero variance.'],metric_levels(leveli));
         end
-        phase_space = (phase_space-phase_mean)./phase_sd;
+        phase_space(valid_sample_mask,:) = ...
+            (phase_space(valid_sample_mask,:)-phase_mean)./phase_sd;
     end
 
-    distance_matrix = euclidean_distance_matrix(phase_space);
-    [recurrence_plot,effective_threshold] = threshold_distances( ...
+    distance_matrix = nan(ntime);
+    valid_distance_matrix = euclidean_distance_matrix( ...
+        phase_space(valid_sample_mask,:));
+    distance_matrix(valid_sample_mask,valid_sample_mask) = ...
+        valid_distance_matrix;
+    [recurrence_plot,effective_threshold,eligible_pair_mask] = ...
+        threshold_distances( ...
         distance_matrix,opts.threshold_method,opts.threshold, ...
-        opts.theiler_window);
+        opts.theiler_window,valid_sample_mask);
 
-    FREQrqa(leveli).RR = ...
-        FREQNESS_RQA_RecurrenceRate_Mocap(recurrence_plot);
+    % Excluded pairs are absent from both numerator and denominator.
+    FREQrqa(leveli).RR = sum(recurrence_plot(eligible_pair_mask))/ ...
+        nnz(eligible_pair_mask);
     FREQrqa(leveli).L = ...
         FREQNESS_RQA_MeanDiagonalLength_Mocap(recurrence_plot,opts.lmin);
     FREQrqa(leveli).DET = ...
@@ -283,9 +319,18 @@ for leveli = 1:nlevels
     FREQrqa(leveli).ThresholdMethod = lower(char(opts.threshold_method));
     FREQrqa(leveli).ActualRR = FREQrqa(leveli).RR;
     FREQrqa(leveli).Time = time;
+    FREQrqa(leveli).BadSegments = bad_segments;
+    FREQrqa(leveli).SelectedSampleIndices = sample_indices;
+    FREQrqa(leveli).ValidSampleMask = valid_sample_mask;
+    FREQrqa(leveli).ValidSampleCount = nnz(valid_sample_mask);
+    FREQrqa(leveli).ExcludedSampleCount = nnz(~valid_sample_mask);
+    FREQrqa(leveli).EligiblePairCount = nnz(eligible_pair_mask);
+    FREQrqa(leveli).EligiblePairFraction = ...
+        nnz(eligible_pair_mask)/numel(eligible_pair_mask);
     if opts.store_matrices
         FREQrqa(leveli).DistanceMatrix = distance_matrix;
         FREQrqa(leveli).RecurrencePlot = recurrence_plot;
+        FREQrqa(leveli).EligiblePairMask = eligible_pair_mask;
     end
 
     if opts.figure
@@ -322,18 +367,32 @@ end
 
 
 %% Helper function: Threshold distances
-function [recurrence_plot,effective_threshold] = threshold_distances( ...
-    distance_matrix,method,threshold,theiler_window)
+function [recurrence_plot,effective_threshold,eligible_pair_mask] = ...
+    threshold_distances(distance_matrix,method,threshold,theiler_window, ...
+    valid_sample_mask)
 
 method = lower(char(method));
 ntime = size(distance_matrix,1);
+eligible_pair_mask = valid_sample_mask(:) & valid_sample_mask(:)';
+if theiler_window > 0
+    [row_idx,column_idx] = ndgrid(1:ntime,1:ntime);
+    eligible_pair_mask(abs(row_idx-column_idx) <= theiler_window) = false;
+end
+if ~any(eligible_pair_mask(:))
+    error('No eligible sample pairs remain after exclusions.');
+end
 
 switch method
     case 'max_fraction'
-        effective_threshold = max(distance_matrix(:))*threshold;
+        effective_threshold = ...
+            max(distance_matrix(eligible_pair_mask))*threshold;
     case 'fixed_rr'
-        eligible_upper = triu(true(ntime),theiler_window+1);
+        eligible_upper = triu(eligible_pair_mask,theiler_window+1);
         eligible_distances = sort(distance_matrix(eligible_upper));
+        if isempty(eligible_distances)
+            error(['No unique eligible sample pairs remain for ' ...
+                'fixed_rr threshold estimation.']);
+        end
         threshold_index = max(1,min(numel(eligible_distances), ...
             ceil(threshold*numel(eligible_distances))));
         effective_threshold = eligible_distances(threshold_index);
@@ -341,11 +400,9 @@ switch method
         error('threshold_method must be ''max_fraction'' or ''fixed_rr''.');
 end
 
-recurrence_plot = distance_matrix < effective_threshold;
-if theiler_window > 0
-    [row_idx,column_idx] = ndgrid(1:ntime,1:ntime);
-    recurrence_plot(abs(row_idx-column_idx) <= theiler_window) = false;
-end
+recurrence_plot = false(ntime);
+recurrence_plot(eligible_pair_mask) = ...
+    distance_matrix(eligible_pair_mask) < effective_threshold;
 
 end
 
@@ -441,15 +498,20 @@ ax = axes('Parent',fig);
 hold(ax,'on')
 
 if nsubs == 2
-    xlim(ax,[min(phase_space(:,1)) max(phase_space(:,1))])
-    ylim(ax,[min(phase_space(:,2)) max(phase_space(:,2))])
+    xlim(ax,[min(phase_space(:,1),[],'omitnan') ...
+        max(phase_space(:,1),[],'omitnan')])
+    ylim(ax,[min(phase_space(:,2),[],'omitnan') ...
+        max(phase_space(:,2),[],'omitnan')])
     xlabel(ax,'Participant #1 network score','FontWeight','bold')
     ylabel(ax,'Participant #2 network score','FontWeight','bold')
     axis(ax,'square')
 else
-    xlim(ax,[min(phase_space(:,1)) max(phase_space(:,1))])
-    ylim(ax,[min(phase_space(:,2)) max(phase_space(:,2))])
-    zlim(ax,[min(phase_space(:,3)) max(phase_space(:,3))])
+    xlim(ax,[min(phase_space(:,1),[],'omitnan') ...
+        max(phase_space(:,1),[],'omitnan')])
+    ylim(ax,[min(phase_space(:,2),[],'omitnan') ...
+        max(phase_space(:,2),[],'omitnan')])
+    zlim(ax,[min(phase_space(:,3),[],'omitnan') ...
+        max(phase_space(:,3),[],'omitnan')])
     xlabel(ax,'Participant #1 network score','FontWeight','bold')
     ylabel(ax,'Participant #2 network score','FontWeight','bold')
     zlabel(ax,'Participant #3 network score','FontWeight','bold')
@@ -490,6 +552,22 @@ end
 
 
 %% Validation helpers
+function bad_segments = validate_bad_segments(value,ntime,name)
+if isempty(value)
+    bad_segments = zeros(1,0);
+    return
+end
+if ~isnumeric(value) || ~isreal(value) || ~isvector(value) || ...
+        any(~isfinite(value)) || any(value ~= round(value))
+    error('%s must contain finite integer sample indices.',name);
+end
+bad_segments = unique(value(:)','stable');
+if any(bad_segments < 1) || any(bad_segments > ntime)
+    error('%s contains indices outside FREQ.ts.',name);
+end
+end
+
+
 function validate_positive_integer(value,name)
 if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || ...
         value < 1 || value ~= round(value)
