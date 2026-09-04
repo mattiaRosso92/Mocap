@@ -113,7 +113,7 @@ if config.block1.run
         coreSummary.availableCount);
 else
     fprintf(['Core FREQ-NESS analysis is configured but disabled. ' ...
-        'Review the provisional 1.5 Hz beat frequency and set ' ...
+        'The confirmed 1.67 Hz beat frequency is configured; set ' ...
         'config.block1.run = true for the production run.\n']);
 end
 
@@ -158,4 +158,59 @@ if config.block3.run
 else
     fprintf(['BLOCK 3 coordination analysis is configured but disabled. ' ...
         'Set config.block3.run = true after BLOCK 1 outputs exist.\n']);
+end
+
+
+%% ========================================================================
+% BLOCK 4 - PHASE-SPACE RQA (ALTERNATIVE TEMPORAL COORDINATION)
+% =========================================================================
+% Follow the DyadicDance alternative RQA block using the same selected
+% components, metric levels, proportional interval, anti-alias filter, and
+% 24 Hz working rate as BLOCK 3. One result is saved per recording/component
+% and compact summaries retain the complete 24-cell experimental design.
+
+if config.block4.run
+    [dyadManifest,phaseRQASummary] = ...
+        EmpaticMirroring_RunPhaseSpaceRQA(dyadManifest,config);
+    fprintf('BLOCK 4 phase-space RQA outputs available: %d\n', ...
+        phaseRQASummary.availableCount);
+else
+    fprintf(['BLOCK 4 phase-space RQA is configured but disabled. ' ...
+        'Set config.block4.run = true after BLOCK 1 outputs exist.\n']);
+end
+
+
+%% ========================================================================
+% BLOCK 5 - GROUP-LEVEL SUMMARIES AND VISUALIZATION
+% =========================================================================
+% Match the DyadicDance group outputs without loading or saving one dense
+% copy of the complete experiment. Repetitions are averaged within each
+% participant-condition cell first; participant means and SEM then use the
+% participant as the inferential unit. The 24 factorial cells remain separate.
+
+if config.block5.run
+    groupSummary = EmpaticMirroring_RunGroupAnalysis(dyadManifest,config);
+    fprintf('BLOCK 5 retained recordings: %d\n', ...
+        groupSummary.recordingCount);
+else
+    fprintf(['BLOCK 5 group analysis is configured but disabled. ' ...
+        'Enable it after BLOCKS 1-4 have completed.\n']);
+end
+
+
+%% ========================================================================
+% BLOCK 6 - R-READY STATISTICAL EXPORT
+% =========================================================================
+% As in DyadicDance, average repeated recordings before final modelling.
+% Export one row per Participant x Instruction x Complexity x Version x
+% Movement x Meter x Component. Trial-level outputs remain available in the
+% individual BLOCK 3 and BLOCK 4 files for audit and sensitivity analyses.
+
+if config.block6.run
+    statisticsSummary = EmpaticMirroring_ExportStatistics(config);
+    fprintf('BLOCK 6 statistical rows exported: %d\n', ...
+        statisticsSummary.rowCount);
+else
+    fprintf(['BLOCK 6 statistical export is configured but disabled. ' ...
+        'Enable it after BLOCKS 3 and 4 have completed.\n']);
 end

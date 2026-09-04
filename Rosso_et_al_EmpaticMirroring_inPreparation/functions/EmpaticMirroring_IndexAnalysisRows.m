@@ -59,6 +59,12 @@ designTable = table(conditionNumber,instruction,complexity,version, ...
     'Complexity','Version','Movement'});
 
 participantLabel = string(analysisRows.Subject);
+numericParticipantLabel = str2double(participantLabel);
+if all(isfinite(numericParticipantLabel)) && ...
+        all(numericParticipantLabel >= 0) && ...
+        all(numericParticipantLabel == round(numericParticipantLabel))
+    participantLabel = compose("%03d",numericParticipantLabel);
+end
 participantIds = unique(participantLabel,'stable');
 numericIds = str2double(participantIds);
 if all(isfinite(numericIds))

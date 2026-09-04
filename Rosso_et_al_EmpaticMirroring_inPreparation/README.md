@@ -10,7 +10,7 @@ must not be edited for study-specific behavior.
 |:---:|---|---|
 | ☑ | Import and handle data | **Complete:** folder normalization, recursive import, frame/rate/name/marker/gap QC, explicit file- and participant-level exclusions, and the processed-MAT timing rule are implemented. |
 | ☑ | Create artificial dyads | **Complete:** every eligible participant trial is paired with its condition-labelled model recording and stored as `[coordinates x time x participants]`, with synchronized bad-sample lists. |
-| ◐ | Run toolbox analyses | **BLOCKS 1–3 implemented:** resumable core estimation passes synchronized `bad_segments`; per-recording landscape/effective-dimensionality and temporal/spatial coordination outputs preserve every experimental-design label without duplicating the large FREQ arrays. Production execution remains off pending review of the provisional 1.5 Hz beat frequency. |
+| ◐ | Run toolbox analyses | **BLOCKS 1–6 implemented:** all per-recording analyses, streamed group summaries, and cell-averaged statistical exports preserve the complete design without duplicating the large FREQ arrays. The confirmed 1.67 Hz beat frequency is configured; production execution remains intentionally disabled until the full run is requested. |
 | ☐ | Replicate with previously excluded participants | Not started. Repair excluded recordings where scientifically defensible, document every repair, rerun the identical pipeline, and compare the sensitivity results with the primary analysis. |
 
 ## Pipeline
@@ -36,7 +36,12 @@ Run `EmpaticMirroring_MainPipeline.m` from MATLAB. The implemented stages:
 11. derives per-recording network landscapes and effective dimensionality,
     then writes a lightweight experimental-design catalogue; and
 12. computes per-recording JRQA temporal coordination and spatial mirroring
-    for each selected component, plus compact summaries for statistics.
+    for each selected component, plus compact summaries for statistics;
+13. computes phase-space RQA as an alternative temporal-coordination method;
+14. streams individual outputs to create participant-level group means, SEM,
+    and optional figures without saving dense trial-level copies; and
+15. averages repetitions within participant-condition cells and exports
+    long-format CSV/XLSX tables for R.
 
 The QC stage writes `recording_exclusions.csv`, `participant_qc_summary.csv`,
 `participant_exclusions.csv`, and `model_exclusions.csv` to `outputs/qc/`.
@@ -45,6 +50,7 @@ output path and created, existing, or error status of every selected dyad.
 Landscape analysis writes `landscape_analysis_manifest.csv` with the same
 per-recording audit trail. Coordination analysis writes
 `coordination_analysis_manifest.csv` with one row per recording and component.
+Phase-space RQA writes `phase_rqa_analysis_manifest.csv` in the same format.
 Every excluded recording can carry multiple standardized reasons so that,
 for example, an annotation, a short duration, and an incomplete marker layout
 are preserved rather than reduced to one label.
@@ -103,11 +109,11 @@ frequencies are also stored normalized by `beat_frex`, existing outputs are
 skipped unless `overwrite_flag` is enabled, and every result retains its
 `marker_reference`, dyad metadata, sampling rate, and analysis settings.
 
-The current provisional `beat_frex` is 1.5 Hz for both members of each
-artificial dyad. Following the template, `frex` contains 32 points from
-beat/8 to beat×4 in beat/8 increments (0.1875–6 Hz). This value is explicitly
-documented and must be reviewed against definitive stimulus timing before the
-production run. `config.block1.run` is therefore `false` by default.
+The confirmed `beat_frex` is 1.67 Hz for both members of every artificial
+dyad and applies to all trials and conditions. Following the template, `frex`
+contains 32 points from beat/8 to beat×4 in beat/8 increments
+(0.20875–6.68 Hz). `config.block1.run` remains `false` by default so a full
+production run starts only when explicitly requested.
 
 Generated QC tables and figures are written to `outputs/`, which is ignored by
 Git. Raw `.mat`, `.qtm`, and `.avi` files are also ignored repository-wide.
@@ -158,6 +164,35 @@ coordination file. Only the scalar `MIRROR`, `RR`, and `DET` results are also
 assembled into compact
 `[participant x condition x metric x repetition]` summaries, with missing or
 failed observations represented by `NaN` and a validity mask.
+
+## Phase-space RQA
+
+BLOCK 4 mirrors the DyadicDance alternative temporal-coordination block. It
+uses components 1 and 2, metric levels `[0.25 0.5 1 2]`, the proportional
+interval `[0.15 0.85]`, and the same anti-alias filtering and 24 Hz working
+rate as BLOCK 3. Default settings standardize both dyad members, use a
+maximum-distance fraction of `0.1`, and retain RR, L, DET, ENTR, TT, LAM,
+Vmax, and DIV. Distance and recurrence matrices are not stored by default.
+Each recording/component is independently resumable.
+
+## Group analysis and statistical export
+
+BLOCK 5 streams individual core and landscape files one condition at a time.
+It first averages repetitions within each participant-condition cell and then
+computes means and SEM across participants. Only group-level eigenspectrum,
+pattern, and effective-dimensionality summaries are saved; complete trial
+arrays remain in their individual files. Coordination and phase-space
+summaries use the same order of averaging, and optional figures cover all 24
+factorial cells. Activation-pattern figures show only components 1 and 2 at
+`[0.25 0.5 1 2]` times the beat; bones are disabled so marker-wise XYZ
+activation weights remain visually unobstructed.
+
+BLOCK 6 exports one row per Participant × Instruction × Complexity ×
+Version × Movement × Meter × Component. It includes spatial mirroring,
+JRQA RR/DET, all eight phase-space RQA measures, and the number of recordings
+averaged into each cell. TrialIndex is intentionally absent because it is
+acquisition provenance; per-recording results remain available for audit and
+sensitivity analyses.
 
 ## Current timing check
 

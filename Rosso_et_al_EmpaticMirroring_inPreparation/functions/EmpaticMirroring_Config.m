@@ -53,12 +53,12 @@ config.markers.expectedCount = 22;
 config.network.badSegmentsOptionName = "bad_segments";
 
 % BLOCK 1 - NETWORK ESTIMATION. Match FREQNESS_DyadicDance_Mocap naming
-% and frequency construction. The provisional beat frequency is 1.5 Hz;
-% replace it when the definitive stimulus timing is available. Model and
-% participant share the teacher-video stimulus, hence the same frequency
-% vector is assigned to both members of every artificial dyad.
+% and frequency construction. The confirmed beat frequency is 1.67 Hz in
+% every trial and condition. Model and participant share the teacher-video
+% stimulus, hence the same frequency vector is assigned to both members of
+% every artificial dyad.
 config.block1.run = false;
-config.block1.beat_frex = 1.5*ones(1,2);
+config.block1.beat_frex = 1.67*ones(1,2);
 frex_vector = (config.block1.beat_frex(1)/8: ...
     config.block1.beat_frex(1)/8:config.block1.beat_frex(1)*4)';
 config.block1.frex = repmat(frex_vector,1,2);
@@ -105,6 +105,55 @@ config.block3.lp_cutoff_norm = .8;
 config.block3.duration = [.15 .85];
 config.block3.max_dyads = inf;
 config.block3.max_attune_dyads = inf;
+
+% BLOCK 4 - PHASE-SPACE RQA. This alternative temporal-coordination method
+% uses the same frequencies, components, interval, and 24 Hz working rate
+% as BLOCK 3 so the two approaches receive matched time series.
+config.block4.run = false;
+config.block4.output_path = fullfile(config.paths.outputRoot, ...
+    '04_PhaseSpaceRQA');
+config.block4.overwrite_flag = false;
+config.block4.save_flag = true;
+config.block4.components = 1:2;
+config.block4.metric_levels = [.25 .5 1 2];
+config.block4.downsample_factor = 5;
+config.block4.lp_order = 4;
+config.block4.lp_cutoff_norm = .8;
+config.block4.duration = [.15 .85];
+config.block4.standardize = true;
+config.block4.threshold_method = 'max_fraction';
+config.block4.threshold = .1;
+config.block4.theiler_window = 0;
+config.block4.lmin = 2;
+config.block4.vmin = 2;
+config.block4.store_matrices = false;
+config.block4.figure = false;
+config.block4.animate = false;
+config.block4.max_dyads = inf;
+
+% BLOCK 5 - GROUP-LEVEL SUMMARIES AND VISUALIZATION. Stream individual
+% results condition by condition; save means/SEMs rather than dense copies
+% of every FREQ output.
+config.block5.run = false;
+config.block5.output_path = fullfile(config.paths.outputRoot,'05_Group');
+config.block5.figure_path = fullfile(config.block5.output_path,'Figures');
+config.block5.overwrite_flag = false;
+config.block5.save_flag = true;
+config.block5.make_figures = true;
+config.block5.ncomps2keep = 4;
+config.block5.pattern_components = 1:2;
+config.block5.pattern_frequencies = [.25 .5 1 2];
+config.block5.plot_pattern_bones = false;
+config.block5.max_dyads = inf;
+
+% BLOCK 6 - R-READY STATISTICAL EXPORT. Trial-level results remain in
+% BLOCKS 3-4; this export averages repetitions within each participant and
+% factorial cell before statistical modelling.
+config.block6.run = false;
+config.block6.output_path = fullfile(config.paths.outputRoot, ...
+    '06_Statistics_R');
+config.block6.overwrite_flag = false;
+config.block6.write_xlsx = true;
 
 config.naming.teacherFolder = "Michalina";
 config.output.figureVisible = "on";

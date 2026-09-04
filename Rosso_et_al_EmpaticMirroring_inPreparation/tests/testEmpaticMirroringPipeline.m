@@ -216,17 +216,50 @@ verifyTrue(testCase,manifest.ReadyForAlignment);
 end
 
 
-function testProvisionalCoreFrequencyGrid(testCase)
+function testConfirmedCoreFrequencyGrid(testCase)
 
 config = EmpaticMirroring_Config();
-expectedBeatFrequency = 1.5*ones(1,2);
-expectedFrexVector = (1.5/8:1.5/8:1.5*4)';
+expectedBeatFrequency = 1.67*ones(1,2);
+expectedFrexVector = (1.67/8:1.67/8:1.67*4)';
 
 verifyEqual(testCase,config.block1.beat_frex,expectedBeatFrequency);
 verifyEqual(testCase,config.block1.frex, ...
     repmat(expectedFrexVector,1,2));
 verifyEqual(testCase,config.block1.ncomps,4);
 verifyFalse(testCase,config.block1.run);
+verifyEqual(testCase,config.block5.pattern_components,1:2);
+verifyEqual(testCase,config.block5.pattern_frequencies,[.25 .5 1 2]);
+verifyFalse(testCase,config.block5.plot_pattern_bones);
+
+end
+
+
+function testVisualizerCanHideBones(testCase)
+
+previousVisibility = get(groot,'defaultFigureVisible');
+set(groot,'defaultFigureVisible','off');
+cleanup = onCleanup(@() set(groot,'defaultFigureVisible', ...
+    previousVisibility));
+
+FREQ = struct( ...
+    'evals',ones(6,1,2), ...
+    'pats',reshape(1:12,[6 1 1 2]), ...
+    'frex',1);
+Patterns = struct( ...
+    'frex',1, ...
+    'labels',{{'Marker 1','Marker 2'}}, ...
+    'markerData',reshape(1:12,[6 1 2]), ...
+    'comp',1, ...
+    'srate',120, ...
+    'start',0, ...
+    'bones',[1 2], ...
+    'plot_bones',false, ...
+    'plot_matrix',false, ...
+    'animate',false);
+
+figures = FREQNESS_Visualizer_Mocap(FREQ,[],Patterns);
+verifyEmpty(testCase,findobj(figures.patterns(1),'Type','Line'));
+close(figures.patterns);
 
 end
 
@@ -239,7 +272,7 @@ cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
 
 config = EmpaticMirroring_Config();
 config.paths.qcOutputRoot = fullfile(temporaryRoot,'qc');
-config.block1.beat_frex = 1.5*ones(1,2);
+config.block1.beat_frex = 1.67*ones(1,2);
 config.block1.frex = repmat([1;2],1,2);
 config.block1.duration = 2;
 config.block1.fwidth = repmat([0.3;0.4],1,2);
@@ -324,7 +357,7 @@ FREQ.evals = reshape(1:24,[6 2 2]);
 FREQ.evals(6,1,1) = -1e-5;
 FREQ.pats = reshape(1:96,[6 4 2 2]);
 FREQ.frex = repmat([1;2],1,2);
-FREQ.frex_norm = FREQ.frex./[1.5 1.5];
+FREQ.frex_norm = FREQ.frex./[1.67 1.67];
 marker_reference = zeros(6,1,2);
 save(coreFile,'FREQ','marker_reference');
 
@@ -457,7 +490,7 @@ FREQ.ts = randn(2,600,2,2);
 FREQ.pats = randn(6,2,2,2);
 FREQ.frex = repmat([1;2],1,2);
 FREQ.srate = 120;
-beat_frex = [1.5 1.5];
+beat_frex = [1.67 1.67];
 save(coreFile,'FREQ','beat_frex');
 
 DyadFile = string(dyadFile);
@@ -507,6 +540,210 @@ verifyTrue(testCase,group.validTrialMask(1,1,1));
 verifyEqual(testCase,secondManifest.CoordinationStatus,"existing");
 verifyEqual(testCase,secondSummary.existingCount,1);
 verifyEqual(testCase,secondSummary.createdCount,0);
+
+end
+
+
+function testPhaseRQAUsesFactorialIndicesAndIsResumable(testCase)
+
+temporaryRoot = string(tempname);
+mkdir(temporaryRoot);
+cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
+
+config = EmpaticMirroring_Config();
+config.paths.qcOutputRoot = fullfile(temporaryRoot,'qc');
+config.block4.output_path = fullfile(temporaryRoot,'04_PhaseSpaceRQA');
+config.block4.overwrite_flag = false;
+config.block4.save_flag = true;
+config.block4.components = 1;
+config.block4.metric_levels = 1;
+config.block4.downsample_factor = 2;
+config.block4.lp_order = 4;
+config.block4.lp_cutoff_norm = .8;
+config.block4.duration = [.15 .85];
+config.block4.standardize = true;
+config.block4.threshold_method = 'max_fraction';
+config.block4.threshold = .2;
+config.block4.theiler_window = 0;
+config.block4.lmin = 2;
+config.block4.vmin = 2;
+config.block4.store_matrices = false;
+config.block4.figure = false;
+config.block4.animate = false;
+config.block4.max_dyads = inf;
+
+participantOutputRoot = fullfile(temporaryRoot,'participants','001');
+mkdir(participantOutputRoot);
+dyadFile = fullfile(participantOutputRoot, ...
+    'S001_T01_mir_low_v1_mov1.mat');
+coreFile = fullfile(participantOutputRoot, ...
+    'FREQNESS_CORE_S001_T01_mir_low_v1_mov1.mat');
+
+rng(913);
+FREQ = struct();
+FREQ.ts = randn(2,600,2,2);
+FREQ.frex = repmat([1;2],1,2);
+FREQ.srate = 120;
+beat_frex = [1.67 1.67];
+save(coreFile,'FREQ','beat_frex');
+
+DyadFile = string(dyadFile);
+CoreFile = string(coreFile);
+Subject = "001";
+TrialIndex = 1;
+Instruction = "mir";
+Complexity = "low";
+Version = 1;
+Movement = 1;
+dyadManifest = table(DyadFile,CoreFile,Subject,TrialIndex, ...
+    Instruction,Complexity,Version,Movement);
+
+[firstManifest,firstSummary] = ...
+    EmpaticMirroring_RunPhaseSpaceRQA(dyadManifest,config);
+
+verifyEqual(testCase,firstManifest.PhaseRQAStatus,"created");
+verifyEqual(testCase,firstSummary.createdCount,1);
+verifyEqual(testCase,firstSummary.errorCount,0);
+outputFile = firstSummary.phaseRQAManifest.PhaseRQAFile;
+verifyTrue(testCase,isfile(outputFile));
+saved = load(outputFile,'FREQrqa','PhaseRQA','analysis_info');
+verifyEqual(testCase,saved.PhaseRQA.component,1);
+verifyEqual(testCase,saved.analysis_info.outputSrate,60);
+verifyEqual(testCase,numel(saved.FREQrqa),1);
+verifyFalse(testCase,isfield(saved.FREQrqa,'DistanceMatrix') && ...
+    ~isempty(saved.FREQrqa.DistanceMatrix));
+
+summaryFile = fullfile(config.block4.output_path,'Component_1', ...
+    'FREQNESS_PHASERQA_SUMMARY_Comp#1.mat');
+verifyTrue(testCase,isfile(summaryFile));
+group = load(summaryFile,'PhaseRQA','designTable', ...
+    'componentRows','validTrialMask');
+verifySize(testCase,group.PhaseRQA.output.RR,[1 24]);
+verifyEqual(testCase,group.PhaseRQA.output.RR(1,1,1,1), ...
+    saved.FREQrqa.RR);
+verifyEqual(testCase,height(group.designTable),24);
+verifyEqual(testCase,group.componentRows.ConditionIndex,1);
+verifyTrue(testCase,group.validTrialMask(1,1,1));
+
+[secondManifest,secondSummary] = ...
+    EmpaticMirroring_RunPhaseSpaceRQA(dyadManifest,config);
+verifyEqual(testCase,secondManifest.PhaseRQAStatus,"existing");
+verifyEqual(testCase,secondSummary.existingCount,1);
+verifyEqual(testCase,secondSummary.createdCount,0);
+
+end
+
+
+function testGroupAndStatisticsUseParticipantCellMeans(testCase)
+
+temporaryRoot = string(tempname);
+mkdir(temporaryRoot);
+cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
+
+config = EmpaticMirroring_Config();
+config.block2.output_path = fullfile(temporaryRoot,'02_Landscape');
+config.block3.output_path = fullfile(temporaryRoot,'03_Coordination');
+config.block3.components = 1;
+config.block4.output_path = fullfile(temporaryRoot,'04_PhaseSpaceRQA');
+config.block4.components = 1;
+config.block5.output_path = fullfile(temporaryRoot,'05_Group');
+config.block5.figure_path = fullfile(config.block5.output_path,'Figures');
+config.block5.make_figures = false;
+config.block5.ncomps2keep = 2;
+config.block5.max_dyads = inf;
+config.block6.output_path = fullfile(temporaryRoot,'06_Statistics_R');
+config.block6.overwrite_flag = false;
+config.block6.write_xlsx = false;
+
+participantOutputRoot = fullfile(temporaryRoot,'participants','001');
+mkdir(participantOutputRoot);
+mkdir(config.block2.output_path);
+coreFiles = strings(2,1);
+landscapeFiles = strings(2,1);
+for triali = 1:2
+    coreFiles(triali) = fullfile(participantOutputRoot, ...
+        "FREQNESS_CORE_S001_T0" + triali + "_mir_low_v1_mov1.mat");
+    landscapeFiles(triali) = fullfile(config.block2.output_path, ...
+        "FREQNESS_LANDSCAPE_S001_T0" + triali + ...
+        "_mir_low_v1_mov1.mat");
+    value = 2*triali-1;
+    FREQ = struct( ...
+        'evals',value*ones(6,2,2), ...
+        'pats',value*ones(6,2,2,2), ...
+        'frex_norm',repmat([2/3;4/3],1,2));
+    marker_reference = zeros(6,1,2);
+    ED_trial = value*ones(2,2);
+    save(coreFiles(triali),'FREQ','marker_reference');
+    save(landscapeFiles(triali),'ED_trial');
+end
+
+DyadFile = ["dyad1.mat";"dyad2.mat"];
+CoreFile = coreFiles;
+LandscapeFile = landscapeFiles;
+Subject = ["001";"001"];
+TrialIndex = [1;2];
+Instruction = ["mir";"mir"];
+Complexity = ["low";"low"];
+Version = [1;1];
+Movement = [1;1];
+dyadManifest = table(DyadFile,CoreFile,LandscapeFile,Subject, ...
+    TrialIndex,Instruction,Complexity,Version,Movement);
+[componentRows,design] = EmpaticMirroring_IndexAnalysisRows( ...
+    dyadManifest,(1:2)');
+participantIds = design.participantIds;
+designTable = design.designTable;
+meter = 1;
+validTrialMask = false(1,24,2);
+validTrialMask(1,1,1:2) = true;
+
+coordinationFolder = fullfile(config.block3.output_path,'Component_1');
+mkdir(coordinationFolder);
+MIRROR = nan(1,24,1,2);
+RR = nan(1,24,1,2);
+DET = nan(1,24,1,2);
+MIRROR(1,1,1,:) = [1 3];
+RR(1,1,1,:) = [.2 .4];
+DET(1,1,1,:) = [.6 .8];
+save(fullfile(coordinationFolder, ...
+    'FREQNESS_COORDINATION_SUMMARY_Comp#1.mat'), ...
+    'MIRROR','RR','DET','meter','participantIds','designTable', ...
+    'componentRows','validTrialMask');
+
+phaseFolder = fullfile(config.block4.output_path,'Component_1');
+mkdir(phaseFolder);
+PhaseRQA = struct();
+phaseFields = {'RR','L','DET','ENTR','TT','LAM','Vmax','DIV'};
+for fieldi = 1:numel(phaseFields)
+    PhaseRQA.output.(phaseFields{fieldi}) = nan(1,24,1,2);
+    PhaseRQA.output.(phaseFields{fieldi})(1,1,1,:) = [1 3];
+end
+save(fullfile(phaseFolder,'FREQNESS_PHASERQA_SUMMARY_Comp#1.mat'), ...
+    'PhaseRQA','meter','participantIds','designTable', ...
+    'componentRows','validTrialMask');
+
+groupSummary = EmpaticMirroring_RunGroupAnalysis(dyadManifest,config);
+verifyEqual(testCase,groupSummary.recordingCount,2);
+network = load(groupSummary.networkSummaryFile,'avg_evals', ...
+    'avg_pats','avg_ED','participantCounts');
+verifyEqual(testCase,network.avg_evals(1,:,:),2*ones(1,6,2));
+verifyEqual(testCase,network.avg_pats(1,:,:,:,:),2*ones(1,6,2,2,2));
+verifyEqual(testCase,network.avg_ED(1,:),2*ones(1,2));
+verifyEqual(testCase,network.participantCounts(1),1);
+
+statistics = EmpaticMirroring_ExportStatistics(config);
+verifyEqual(testCase,statistics.rowCount,1);
+T = statistics.statisticsTable;
+verifyEqual(testCase,T.Participant,"001");
+verifyEqual(testCase,T.Instruction,"mir");
+verifyEqual(testCase,T.Complexity,"low");
+verifyEqual(testCase,T.Version,1);
+verifyEqual(testCase,T.Movement,1);
+verifyEqual(testCase,T.NRepetitions,2);
+verifyEqual(testCase,T.Mirror,2);
+verifyEqual(testCase,T.RR_JRQA,.3,'AbsTol',eps);
+verifyEqual(testCase,T.DET_JRQA,.7,'AbsTol',eps);
+verifyEqual(testCase,T.RR_Phase,2);
+verifyTrue(testCase,isfile(statistics.combinedCsvFile));
 
 end
 
