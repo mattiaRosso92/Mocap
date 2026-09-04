@@ -91,6 +91,33 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 % contrast enhancement, and dimension reduction in multichannel electrophysiology')
 
 
+%% Check mandatory inputs
+
+if nargin < 3
+    error('data, frex, and srate are required inputs.');
+end
+
+if ~isnumeric(data) || ~isreal(data) || isempty(data) || ...
+        ndims(data) > 3 || any(~isfinite(data(:)))
+    error(['data must be a non-empty, real, finite numeric array in ' ...
+        '[marker coordinates x time] or ' ...
+        '[marker coordinates x time x participants] format.']);
+end
+
+if ~isnumeric(srate) || ~isreal(srate) || ~isscalar(srate) || ...
+        ~isfinite(srate) || srate <= 0
+    error('srate must be one positive finite scalar.');
+end
+
+if ~isnumeric(frex) || ~isreal(frex) || isempty(frex) || ...
+        ndims(frex) > 2 || any(~isfinite(frex(:))) || any(frex(:) <= 0)
+    error('frex must contain positive finite frequencies.');
+end
+
+if any(frex(:) >= srate/2)
+    error('All frequencies in frex must be lower than the Nyquist frequency.');
+end
+
 %% Handle Optional Arguments
 
 % Define default values
@@ -119,10 +146,25 @@ if ~isempty(duration) && (~isnumeric(duration) || ~isreal(duration) || ...
     error('duration must be one positive finite scalar expressed in seconds.');
 end
 
+if ~(ischar(filter) || (isstring(filter) && isscalar(filter))) || ...
+        ~(strcmpi(filter,'logarithmic') || strcmpi(filter,'linear'))
+    error('filter must be either ''logarithmic'' or ''linear''.');
+end
+
+if ~isnumeric(regularisation) || ~isreal(regularisation) || ...
+        ~isscalar(regularisation) || ~isfinite(regularisation) || ...
+        regularisation < 0 || regularisation >= 1
+    error('regularisation must be one finite scalar in the interval [0, 1).');
+end
+
 if ~isnumeric(ncomps) || ~isreal(ncomps) || ~isscalar(ncomps) || ...
-        ~isfinite(ncomps) || ncomps ~= round(ncomps) || ncomps < 1 || ...
-        ncomps > size(data,1)
-    error('ncomps must be an integer from 1 to the number of marker coordinates.');
+        ~isfinite(ncomps) || ncomps ~= round(ncomps) || ncomps < 1
+    error('ncomps must be one positive integer.');
+end
+
+
+if ncomps > size(data,1)
+    error('ncomps cannot exceed the number of marker coordinates.');
 end
 
 % Compute necessary parameters
@@ -163,17 +205,9 @@ if numel(idx2cov) < 2
 end
 
 % Check input size to verify if more than one participant is being analyzed
-if ndims(data) < 3
-    nsubs = 1;
-else
-    nsubs = size(data,3);
-end
+nsubs = size(data,3);
 
 % Normalize shared or participant-specific frequency input
-if ~isnumeric(frex) || ~isreal(frex) || isempty(frex) || ...
-        any(~isfinite(frex(:))) || any(frex(:) <= 0)
-    error('frex must contain positive finite frequencies.');
-end
 if isvector(frex)
     frex = sort(frex(:),'ascend');
     nfrex = numel(frex);
@@ -203,14 +237,16 @@ if isempty(fwidth)
         [~,idx] = min(abs(frex_all-frex_by_participant(1,subi)));
         starting_width(subi) = reference_widths(idx);
     end
-elseif isnumeric(fwidth) && isscalar(fwidth) && ...
+elseif isnumeric(fwidth) && isreal(fwidth) && isscalar(fwidth) && ...
         isfinite(fwidth) && fwidth > 0
     starting_width = repmat(fwidth,1,nsubs);
-elseif isnumeric(fwidth) && isvector(fwidth) && ...
-        numel(fwidth) == nfrex && all(isfinite(fwidth)) && all(fwidth > 0)
+elseif isnumeric(fwidth) && isreal(fwidth) && isvector(fwidth) && ...
+        numel(fwidth) == nfrex && all(isfinite(fwidth(:))) && ...
+        all(fwidth(:) > 0)
     fwidth_all = repmat(fwidth(:),1,nsubs);
     starting_width = [];
-elseif isnumeric(fwidth) && isequal(size(fwidth),[nfrex nsubs]) && ...
+elseif isnumeric(fwidth) && isreal(fwidth) && ...
+        isequal(size(fwidth),[nfrex nsubs]) && ...
         all(isfinite(fwidth(:))) && all(fwidth(:) > 0)
     fwidth_all = fwidth;
     starting_width = [];
@@ -232,6 +268,11 @@ if ~isempty(starting_width)
             error('filter must be ''logarithmic'' or ''linear''.');
         end
     end
+end
+
+if ~isnumeric(fwidth_all) || ~isreal(fwidth_all) || ...
+        any(~isfinite(fwidth_all(:))) || any(fwidth_all(:) <= 0)
+    error('fwidth must contain positive finite values.');
 end
 
 %% GED Computation
@@ -277,6 +318,9 @@ for subi = 1:nsubs
         [evecs,evals] = eig(covS ,covR);
         [evals,sidx]  = sort( diag(evals),'descend' ); % the first output returns sorted evals extracted from diagonal
         evecs = evecs(:,sidx);          % sort eigenvectors
+        if ~isfinite(sum(evals)) || abs(sum(evals)) < realmin
+            error('Generalized eigenvalues cannot be normalized because their sum is zero or non-finite.');
+        end
         evals = evals.*100./sum(evals); % normalize eigenvalues to percent variance explained
         % Assign temporary variables to output
         GEDevecs(:,:,frexi,subi) = evecs(:,1:ncomps);

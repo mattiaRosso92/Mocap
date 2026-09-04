@@ -145,6 +145,132 @@ verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
 end
 
 
+function testMandatoryInputValidation(testCase)
+
+data = randn(6,240,2);
+baseArguments = {'fwidth',0.3,'ncomps',2};
+dataMessage = ['data must be a non-empty, real, finite numeric array in ' ...
+    '[marker coordinates x time] or ' ...
+    '[marker coordinates x time x participants] format.'];
+
+verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap(), ...
+    'data, frex, and srate are required inputs.');
+
+invalidData = {[], 'data', complex(data,data), ...
+    replaceDataValue(data,NaN), zeros(2,3,2,2)};
+for invalidIndex = 1:numel(invalidData)
+    verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+        invalidData{invalidIndex},2,120,baseArguments{:}),dataMessage);
+end
+
+invalidSamplingRates = {0, [120 120], Inf, '120'};
+for invalidIndex = 1:numel(invalidSamplingRates)
+    verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+        data,2,invalidSamplingRates{invalidIndex},baseArguments{:}), ...
+        'srate must be one positive finite scalar.');
+end
+
+invalidFrequencies = {[], -2, NaN, zeros(1,1,2)};
+for invalidIndex = 1:numel(invalidFrequencies)
+    verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+        data,invalidFrequencies{invalidIndex},120,baseArguments{:}), ...
+        'frex must contain positive finite frequencies.');
+end
+
+end
+
+
+function testOptionalInputValidation(testCase)
+
+data = randn(6,240,2);
+baseArguments = {2,120,'fwidth',0.3,'ncomps',2};
+
+verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+    data,baseArguments{:},'filter','quadratic'), ...
+    'filter must be either ''logarithmic'' or ''linear''.');
+
+invalidRegularisation = {-0.1, 1, [0.01 0.02], complex(0.01,0.01), NaN};
+for invalidIndex = 1:numel(invalidRegularisation)
+    verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+        data,baseArguments{:},'regularisation', ...
+        invalidRegularisation{invalidIndex}), ...
+        'regularisation must be one finite scalar in the interval [0, 1).');
+end
+
+invalidComponentCounts = {0, 1.5, [1 2], complex(1,1), NaN};
+for invalidIndex = 1:numel(invalidComponentCounts)
+    verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+        data,2,120,'fwidth',0.3,'ncomps', ...
+        invalidComponentCounts{invalidIndex}), ...
+        'ncomps must be one positive integer.');
+end
+verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+    data,2,120,'fwidth',0.3,'ncomps',7), ...
+    'ncomps cannot exceed the number of marker coordinates.');
+
+invalidFilterWidths = {-0.3, complex(0.3,0.1), [0.2 0.3 0.4], NaN};
+for invalidIndex = 1:numel(invalidFilterWidths)
+    verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+        data,2,120,'fwidth',invalidFilterWidths{invalidIndex},'ncomps',2), ...
+        ['fwidth must be empty, a positive scalar, a shared nFrex ' ...
+        'vector, or an [nFrex x nParticipants] matrix.']);
+end
+
+end
+
+
+function testNyquistValidation(testCase)
+
+data = randn(6,240,2);
+expectedMessage = ...
+    'All frequencies in frex must be lower than the Nyquist frequency.';
+
+verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+    data,[2 60],120,'fwidth',0.3,'ncomps',2),expectedMessage);
+verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+    data,[2 3; 4 60],120,'fwidth',0.3,'ncomps',2),expectedMessage);
+
+end
+
+
+function testEigenvalueNormalizationSafety(testCase)
+
+data = zeros(6,240,2);
+
+verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+    data,2,120,'fwidth',0.3,'regularisation',0,'ncomps',2), ...
+    ['Generalized eigenvalues cannot be normalized because their sum ' ...
+    'is zero or non-finite.']);
+
+end
+
+
+function testParticipantSpecificInputsRemainSupported(testCase)
+
+rng(79);
+data = randn(6,480,2);
+frex = [1 1.5; 2 2.5];
+fwidth = [0.2 0.25; 0.3 0.35];
+
+FREQ = FREQNESS_NetworkEstimation_Mocap(data,frex,120, ...
+    'fwidth',fwidth,'ncomps',2);
+
+verifyEqual(testCase,FREQ.frex,frex);
+verifyEqual(testCase,FREQ.fwhm,fwidth);
+verifySize(testCase,FREQ.evals,[6 2 2]);
+verifySize(testCase,FREQ.evecs,[6 2 2 2]);
+
+end
+
+
+function outputData = replaceDataValue(inputData,replacementValue)
+
+outputData = inputData;
+outputData(1) = replacementValue;
+
+end
+
+
 function verifyFailureMessage(testCase,functionHandle,expectedMessage)
 
 didThrow = false;
