@@ -123,10 +123,11 @@ end
 % =========================================================================
 % As in FREQNESS_DyadicDance_Mocap, retain the complete eigenspectrum for
 % effective dimensionality and only the requested leading spatial patterns
-% for group visualization. Because this study can have missing trials, the
-% first array dimension is an analysis-unit row linked to analysisRows,
-% which retains Participant, Instruction, Complexity, Version, Movement,
-% and acquisition-order provenance without treating TrialIndex as a factor.
+% for later visualization. Complete FREQ arrays remain in one file per
+% recording rather than being duplicated in a large dense group file. A
+% lightweight catalogue indexes participants x conditions x repetitions;
+% the 24 conditions encode Instruction x Complexity x Version x Movement.
+% Missing/excluded recordings are absent and false in validTrialMask.
 
 if config.block2.run
     [dyadManifest,landscapeSummary] = ...
@@ -136,4 +137,25 @@ if config.block2.run
 else
     fprintf(['BLOCK 2 network landscapes are configured but disabled. ' ...
         'Set config.block2.run = true after BLOCK 1 outputs exist.\n']);
+end
+
+
+%% ========================================================================
+% BLOCK 3 - JRQA TEMPORAL COORDINATION AND SPATIAL COORDINATION
+% =========================================================================
+% Mirror the DyadicDance coordination block for every requested component
+% and metric level. Core FREQ time series are anti-alias filtered and
+% downsampled from 120 to 24 Hz before JRQA; spatial coordination uses the
+% original FREQ patterns. Each recording/component is saved independently,
+% while compact MIRROR/RR/DET arrays retain participant x condition x
+% metric x repetition indexing for the 24-cell repeated-measures design.
+
+if config.block3.run
+    [dyadManifest,coordinationSummary] = ...
+        EmpaticMirroring_RunCoordinationAnalysis(dyadManifest,config);
+    fprintf('BLOCK 3 coordination outputs available: %d\n', ...
+        coordinationSummary.availableCount);
+else
+    fprintf(['BLOCK 3 coordination analysis is configured but disabled. ' ...
+        'Set config.block3.run = true after BLOCK 1 outputs exist.\n']);
 end

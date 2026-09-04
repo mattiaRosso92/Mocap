@@ -27,14 +27,19 @@ end
 
 nAnalysisRows = numel(eligibleRows);
 successMask = false(nAnalysisRows,1);
-[all_evals,all_pats,all_frex_norm,ED] = deal([]);
+[analysisRows,design] = EmpaticMirroring_IndexAnalysisRows( ...
+    dyadManifest,eligibleRows);
 marker_reference = [];
+validTrialMask = false(design.nparticipants,design.nconds,design.ntrials);
 
 fprintf('\nBLOCK 2: processing %d FREQ network landscapes...\n', ...
     nAnalysisRows);
 
 for analysisi = 1:nAnalysisRows
     rowIndex = eligibleRows(analysisi);
+    participanti = analysisRows.ParticipantIndex(analysisi);
+    condi = analysisRows.ConditionIndex(analysisi);
+    triali = analysisRows.RepetitionIndex(analysisi);
     input_file = coreFiles(rowIndex);
     output_file = landscapeOutputFile(input_file,config.block2.output_path);
     landscapeFile(rowIndex) = output_file;
@@ -76,30 +81,11 @@ for analysisi = 1:nAnalysisRows
             end
         end
 
-        if isempty(all_evals)
-            nCoordinates = size(FREQ.evals,1);
-            nfrex = size(FREQ.evals,2);
-            nsubs = size(FREQ.evals,3);
-            ncomps2keep = config.block2.ncomps2keep;
-            all_evals = nan(nAnalysisRows,nCoordinates,nfrex,nsubs);
-            all_pats = nan(nAnalysisRows,nCoordinates,ncomps2keep, ...
-                nfrex,nsubs);
-            all_frex_norm = nan(nAnalysisRows,nsubs,nfrex);
-            ED = nan(nAnalysisRows,nfrex,nsubs);
+        if isempty(marker_reference)
             marker_reference = S.marker_reference;
         end
 
-        validateGroupDimensions(FREQ,all_evals,all_pats,config);
-        all_evals(analysisi,:,:,:) = reshape(FREQ.evals, ...
-            [1 size(FREQ.evals)]);
-        all_pats(analysisi,:,:,:,:) = reshape( ...
-            FREQ.pats(:,1:config.block2.ncomps2keep,:,:), ...
-            [1 size(FREQ.pats,1) config.block2.ncomps2keep ...
-            size(FREQ.pats,3) size(FREQ.pats,4)]);
-        all_frex_norm(analysisi,:,:) = reshape(FREQ.frex_norm', ...
-            [1 size(FREQ.frex_norm,2) size(FREQ.frex_norm,1)]);
-        ED(analysisi,:,:) = reshape(this_ED, ...
-            [1 size(this_ED,1) size(this_ED,2)]);
+        validTrialMask(participanti,condi,triali) = true;
         successMask(analysisi) = true;
     catch exception
         landscapeStatus(rowIndex) = "error";
@@ -121,16 +107,18 @@ dyadManifest.LandscapeErrorMessage = landscapeErrorMessage;
 dyadManifest.NegativeEigenvalueCount = negativeEigenvalueCount;
 dyadManifest.MaximumNegativeEigenvalue = maximumNegativeEigenvalue;
 dyadManifest.MaximumNegativeMassRatio = maximumNegativeMassRatio;
-analysisRows = dyadManifest(eligibleRows,:);
 analysisRows.SummaryIncluded = successMask;
+participantIds = design.participantIds;
+designTable = design.designTable;
 
 group_output_file = fullfile(config.block2.output_path, ...
     'FREQNESS_GroupNetworkSummary.mat');
 if config.block2.save_flag
-    % Rebuild this derived summary on every BLOCK 2 run so a pilot summary
-    % can never be mistaken for a later full-sample summary.
-    save(group_output_file,'all_evals','all_pats','all_frex_norm', ...
-        'ED','analysisRows','marker_reference','-v7.3');
+    % Keep this catalogue lightweight. Complete evals/patterns remain in
+    % the per-recording FREQ files and H2/ED in the landscape files; later
+    % blocks load only the observations they require.
+    save(group_output_file,'analysisRows','participantIds','designTable', ...
+        'validTrialMask','marker_reference');
 end
 
 if ~isfolder(config.paths.qcOutputRoot)
@@ -329,21 +317,5 @@ qc = struct( ...
     'policy',string(['Clip and sum-preserving rescale only numerical ' ...
     'negative GED eigenvalues whose negative/positive mass ratio is ' ...
     'within tolerance; reject material negative spectra.']));
-
-end
-
-
-function validateGroupDimensions(FREQ,all_evals,all_pats,config)
-
-if size(FREQ.evals,1) ~= size(all_evals,2) || ...
-        size(FREQ.evals,2) ~= size(all_evals,3) || ...
-        size(FREQ.evals,3) ~= size(all_evals,4) || ...
-        size(FREQ.pats,1) ~= size(all_pats,2) || ...
-        size(FREQ.pats,2) < config.block2.ncomps2keep || ...
-        size(FREQ.pats,3) ~= size(all_pats,4) || ...
-        size(FREQ.pats,4) ~= size(all_pats,5)
-    error('EmpaticMirroring:LandscapeGroupDimensions', ...
-        'BLOCK 1 outputs do not share compatible group dimensions.');
-end
 
 end

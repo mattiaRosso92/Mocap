@@ -370,31 +370,141 @@ verifyLessThanOrEqual(testCase, ...
     firstManifest.MaximumNegativeMassRatio, ...
     config.block2.eigenvalue_negative_tolerance);
 
-group = load(firstSummary.groupOutputFile,'all_evals','all_pats', ...
-    'all_frex_norm','ED','analysisRows','marker_reference');
-verifySize(testCase,group.all_evals,[1 6 2 2]);
-verifySize(testCase,group.all_pats,[1 6 2 2 2]);
-verifySize(testCase,group.all_frex_norm,[1 2 2]);
-verifySize(testCase,group.ED,[1 2 2]);
-verifyEqual(testCase,squeeze(group.all_evals(1,:,:,:)), ...
-    expectedFREQ.evals);
-verifyEqual(testCase,squeeze(group.all_pats(1,:,:,:,:)), ...
-    FREQ.pats(:,1:2,:,:));
-verifyEqual(testCase,squeeze(group.all_frex_norm(1,:,:)), ...
-    FREQ.frex_norm');
-verifyEqual(testCase,squeeze(group.ED(1,:,:)),expectedED);
+group = load(firstSummary.groupOutputFile,'analysisRows', ...
+    'participantIds','designTable','validTrialMask','marker_reference');
+verifyFalse(testCase,isfield(group,'all_evals'));
+verifyEqual(testCase,group.participantIds,"001");
+verifyEqual(testCase,height(group.designTable),24);
+verifySize(testCase,group.validTrialMask,[1 24]);
+verifyTrue(testCase,group.validTrialMask(1,1,1));
 verifyEqual(testCase,group.analysisRows.Subject,"001");
 verifyEqual(testCase,group.analysisRows.Instruction,"mir");
 verifyEqual(testCase,group.analysisRows.Complexity,"low");
 verifyEqual(testCase,group.analysisRows.Version,1);
 verifyEqual(testCase,group.analysisRows.Movement,1);
 verifyEqual(testCase,group.analysisRows.TrialIndex,1);
+verifyEqual(testCase,group.analysisRows.ParticipantIndex,1);
+verifyEqual(testCase,group.analysisRows.ConditionIndex,1);
+verifyEqual(testCase,group.analysisRows.RepetitionIndex,1);
 verifyTrue(testCase,group.analysisRows.SummaryIncluded);
 verifyEqual(testCase,group.marker_reference,marker_reference);
 
 [secondManifest,secondSummary] = ...
     EmpaticMirroring_RunLandscapeAnalysis(dyadManifest,config);
 verifyEqual(testCase,secondManifest.LandscapeStatus,"existing");
+verifyEqual(testCase,secondSummary.existingCount,1);
+verifyEqual(testCase,secondSummary.createdCount,0);
+
+end
+
+
+function testAnalysisIndexPreservesConditionsAndRepetitions(testCase)
+
+Subject = ["002";"001";"001";"001"];
+TrialIndex = [8;9;1;7];
+Instruction = ["obs";"mir";"mir";"mir"];
+Complexity = ["high";"low";"low";"low"];
+Version = [2;1;1;1];
+Movement = [2;1;1;2];
+dyadManifest = table(Subject,TrialIndex,Instruction,Complexity, ...
+    Version,Movement);
+
+[analysisRows,design] = EmpaticMirroring_IndexAnalysisRows( ...
+    dyadManifest,(1:4)');
+
+verifyEqual(testCase,design.participantIds,["001";"002"]);
+verifyEqual(testCase,height(design.designTable),24);
+verifyEqual(testCase,design.ntrials,2);
+verifyEqual(testCase,analysisRows.ParticipantIndex,[2;1;1;1]);
+verifyEqual(testCase,analysisRows.ConditionIndex,[24;1;1;2]);
+verifyEqual(testCase,analysisRows.RepetitionIndex,[1;2;1;1]);
+
+end
+
+
+function testCoordinationAnalysisUsesFactorialIndicesAndIsResumable(testCase)
+
+temporaryRoot = string(tempname);
+mkdir(temporaryRoot);
+cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
+
+config = EmpaticMirroring_Config();
+config.paths.qcOutputRoot = fullfile(temporaryRoot,'qc');
+config.block3.output_path = fullfile(temporaryRoot,'03_Coordination');
+config.block3.overwrite_flag = false;
+config.block3.save_flag = true;
+config.block3.components = 1;
+config.block3.attune_flag = false;
+config.block3.JRQA = struct('tau',2,'m',2,'ps',0.1);
+config.block3.metric_levels = 1;
+config.block3.downsample_factor = 2;
+config.block3.lp_order = 4;
+config.block3.lp_cutoff_norm = .8;
+config.block3.duration = [.15 .85];
+config.block3.max_dyads = inf;
+config.block3.max_attune_dyads = inf;
+
+participantOutputRoot = fullfile(temporaryRoot,'participants','001');
+mkdir(participantOutputRoot);
+dyadFile = fullfile(participantOutputRoot, ...
+    'S001_T01_mir_low_v1_mov1.mat');
+coreFile = fullfile(participantOutputRoot, ...
+    'FREQNESS_CORE_S001_T01_mir_low_v1_mov1.mat');
+
+rng(812);
+FREQ = struct();
+FREQ.ts = randn(2,600,2,2);
+FREQ.pats = randn(6,2,2,2);
+FREQ.frex = repmat([1;2],1,2);
+FREQ.srate = 120;
+beat_frex = [1.5 1.5];
+save(coreFile,'FREQ','beat_frex');
+
+DyadFile = string(dyadFile);
+CoreFile = string(coreFile);
+Subject = "001";
+TrialIndex = 1;
+Instruction = "mir";
+Complexity = "low";
+Version = 1;
+Movement = 1;
+dyadManifest = table(DyadFile,CoreFile,Subject,TrialIndex, ...
+    Instruction,Complexity,Version,Movement);
+
+[firstManifest,firstSummary] = ...
+    EmpaticMirroring_RunCoordinationAnalysis(dyadManifest,config);
+
+verifyEqual(testCase,firstManifest.CoordinationStatus,"created");
+verifyEqual(testCase,firstSummary.createdCount,1);
+verifyEqual(testCase,firstSummary.errorCount,0);
+outputFile = firstSummary.coordinationManifest.CoordinationFile;
+verifyTrue(testCase,isfile(outputFile));
+saved = load(outputFile,'FREQjrqa','FREQmirror','which_comp', ...
+    'meter','analysis_info');
+verifyEqual(testCase,saved.which_comp,1);
+verifyEqual(testCase,saved.meter,1);
+verifyEqual(testCase,saved.analysis_info.outputSrate,60);
+verifyEqual(testCase,numel(saved.FREQjrqa),1);
+verifyEqual(testCase,numel(saved.FREQmirror),1);
+
+summaryFile = fullfile(config.block3.output_path,'Component_1', ...
+    'FREQNESS_COORDINATION_SUMMARY_Comp#1.mat');
+verifyTrue(testCase,isfile(summaryFile));
+group = load(summaryFile,'MIRROR','RR','DET','designTable', ...
+    'componentRows','validTrialMask');
+verifySize(testCase,group.MIRROR,[1 24]);
+verifySize(testCase,group.RR,[1 24]);
+verifySize(testCase,group.DET,[1 24]);
+verifyEqual(testCase,group.MIRROR(1,1,1,1),saved.FREQmirror);
+verifyEqual(testCase,group.RR(1,1,1,1),saved.FREQjrqa.RR);
+verifyEqual(testCase,group.DET(1,1,1,1),saved.FREQjrqa.DET);
+verifyEqual(testCase,height(group.designTable),24);
+verifyEqual(testCase,group.componentRows.ConditionIndex,1);
+verifyTrue(testCase,group.validTrialMask(1,1,1));
+
+[secondManifest,secondSummary] = ...
+    EmpaticMirroring_RunCoordinationAnalysis(dyadManifest,config);
+verifyEqual(testCase,secondManifest.CoordinationStatus,"existing");
 verifyEqual(testCase,secondSummary.existingCount,1);
 verifyEqual(testCase,secondSummary.createdCount,0);
 

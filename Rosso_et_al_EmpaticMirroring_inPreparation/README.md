@@ -10,7 +10,7 @@ must not be edited for study-specific behavior.
 |:---:|---|---|
 | ☑ | Import and handle data | **Complete:** folder normalization, recursive import, frame/rate/name/marker/gap QC, explicit file- and participant-level exclusions, and the processed-MAT timing rule are implemented. |
 | ☑ | Create artificial dyads | **Complete:** every eligible participant trial is paired with its condition-labelled model recording and stored as `[coordinates x time x participants]`, with synchronized bad-sample lists. |
-| ◐ | Run toolbox analyses | **BLOCKS 1–2 implemented:** resumable core estimation passes synchronized `bad_segments`; the landscape block retains the full eigenspectrum, computes effective dimensionality, and preserves every experimental-design label. Production execution remains off pending review of the provisional 1.5 Hz beat frequency. |
+| ◐ | Run toolbox analyses | **BLOCKS 1–3 implemented:** resumable core estimation passes synchronized `bad_segments`; per-recording landscape/effective-dimensionality and temporal/spatial coordination outputs preserve every experimental-design label without duplicating the large FREQ arrays. Production execution remains off pending review of the provisional 1.5 Hz beat frequency. |
 | ☐ | Replicate with previously excluded participants | Not started. Repair excluded recordings where scientifically defensible, document every repair, rerun the identical pipeline, and compare the sensitivity results with the primary analysis. |
 
 ## Pipeline
@@ -34,15 +34,17 @@ Run `EmpaticMirroring_MainPipeline.m` from MATLAB. The implemented stages:
 10. when enabled, runs resumable FREQ network estimation and saves each core
     output beside its artificial-dyad input; and
 11. derives per-recording network landscapes and effective dimensionality,
-    then assembles group arrays linked to an explicit experimental-design
-    table.
+    then writes a lightweight experimental-design catalogue; and
+12. computes per-recording JRQA temporal coordination and spatial mirroring
+    for each selected component, plus compact summaries for statistics.
 
 The QC stage writes `recording_exclusions.csv`, `participant_qc_summary.csv`,
 `participant_exclusions.csv`, and `model_exclusions.csv` to `outputs/qc/`.
 Core estimation additionally writes `core_analysis_manifest.csv` with the
 output path and created, existing, or error status of every selected dyad.
 Landscape analysis writes `landscape_analysis_manifest.csv` with the same
-per-recording audit trail.
+per-recording audit trail. Coordination analysis writes
+`coordination_analysis_manifest.csv` with one row per recording and component.
 Every excluded recording can carry multiple standardized reasons so that,
 for example, an annotation, a short duration, and an incomplete marker layout
 are preserved rather than reduced to one label.
@@ -112,12 +114,11 @@ Git. Raw `.mat`, `.qtm`, and `.avi` files are also ignored repository-wide.
 
 ## Network landscapes and effective dimensionality
 
-BLOCK 2 mirrors the corresponding `FREQNESS_DyadicDance_Mocap` block. It
-retains `all_evals` with the complete eigenspectrum, limits `all_pats` to the
-configured leading components, stores normalized frequency axes, and computes
-quadratic Rényi entropy (`H2`) and effective dimensionality (`ED`) with
-`FREQNESS_EffectDim_Mocap`. Existing compatible per-recording landscape files
-are reused unless overwriting is enabled.
+BLOCK 2 mirrors the computation in the corresponding
+`FREQNESS_DyadicDance_Mocap` block: it uses the complete eigenspectrum to
+compute quadratic Rényi entropy (`H2`) and effective dimensionality (`ED`)
+with `FREQNESS_EffectDim_Mocap`. Existing compatible per-recording landscape
+files are reused unless overwriting is enabled.
 
 GED can produce negligible negative eigenvalues through floating-point noise
 even though the underlying covariance problem is non-negative. Before the
@@ -127,14 +128,36 @@ count, largest corrected magnitude, and largest mass ratio are written to the
 landscape manifest. Material negative spectra are rejected, and the original
 BLOCK 1 `FREQ` files are never modified.
 
-Unlike the balanced positional arrays in the template study, the first group
-array dimension is one retained recording. The accompanying `analysisRows`
-table is the authoritative map to Subject, Instruction, Complexity, Version,
-Movement, and TrialIndex. Thus repeated recordings can later be averaged
-within each of the 24 design cells while Subject remains the repeated-measures
-unit and TrialIndex remains acquisition provenance rather than an analysis
-factor. Missing or excluded trials remain absent; they are never represented
-as zero-valued observations.
+Complete eigenspectra and patterns are not copied into dense group arrays.
+They remain in the individual core `FREQ` files, while the compact group file
+stores `analysisRows`, the 24-cell `designTable`, participant identifiers, and
+`validTrialMask`. `analysisRows` maps every result to Subject, Instruction,
+Complexity, Version, Movement, and its acquisition-order TrialIndex. Repetition
+indices are assigned by TrialIndex within each participant-condition cell, but
+TrialIndex is not treated as a factor. This retains the DyadicDance
+participant-condition-repetition semantics without hundreds of megabytes of
+duplicated data or zero-valued placeholders for missing trials.
+
+## Temporal and spatial coordination
+
+BLOCK 3 mirrors the DyadicDance JRQA and spatial-mirroring block. Components 1
+and 2 are analyzed independently at metric levels `[0.25 0.5 1 2]`. Before
+JRQA, the selected FREQ time series are zero-phase low-pass filtered and
+downsampled from 120 to 24 Hz, closely matching the template's 25 Hz working
+rate. JRQA uses the proportional interval `[0.15 0.85]`; spatial coordination
+uses the original FREQ patterns.
+The low-pass cutoff is 80% of the new Nyquist frequency (9.6 Hz), expressed
+relative to the original sampling rate before decimation so that it genuinely
+prevents aliasing.
+
+JRQA embedding delay and dimension are attuned from the selected study data
+and cached separately for each component with cohort and setting provenance.
+Changing the selected cohort or settings forces re-attunement rather than
+silently reusing pilot parameters. Each recording/component has one resumable
+coordination file. Only the scalar `MIRROR`, `RR`, and `DET` results are also
+assembled into compact
+`[participant x condition x metric x repetition]` summaries, with missing or
+failed observations represented by `NaN` and a validity mask.
 
 ## Current timing check
 

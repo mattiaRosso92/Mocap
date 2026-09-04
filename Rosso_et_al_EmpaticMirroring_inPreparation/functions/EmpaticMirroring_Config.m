@@ -71,9 +71,10 @@ config.block1.overwrite_flag = false;
 config.block1.save_flag = true;
 config.block1.max_dyads = inf;
 
-% BLOCK 2 - NETWORK LANDSCAPES AND EFFECTIVE DIMENSIONALITY. Per-trial
-% landscape files and the group summary follow the DyadicDance variables;
-% analysisRows preserves this study's repeated-measures factor labels.
+% BLOCK 2 - NETWORK LANDSCAPES AND EFFECTIVE DIMENSIONALITY. Per-recording
+% outputs follow the DyadicDance variables. The group file is deliberately
+% a lightweight design catalogue; complete arrays remain in individual
+% FREQ files and are loaded only when a downstream analysis requires them.
 config.block2.run = false;
 config.block2.output_path = fullfile(config.paths.outputRoot,'02_Landscape');
 config.block2.overwrite_flag = false;
@@ -84,6 +85,26 @@ config.block2.max_dyads = inf;
 % BLOCK 2 clips and rescales such values, records them in QC, and rejects
 % spectra whose negative/positive mass ratio exceeds this threshold.
 config.block2.eigenvalue_negative_tolerance = 1e-5;
+
+% BLOCK 3 - JRQA TEMPORAL COORDINATION AND SPATIAL COORDINATION. Match the
+% DyadicDance settings while keeping this block independently resumable.
+% At 120 Hz, a factor of five gives 24 Hz, close to the template's 25 Hz.
+config.block3.run = false;
+config.block3.output_path = fullfile(config.paths.outputRoot, ...
+    '03_Coordination');
+config.block3.overwrite_flag = false;
+config.block3.save_flag = true;
+config.block3.components = 1:2;
+config.block3.attune_flag = true;
+config.block3.JRQA = struct('tau',[],'m',[],'ps',[]);
+config.block3.metric_levels = [.25 .5 1 2];
+config.block3.downsample_factor = 5;
+config.block3.lp_order = 4;
+% Fraction of the post-downsampling Nyquist frequency (9.6 Hz cutoff).
+config.block3.lp_cutoff_norm = .8;
+config.block3.duration = [.15 .85];
+config.block3.max_dyads = inf;
+config.block3.max_attune_dyads = inf;
 
 config.naming.teacherFolder = "Michalina";
 config.output.figureVisible = "on";
