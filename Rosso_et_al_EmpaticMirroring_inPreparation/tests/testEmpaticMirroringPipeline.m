@@ -422,6 +422,11 @@ verifyEqual(testCase,group.analysisRows.RepetitionIndex,1);
 verifyTrue(testCase,group.analysisRows.SummaryIncluded);
 verifyEqual(testCase,group.marker_reference,marker_reference);
 
+% A stricter historical acceptance ceiling does not invalidate identical
+% corrected spectra after the configured ceiling is relaxed.
+historicalLandscape = load(firstManifest.LandscapeFile);
+historicalLandscape.eigenvalue_qc.tolerance = 1e-5;
+save(firstManifest.LandscapeFile,'-struct','historicalLandscape');
 [secondManifest,secondSummary] = ...
     EmpaticMirroring_RunLandscapeAnalysis(dyadManifest,config);
 verifyEqual(testCase,secondManifest.LandscapeStatus,"existing");
@@ -467,15 +472,8 @@ config.block3.output_path = fullfile(temporaryRoot,'03_Coordination');
 config.block3.overwrite_flag = false;
 config.block3.save_flag = true;
 config.block3.components = 1;
-config.block3.attune_flag = false;
-config.block3.JRQA = struct('tau',2,'m',2,'ps',0.1);
 config.block3.metric_levels = 1;
-config.block3.downsample_factor = 2;
-config.block3.lp_order = 4;
-config.block3.lp_cutoff_norm = .8;
-config.block3.duration = [.15 .85];
 config.block3.max_dyads = inf;
-config.block3.max_attune_dyads = inf;
 
 participantOutputRoot = fullfile(temporaryRoot,'participants','001');
 mkdir(participantOutputRoot);
@@ -512,25 +510,20 @@ verifyEqual(testCase,firstSummary.createdCount,1);
 verifyEqual(testCase,firstSummary.errorCount,0);
 outputFile = firstSummary.coordinationManifest.CoordinationFile;
 verifyTrue(testCase,isfile(outputFile));
-saved = load(outputFile,'FREQjrqa','FREQmirror','which_comp', ...
+saved = load(outputFile,'FREQmirror','which_comp', ...
     'meter','analysis_info');
 verifyEqual(testCase,saved.which_comp,1);
 verifyEqual(testCase,saved.meter,1);
-verifyEqual(testCase,saved.analysis_info.outputSrate,60);
-verifyEqual(testCase,numel(saved.FREQjrqa),1);
+verifyEqual(testCase,saved.analysis_info.method,"spatial_mirroring");
 verifyEqual(testCase,numel(saved.FREQmirror),1);
 
 summaryFile = fullfile(config.block3.output_path,'Component_1', ...
-    'FREQNESS_COORDINATION_SUMMARY_Comp#1.mat');
+    'FREQNESS_SPATIALCOORDINATION_SUMMARY_Comp#1.mat');
 verifyTrue(testCase,isfile(summaryFile));
-group = load(summaryFile,'MIRROR','RR','DET','designTable', ...
+group = load(summaryFile,'MIRROR','designTable', ...
     'componentRows','validTrialMask');
 verifySize(testCase,group.MIRROR,[1 24]);
-verifySize(testCase,group.RR,[1 24]);
-verifySize(testCase,group.DET,[1 24]);
 verifyEqual(testCase,group.MIRROR(1,1,1,1),saved.FREQmirror);
-verifyEqual(testCase,group.RR(1,1,1,1),saved.FREQjrqa.RR);
-verifyEqual(testCase,group.DET(1,1,1,1),saved.FREQjrqa.DET);
 verifyEqual(testCase,height(group.designTable),24);
 verifyEqual(testCase,group.componentRows.ConditionIndex,1);
 verifyTrue(testCase,group.validTrialMask(1,1,1));
@@ -699,14 +692,10 @@ validTrialMask(1,1,1:2) = true;
 coordinationFolder = fullfile(config.block3.output_path,'Component_1');
 mkdir(coordinationFolder);
 MIRROR = nan(1,24,1,2);
-RR = nan(1,24,1,2);
-DET = nan(1,24,1,2);
 MIRROR(1,1,1,:) = [1 3];
-RR(1,1,1,:) = [.2 .4];
-DET(1,1,1,:) = [.6 .8];
 save(fullfile(coordinationFolder, ...
-    'FREQNESS_COORDINATION_SUMMARY_Comp#1.mat'), ...
-    'MIRROR','RR','DET','meter','participantIds','designTable', ...
+    'FREQNESS_SPATIALCOORDINATION_SUMMARY_Comp#1.mat'), ...
+    'MIRROR','meter','participantIds','designTable', ...
     'componentRows','validTrialMask');
 
 phaseFolder = fullfile(config.block4.output_path,'Component_1');
@@ -740,8 +729,8 @@ verifyEqual(testCase,T.Version,1);
 verifyEqual(testCase,T.Movement,1);
 verifyEqual(testCase,T.NRepetitions,2);
 verifyEqual(testCase,T.Mirror,2);
-verifyEqual(testCase,T.RR_JRQA,.3,'AbsTol',eps);
-verifyEqual(testCase,T.DET_JRQA,.7,'AbsTol',eps);
+verifyFalse(testCase,ismember('RR_JRQA',T.Properties.VariableNames));
+verifyFalse(testCase,ismember('DET_JRQA',T.Properties.VariableNames));
 verifyEqual(testCase,T.RR_Phase,2);
 verifyTrue(testCase,isfile(statistics.combinedCsvFile));
 

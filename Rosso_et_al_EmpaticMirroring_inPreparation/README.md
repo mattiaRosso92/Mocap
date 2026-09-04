@@ -35,9 +35,9 @@ Run `EmpaticMirroring_MainPipeline.m` from MATLAB. The implemented stages:
     output beside its artificial-dyad input; and
 11. derives per-recording network landscapes and effective dimensionality,
     then writes a lightweight experimental-design catalogue; and
-12. computes per-recording JRQA temporal coordination and spatial mirroring
-    for each selected component, plus compact summaries for statistics;
-13. computes phase-space RQA as an alternative temporal-coordination method;
+12. computes per-recording spatial mirroring for each selected component,
+    plus compact summaries for statistics;
+13. computes phase-space RQA for temporal coordination;
 14. streams individual outputs to create participant-level group means, SEM,
     and optional figures without saving dense trial-level copies; and
 15. averages repetitions within participant-condition cells and exports
@@ -48,8 +48,9 @@ The QC stage writes `recording_exclusions.csv`, `participant_qc_summary.csv`,
 Core estimation additionally writes `core_analysis_manifest.csv` with the
 output path and created, existing, or error status of every selected dyad.
 Landscape analysis writes `landscape_analysis_manifest.csv` with the same
-per-recording audit trail. Coordination analysis writes
-`coordination_analysis_manifest.csv` with one row per recording and component.
+per-recording audit trail. Spatial coordination writes
+`spatial_coordination_analysis_manifest.csv` with one row per recording and
+component.
 Phase-space RQA writes `phase_rqa_analysis_manifest.csv` in the same format.
 Every excluded recording can carry multiple standardized reasons so that,
 for example, an annotation, a short duration, and an incomplete marker layout
@@ -129,7 +130,7 @@ files are reused unless overwriting is enabled.
 GED can produce negligible negative eigenvalues through floating-point noise
 even though the underlying covariance problem is non-negative. Before the
 entropy calculation, BLOCK 2 clips and sum-preserving rescales only spectra
-whose negative-to-positive eigenvalue mass is at most `1e-5`. The correction
+whose negative-to-positive eigenvalue mass is at most `2e-4`. The correction
 count, largest corrected magnitude, and largest mass ratio are written to the
 landscape manifest. Material negative spectra are rejected, and the original
 BLOCK 1 `FREQ` files are never modified.
@@ -146,31 +147,22 @@ duplicated data or zero-valued placeholders for missing trials.
 
 ## Temporal and spatial coordination
 
-BLOCK 3 mirrors the DyadicDance JRQA and spatial-mirroring block. Components 1
-and 2 are analyzed independently at metric levels `[0.25 0.5 1 2]`. Before
-JRQA, the selected FREQ time series are zero-phase low-pass filtered and
-downsampled from 120 to 24 Hz, closely matching the template's 25 Hz working
-rate. JRQA uses the proportional interval `[0.15 0.85]`; spatial coordination
-uses the original FREQ patterns.
-The low-pass cutoff is 80% of the new Nyquist frequency (9.6 Hz), expressed
-relative to the original sampling rate before decimation so that it genuinely
-prevents aliasing.
-
-JRQA embedding delay and dimension are attuned from the selected study data
-and cached separately for each component with cohort and setting provenance.
-Changing the selected cohort or settings forces re-attunement rather than
-silently reusing pilot parameters. Each recording/component has one resumable
-coordination file. Only the scalar `MIRROR`, `RR`, and `DET` results are also
-assembled into compact
+BLOCK 3 mirrors the DyadicDance spatial-mirroring analysis. Components 1 and
+2 are analyzed independently at metric levels `[0.25 0.5 1 2]` using the
+original FREQ patterns. Each recording/component has one resumable output;
+scalar `MIRROR` values are also assembled into compact
 `[participant x condition x metric x repetition]` summaries, with missing or
 failed observations represented by `NaN` and a validity mask.
 
+JRQA is disabled because its current implementation cannot exclude the
+study's gappy samples without biasing temporal recurrence estimates.
+
 ## Phase-space RQA
 
-BLOCK 4 mirrors the DyadicDance alternative temporal-coordination block. It
+BLOCK 4 mirrors the DyadicDance phase-space temporal-coordination block. It
 uses components 1 and 2, metric levels `[0.25 0.5 1 2]`, the proportional
-interval `[0.15 0.85]`, and the same anti-alias filtering and 24 Hz working
-rate as BLOCK 3. Default settings standardize both dyad members, use a
+interval `[0.15 0.85]`, anti-alias filtering, and a 24 Hz working rate.
+Default settings standardize both dyad members, use a
 maximum-distance fraction of `0.1`, and retain RR, L, DET, ENTR, TT, LAM,
 Vmax, and DIV. Distance and recurrence matrices are not stored by default.
 Each recording/component is independently resumable.
@@ -189,10 +181,10 @@ activation weights remain visually unobstructed.
 
 BLOCK 6 exports one row per Participant × Instruction × Complexity ×
 Version × Movement × Meter × Component. It includes spatial mirroring,
-JRQA RR/DET, all eight phase-space RQA measures, and the number of recordings
+all eight phase-space RQA measures, and the number of recordings
 averaged into each cell. TrialIndex is intentionally absent because it is
 acquisition provenance; per-recording results remain available for audit and
-sensitivity analyses.
+verification.
 
 ## Current timing check
 

@@ -331,28 +331,25 @@ end
 function output = summarizeCoordination(config,designTable)
 
 components = config.block3.components(:)';
-fields = {'MIRROR','RR','DET'};
 output = repmat(struct('Component',[],'Mean',struct(), ...
     'SEM',struct()),1,numel(components));
 for componenti = 1:numel(components)
     which_comp = components(componenti);
     file = fullfile(config.block3.output_path, ...
         ['Component_' num2str(which_comp)], ...
-        ['FREQNESS_COORDINATION_SUMMARY_Comp#' ...
+        ['FREQNESS_SPATIALCOORDINATION_SUMMARY_Comp#' ...
         num2str(which_comp) '.mat']);
     assert(isfile(file),'Missing BLOCK 3 summary: %s',file);
-    S = load(file,'MIRROR','RR','DET','designTable');
+    S = load(file,'MIRROR','designTable');
     assert(isequal(S.designTable,designTable), ...
         'BLOCK 3 design table does not match BLOCK 5.');
     output(componenti).Component = which_comp;
-    for fieldi = 1:numel(fields)
-        participantData = mean(S.(fields{fieldi}),4,'omitnan');
-        [mu,se] = meanSemFirstDimension(participantData);
-        output(componenti).Mean.(fields{fieldi}) = ...
-            reshape(mu,[size(participantData,2) size(participantData,3)]);
-        output(componenti).SEM.(fields{fieldi}) = ...
-            reshape(se,[size(participantData,2) size(participantData,3)]);
-    end
+    participantData = mean(S.MIRROR,4,'omitnan');
+    [mu,se] = meanSemFirstDimension(participantData);
+    output(componenti).Mean.MIRROR = ...
+        reshape(mu,[size(participantData,2) size(participantData,3)]);
+    output(componenti).SEM.MIRROR = ...
+        reshape(se,[size(participantData,2) size(participantData,3)]);
 end
 
 end
@@ -471,7 +468,7 @@ for compi = config.block5.pattern_components
 end
 
 newFiles = metricFigures(coordinationGroup, ...
-    {'MIRROR','RR','DET'},'Coordination',conditionLabels,config);
+    {'MIRROR'},'SpatialCoordination',conditionLabels,config);
 files = [files(:);newFiles(:)];
 newFiles = metricFigures(phaseGroup, ...
     {'RR','L','DET','ENTR','TT','LAM','Vmax','DIV'}, ...

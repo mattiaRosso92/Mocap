@@ -18,7 +18,7 @@ for componenti = 1:numel(components)
     which_comp = components(componenti);
     coordinationFile = fullfile(config.block3.output_path, ...
         ['Component_' num2str(which_comp)], ...
-        ['FREQNESS_COORDINATION_SUMMARY_Comp#' ...
+        ['FREQNESS_SPATIALCOORDINATION_SUMMARY_Comp#' ...
         num2str(which_comp) '.mat']);
     phaseFile = fullfile(config.block4.output_path, ...
         ['Component_' num2str(which_comp)], ...
@@ -26,7 +26,7 @@ for componenti = 1:numel(components)
     assert(isfile(coordinationFile), ...
         'Missing BLOCK 3 summary: %s',coordinationFile);
     assert(isfile(phaseFile),'Missing BLOCK 4 summary: %s',phaseFile);
-    C = load(coordinationFile,'MIRROR','RR','DET','meter', ...
+    C = load(coordinationFile,'MIRROR','meter', ...
         'participantIds','designTable','validTrialMask');
     P = load(phaseFile,'PhaseRQA','meter','participantIds', ...
         'designTable','validTrialMask');
@@ -88,7 +88,7 @@ end
 
 function validateSummaryPair(C,P,which_comp)
 
-coordinationFields = {'MIRROR','RR','DET','meter','participantIds', ...
+coordinationFields = {'MIRROR','meter','participantIds', ...
     'designTable','validTrialMask'};
 phaseFields = {'PhaseRQA','meter','participantIds','designTable', ...
     'validTrialMask'};
@@ -111,8 +111,6 @@ end
 function T = buildComponentTable(C,P,which_comp)
 
 mirror = mean(C.MIRROR,4,'omitnan');
-rrJRQA = mean(C.RR,4,'omitnan');
-detJRQA = mean(C.DET,4,'omitnan');
 phaseFields = {'RR','L','DET','ENTR','TT','LAM','Vmax','DIV'};
 phaseMeans = struct();
 for fieldi = 1:numel(phaseFields)
@@ -138,8 +136,6 @@ MeterLevel = zeros(nRows,1);
 Component = repmat(which_comp,nRows,1);
 NRepetitions = zeros(nRows,1);
 Mirror = nan(nRows,1);
-RR_JRQA = nan(nRows,1);
-DET_JRQA = nan(nRows,1);
 RR_Phase = nan(nRows,1);
 L_Phase = nan(nRows,1);
 DET_Phase = nan(nRows,1);
@@ -167,8 +163,6 @@ for participanti = 1:nparticipants
             MeterLevel(row) = C.meter(metri);
             NRepetitions(row) = nRepetitions(participanti,condi);
             Mirror(row) = mirror(participanti,condi,metri);
-            RR_JRQA(row) = rrJRQA(participanti,condi,metri);
-            DET_JRQA(row) = detJRQA(participanti,condi,metri);
             RR_Phase(row) = phaseMeans.RR(participanti,condi,metri);
             L_Phase(row) = phaseMeans.L(participanti,condi,metri);
             DET_Phase(row) = phaseMeans.DET(participanti,condi,metri);
@@ -182,8 +176,8 @@ for participanti = 1:nparticipants
 end
 
 T = table(Participant,Instruction,Complexity,Version,Movement, ...
-    Condition,Meter,MeterLevel,Component,NRepetitions,Mirror,RR_JRQA, ...
-    DET_JRQA,RR_Phase,L_Phase,DET_Phase,ENTR_Phase,TT_Phase, ...
+    Condition,Meter,MeterLevel,Component,NRepetitions,Mirror, ...
+    RR_Phase,L_Phase,DET_Phase,ENTR_Phase,TT_Phase, ...
     LAM_Phase,Vmax_Phase,DIV_Phase);
 
 end

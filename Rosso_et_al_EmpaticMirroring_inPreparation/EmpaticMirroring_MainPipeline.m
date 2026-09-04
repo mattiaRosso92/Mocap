@@ -141,14 +141,13 @@ end
 
 
 %% ========================================================================
-% BLOCK 3 - JRQA TEMPORAL COORDINATION AND SPATIAL COORDINATION
+% BLOCK 3 - SPATIAL COORDINATION
 % =========================================================================
-% Mirror the DyadicDance coordination block for every requested component
-% and metric level. Core FREQ time series are anti-alias filtered and
-% downsampled from 120 to 24 Hz before JRQA; spatial coordination uses the
-% original FREQ patterns. Each recording/component is saved independently,
-% while compact MIRROR/RR/DET arrays retain participant x condition x
-% metric x repetition indexing for the 24-cell repeated-measures design.
+% Mirror the DyadicDance spatial-mirroring analysis for every requested
+% component and metric level. JRQA is disabled because it cannot exclude
+% gappy samples safely. Each recording/component is saved independently;
+% compact MIRROR arrays retain participant x condition x metric x repetition
+% indexing for the 24-cell repeated-measures design.
 
 if config.block3.run
     [dyadManifest,coordinationSummary] = ...
@@ -162,12 +161,12 @@ end
 
 
 %% ========================================================================
-% BLOCK 4 - PHASE-SPACE RQA (ALTERNATIVE TEMPORAL COORDINATION)
+% BLOCK 4 - PHASE-SPACE RQA (TEMPORAL COORDINATION)
 % =========================================================================
-% Follow the DyadicDance alternative RQA block using the same selected
-% components, metric levels, proportional interval, anti-alias filter, and
-% 24 Hz working rate as BLOCK 3. One result is saved per recording/component
-% and compact summaries retain the complete 24-cell experimental design.
+% Follow the DyadicDance phase-space RQA block using the selected components,
+% metric levels, proportional interval, anti-alias filter, and 24 Hz working
+% rate. One result is saved per recording/component and compact summaries
+% retain the complete 24-cell experimental design.
 
 if config.block4.run
     [dyadManifest,phaseRQASummary] = ...
@@ -204,7 +203,7 @@ end
 % As in DyadicDance, average repeated recordings before final modelling.
 % Export one row per Participant x Instruction x Complexity x Version x
 % Movement x Meter x Component. Trial-level outputs remain available in the
-% individual BLOCK 3 and BLOCK 4 files for audit and sensitivity analyses.
+% individual BLOCK 3 and BLOCK 4 files for audit.
 
 if config.block6.run
     statisticsSummary = EmpaticMirroring_ExportStatistics(config);

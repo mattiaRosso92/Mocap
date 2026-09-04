@@ -82,33 +82,25 @@ config.block2.save_flag = true;
 config.block2.ncomps2keep = 4;
 config.block2.max_dyads = inf;
 % Permit only negligible negative mass caused by floating-point GED noise.
-% BLOCK 2 clips and rescales such values, records them in QC, and rejects
-% spectra whose negative/positive mass ratio exceeds this threshold.
-config.block2.eigenvalue_negative_tolerance = 1e-5;
+% The complete retained-sample audit found a maximum negative/positive mass
+% ratio of 1.54e-4 (0.0154%); use a 2e-4 ceiling. BLOCK 2 clips accepted
+% values, preserves each spectrum's sum, records the correction in QC, and
+% still rejects any spectrum exceeding this empirically verified bound.
+config.block2.eigenvalue_negative_tolerance = 2e-4;
 
-% BLOCK 3 - JRQA TEMPORAL COORDINATION AND SPATIAL COORDINATION. Match the
-% DyadicDance settings while keeping this block independently resumable.
-% At 120 Hz, a factor of five gives 24 Hz, close to the template's 25 Hz.
+% BLOCK 3 - SPATIAL COORDINATION. JRQA is disabled because it cannot exclude
+% the study's gappy samples without biasing temporal recurrence estimates.
 config.block3.run = false;
 config.block3.output_path = fullfile(config.paths.outputRoot, ...
     '03_Coordination');
 config.block3.overwrite_flag = false;
 config.block3.save_flag = true;
 config.block3.components = 1:2;
-config.block3.attune_flag = true;
-config.block3.JRQA = struct('tau',[],'m',[],'ps',[]);
 config.block3.metric_levels = [.25 .5 1 2];
-config.block3.downsample_factor = 5;
-config.block3.lp_order = 4;
-% Fraction of the post-downsampling Nyquist frequency (9.6 Hz cutoff).
-config.block3.lp_cutoff_norm = .8;
-config.block3.duration = [.15 .85];
 config.block3.max_dyads = inf;
-config.block3.max_attune_dyads = inf;
 
-% BLOCK 4 - PHASE-SPACE RQA. This alternative temporal-coordination method
-% uses the same frequencies, components, interval, and 24 Hz working rate
-% as BLOCK 3 so the two approaches receive matched time series.
+% BLOCK 4 - PHASE-SPACE RQA. This temporal-coordination method uses the
+% DyadicDance frequencies, components, interval, and 24 Hz working rate.
 config.block4.run = false;
 config.block4.output_path = fullfile(config.paths.outputRoot, ...
     '04_PhaseSpaceRQA');

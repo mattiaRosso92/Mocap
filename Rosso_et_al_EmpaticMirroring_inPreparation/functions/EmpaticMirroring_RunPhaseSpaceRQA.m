@@ -1,7 +1,7 @@
 function [dyadManifest,summary] = EmpaticMirroring_RunPhaseSpaceRQA( ...
     dyadManifest,config)
 %EMPATICMIRRORING_RUNPHASESPACERQA Run BLOCK 4 phase-space RQA.
-%   This is the DyadicDance alternative temporal-coordination analysis,
+%   This is the DyadicDance phase-space temporal-coordination analysis,
 %   stored per participant recording and component with compact summaries.
 
 validateBlock4Inputs(dyadManifest,config);
