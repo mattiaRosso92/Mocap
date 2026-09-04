@@ -116,3 +116,24 @@ else
         'Review the provisional 1.5 Hz beat frequency and set ' ...
         'config.block1.run = true for the production run.\n']);
 end
+
+
+%% ========================================================================
+% BLOCK 2 - NETWORK LANDSCAPES AND EFFECTIVE DIMENSIONALITY
+% =========================================================================
+% As in FREQNESS_DyadicDance_Mocap, retain the complete eigenspectrum for
+% effective dimensionality and only the requested leading spatial patterns
+% for group visualization. Because this study can have missing trials, the
+% first array dimension is an analysis-unit row linked to analysisRows,
+% which retains Participant, Instruction, Complexity, Version, Movement,
+% and acquisition-order provenance without treating TrialIndex as a factor.
+
+if config.block2.run
+    [dyadManifest,landscapeSummary] = ...
+        EmpaticMirroring_RunLandscapeAnalysis(dyadManifest,config);
+    fprintf('BLOCK 2 landscape outputs available: %d\n', ...
+        landscapeSummary.availableCount);
+else
+    fprintf(['BLOCK 2 network landscapes are configured but disabled. ' ...
+        'Set config.block2.run = true after BLOCK 1 outputs exist.\n']);
+end

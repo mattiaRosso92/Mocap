@@ -71,6 +71,20 @@ config.block1.overwrite_flag = false;
 config.block1.save_flag = true;
 config.block1.max_dyads = inf;
 
+% BLOCK 2 - NETWORK LANDSCAPES AND EFFECTIVE DIMENSIONALITY. Per-trial
+% landscape files and the group summary follow the DyadicDance variables;
+% analysisRows preserves this study's repeated-measures factor labels.
+config.block2.run = false;
+config.block2.output_path = fullfile(config.paths.outputRoot,'02_Landscape');
+config.block2.overwrite_flag = false;
+config.block2.save_flag = true;
+config.block2.ncomps2keep = 4;
+config.block2.max_dyads = inf;
+% Permit only negligible negative mass caused by floating-point GED noise.
+% BLOCK 2 clips and rescales such values, records them in QC, and rejects
+% spectra whose negative/positive mass ratio exceeds this threshold.
+config.block2.eigenvalue_negative_tolerance = 1e-5;
+
 config.naming.teacherFolder = "Michalina";
 config.output.figureVisible = "on";
 

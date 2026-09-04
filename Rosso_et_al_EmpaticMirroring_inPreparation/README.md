@@ -10,7 +10,7 @@ must not be edited for study-specific behavior.
 |:---:|---|---|
 | ☑ | Import and handle data | **Complete:** folder normalization, recursive import, frame/rate/name/marker/gap QC, explicit file- and participant-level exclusions, and the processed-MAT timing rule are implemented. |
 | ☑ | Create artificial dyads | **Complete:** every eligible participant trial is paired with its condition-labelled model recording and stored as `[coordinates x time x participants]`, with synchronized bad-sample lists. |
-| ◐ | Run toolbox analyses | **BLOCK 1 implemented:** the resumable FREQ runner passes synchronized `bad_segments`, validates outputs, and saves beside each dyad. Production execution remains off pending review of the provisional 1.5 Hz beat frequency. |
+| ◐ | Run toolbox analyses | **BLOCKS 1–2 implemented:** resumable core estimation passes synchronized `bad_segments`; the landscape block retains the full eigenspectrum, computes effective dimensionality, and preserves every experimental-design label. Production execution remains off pending review of the provisional 1.5 Hz beat frequency. |
 | ☐ | Replicate with previously excluded participants | Not started. Repair excluded recordings where scientifically defensible, document every repair, rerun the identical pipeline, and compare the sensitivity results with the primary analysis. |
 
 ## Pipeline
@@ -32,12 +32,17 @@ Run `EmpaticMirroring_MainPipeline.m` from MATLAB. The implemented stages:
 9. saves the dyadic input and synchronized bad-sample indices required for
    covariance exclusion; and
 10. when enabled, runs resumable FREQ network estimation and saves each core
-    output beside its artificial-dyad input.
+    output beside its artificial-dyad input; and
+11. derives per-recording network landscapes and effective dimensionality,
+    then assembles group arrays linked to an explicit experimental-design
+    table.
 
 The QC stage writes `recording_exclusions.csv`, `participant_qc_summary.csv`,
 `participant_exclusions.csv`, and `model_exclusions.csv` to `outputs/qc/`.
 Core estimation additionally writes `core_analysis_manifest.csv` with the
 output path and created, existing, or error status of every selected dyad.
+Landscape analysis writes `landscape_analysis_manifest.csv` with the same
+per-recording audit trail.
 Every excluded recording can carry multiple standardized reasons so that,
 for example, an annotation, a short duration, and an incomplete marker layout
 are preserved rather than reduced to one label.
@@ -104,6 +109,32 @@ production run. `config.block1.run` is therefore `false` by default.
 
 Generated QC tables and figures are written to `outputs/`, which is ignored by
 Git. Raw `.mat`, `.qtm`, and `.avi` files are also ignored repository-wide.
+
+## Network landscapes and effective dimensionality
+
+BLOCK 2 mirrors the corresponding `FREQNESS_DyadicDance_Mocap` block. It
+retains `all_evals` with the complete eigenspectrum, limits `all_pats` to the
+configured leading components, stores normalized frequency axes, and computes
+quadratic Rényi entropy (`H2`) and effective dimensionality (`ED`) with
+`FREQNESS_EffectDim_Mocap`. Existing compatible per-recording landscape files
+are reused unless overwriting is enabled.
+
+GED can produce negligible negative eigenvalues through floating-point noise
+even though the underlying covariance problem is non-negative. Before the
+entropy calculation, BLOCK 2 clips and sum-preserving rescales only spectra
+whose negative-to-positive eigenvalue mass is at most `1e-5`. The correction
+count, largest corrected magnitude, and largest mass ratio are written to the
+landscape manifest. Material negative spectra are rejected, and the original
+BLOCK 1 `FREQ` files are never modified.
+
+Unlike the balanced positional arrays in the template study, the first group
+array dimension is one retained recording. The accompanying `analysisRows`
+table is the authoritative map to Subject, Instruction, Complexity, Version,
+Movement, and TrialIndex. Thus repeated recordings can later be averaged
+within each of the 24 design cells while Subject remains the repeated-measures
+unit and TrialIndex remains acquisition provenance rather than an analysis
+factor. Missing or excluded trials remain absent; they are never represented
+as zero-valued observations.
 
 ## Current timing check
 

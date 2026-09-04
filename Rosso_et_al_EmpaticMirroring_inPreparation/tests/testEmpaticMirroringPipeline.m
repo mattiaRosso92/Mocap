@@ -298,6 +298,129 @@ verifyEqual(testCase,secondSummary.createdCount,0);
 end
 
 
+function testLandscapeAnalysisPreservesDesignAndIsResumable(testCase)
+
+temporaryRoot = string(tempname);
+mkdir(temporaryRoot);
+cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
+
+config = EmpaticMirroring_Config();
+config.paths.qcOutputRoot = fullfile(temporaryRoot,'qc');
+config.block2.output_path = fullfile(temporaryRoot,'02_Landscape');
+config.block2.overwrite_flag = false;
+config.block2.save_flag = true;
+config.block2.ncomps2keep = 2;
+config.block2.max_dyads = inf;
+
+participantOutputRoot = fullfile(temporaryRoot,'participants','001');
+mkdir(participantOutputRoot);
+dyadFile = fullfile(participantOutputRoot, ...
+    'S001_T01_mir_low_v1_mov1.mat');
+coreFile = fullfile(participantOutputRoot, ...
+    'FREQNESS_CORE_S001_T01_mir_low_v1_mov1.mat');
+
+FREQ = struct();
+FREQ.evals = reshape(1:24,[6 2 2]);
+FREQ.evals(6,1,1) = -1e-5;
+FREQ.pats = reshape(1:96,[6 4 2 2]);
+FREQ.frex = repmat([1;2],1,2);
+FREQ.frex_norm = FREQ.frex./[1.5 1.5];
+marker_reference = zeros(6,1,2);
+save(coreFile,'FREQ','marker_reference');
+
+DyadFile = string(dyadFile);
+DyadStatus = "created";
+CoreFile = string(coreFile);
+CoreStatus = "created";
+Subject = "001";
+TrialIndex = 1;
+Instruction = "mir";
+Complexity = "low";
+Version = 1;
+Movement = 1;
+dyadManifest = table(DyadFile,DyadStatus,CoreFile,CoreStatus, ...
+    Subject,TrialIndex,Instruction,Complexity,Version,Movement);
+
+[firstManifest,firstSummary] = ...
+    EmpaticMirroring_RunLandscapeAnalysis(dyadManifest,config);
+
+verifyEqual(testCase,firstManifest.LandscapeStatus,"created");
+verifyEqual(testCase,firstSummary.createdCount,1);
+verifyEqual(testCase,firstSummary.errorCount,0);
+verifyTrue(testCase,isfile(firstManifest.LandscapeFile));
+verifyTrue(testCase,isfile(firstSummary.groupOutputFile));
+verifyEqual(testCase,fileparts(firstManifest.LandscapeFile), ...
+    string(config.block2.output_path));
+
+[expectedFREQ,expectedCorrectionCount] = ...
+    correctTestEigenvalueNoise(FREQ);
+[expectedH2,expectedED] = FREQNESS_EffectDim_Mocap( ...
+    expectedFREQ,'figure',false);
+savedLandscape = load(firstManifest.LandscapeFile,'H2','ED_trial', ...
+    'eigenvalue_qc');
+verifyEqual(testCase,savedLandscape.H2,expectedH2,'AbsTol',eps);
+verifyEqual(testCase,savedLandscape.ED_trial,expectedED,'AbsTol',eps);
+verifyEqual(testCase,savedLandscape.eigenvalue_qc.correctedCount, ...
+    expectedCorrectionCount);
+verifyEqual(testCase,firstManifest.NegativeEigenvalueCount, ...
+    expectedCorrectionCount);
+verifyGreaterThan(testCase, ...
+    firstManifest.MaximumNegativeMassRatio,0);
+verifyLessThanOrEqual(testCase, ...
+    firstManifest.MaximumNegativeMassRatio, ...
+    config.block2.eigenvalue_negative_tolerance);
+
+group = load(firstSummary.groupOutputFile,'all_evals','all_pats', ...
+    'all_frex_norm','ED','analysisRows','marker_reference');
+verifySize(testCase,group.all_evals,[1 6 2 2]);
+verifySize(testCase,group.all_pats,[1 6 2 2 2]);
+verifySize(testCase,group.all_frex_norm,[1 2 2]);
+verifySize(testCase,group.ED,[1 2 2]);
+verifyEqual(testCase,squeeze(group.all_evals(1,:,:,:)), ...
+    expectedFREQ.evals);
+verifyEqual(testCase,squeeze(group.all_pats(1,:,:,:,:)), ...
+    FREQ.pats(:,1:2,:,:));
+verifyEqual(testCase,squeeze(group.all_frex_norm(1,:,:)), ...
+    FREQ.frex_norm');
+verifyEqual(testCase,squeeze(group.ED(1,:,:)),expectedED);
+verifyEqual(testCase,group.analysisRows.Subject,"001");
+verifyEqual(testCase,group.analysisRows.Instruction,"mir");
+verifyEqual(testCase,group.analysisRows.Complexity,"low");
+verifyEqual(testCase,group.analysisRows.Version,1);
+verifyEqual(testCase,group.analysisRows.Movement,1);
+verifyEqual(testCase,group.analysisRows.TrialIndex,1);
+verifyTrue(testCase,group.analysisRows.SummaryIncluded);
+verifyEqual(testCase,group.marker_reference,marker_reference);
+
+[secondManifest,secondSummary] = ...
+    EmpaticMirroring_RunLandscapeAnalysis(dyadManifest,config);
+verifyEqual(testCase,secondManifest.LandscapeStatus,"existing");
+verifyEqual(testCase,secondSummary.existingCount,1);
+verifyEqual(testCase,secondSummary.createdCount,0);
+
+end
+
+
+function [FREQ,correctedCount] = correctTestEigenvalueNoise(FREQ)
+
+correctedCount = 0;
+for subi = 1:size(FREQ.evals,3)
+    for frexi = 1:size(FREQ.evals,2)
+        values = FREQ.evals(:,frexi,subi);
+        negativeMask = values < 0;
+        if any(negativeMask)
+            originalSum = sum(values);
+            values(negativeMask) = 0;
+            values = values.*(originalSum/sum(values));
+            FREQ.evals(:,frexi,subi) = values;
+            correctedCount = correctedCount + nnz(negativeMask);
+        end
+    end
+end
+
+end
+
+
 function recording = syntheticRecording(signal,sampleRate,fileName)
 
 recording = struct();
