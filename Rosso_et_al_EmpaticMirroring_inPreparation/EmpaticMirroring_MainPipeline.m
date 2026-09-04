@@ -22,11 +22,13 @@ addpath(config.paths.toolboxRoot);
 addpath(fullfile(config.paths.toolboxRoot,'FREQNESS_Functions'));
 addpath(fullfile(config.paths.toolboxRoot,'FREQNESS_ExternalFunctions'));
 
-% CRITICAL CONTRACT CHECK: the dyad files use the optional bad_segments
-% convention. Network analysis must remain blocked until the MoCap estimator
-% accepts that option and excludes it from both covariance matrices.
+% CRITICAL CONTRACT CHECK: artificial dyads use the optional bad_segments
+% convention. Confirm that the active MoCap estimator excludes those samples
+% from both covariance matrices before permitting core network analysis.
 networkEstimatorContract = ...
     EmpaticMirroring_CheckNetworkEstimatorContract(config);
+assert(networkEstimatorContract.ReadyForNetworkEstimation, ...
+    'The active MoCap network estimator is incompatible with bad_segments.');
 
 %% 1. Frame-count and file-structure quality control
 % FRAME-COUNT QC: Recordings started automatically from the shared trigger
@@ -86,7 +88,7 @@ fprintf('Review QC outputs in: %s\n\n',config.paths.qcOutputRoot);
 % Each condition-labelled model file is imported, downsampled, aligned, and
 % assigned its post-resampling bad-sample mask once, then reused for all dyads.
 % Each dyad (including its bad-sample lists) is saved in that participant's
-% outputs/participants/<ID> folder; future core FREQ outputs use it as well.
+% outputs/participants/<ID> folder; core FREQ outputs use it as well.
 [dyadManifest,dyadSummary] = ...
     EmpaticMirroring_CreateArtificialDyads(dyadManifest,config,frameQC);
 
@@ -94,8 +96,23 @@ fprintf('Artificial dyads available: %d\n',dyadSummary.availableCount);
 fprintf('Network estimator compatible with bad_segments: %d\n', ...
     networkEstimatorContract.ReadyForNetworkEstimation);
 
-%% 5. FREQ-NESS analysis
-% EmpaticMirroring_LoadRecording and EmpaticMirroring_AlignArtificialDyad
-% implement the reviewed loading/alignment contract. Network estimation is
-% intentionally blocked by the contract check above until the MoCap toolbox
-% supports bad_segments in both covariance computations.
+%% ========================================================================
+% BLOCK 1 - NETWORK ESTIMATION
+% =========================================================================
+% The core runner follows FREQNESS_DyadicDance_Mocap: analyze each dyad in
+% [coordinates x time x participants] format, retain the complete
+% eigenspectrum, and save the FREQ output beside that participant's dyad.
+% The synchronized bad_segments union is passed to NetworkEstimation so both
+% covariance matrices use identical valid samples. Existing valid outputs are
+% skipped unless overwrite is enabled, making interrupted runs resumable.
+
+if config.block1.run
+    [dyadManifest,coreSummary] = EmpaticMirroring_RunCoreAnalysis( ...
+        dyadManifest,config,networkEstimatorContract);
+    fprintf('Core FREQ-NESS outputs available: %d\n', ...
+        coreSummary.availableCount);
+else
+    fprintf(['Core FREQ-NESS analysis is configured but disabled. ' ...
+        'Review the provisional 1.5 Hz beat frequency and set ' ...
+        'config.block1.run = true for the production run.\n']);
+end

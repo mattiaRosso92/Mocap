@@ -52,6 +52,25 @@ config.markers.expectedCount = 22;
 % Exact optional-argument convention used by FREQNESS NetworkEstimation.
 config.network.badSegmentsOptionName = "bad_segments";
 
+% BLOCK 1 - NETWORK ESTIMATION. Match FREQNESS_DyadicDance_Mocap naming
+% and frequency construction. The provisional beat frequency is 1.5 Hz;
+% replace it when the definitive stimulus timing is available. Model and
+% participant share the teacher-video stimulus, hence the same frequency
+% vector is assigned to both members of every artificial dyad.
+config.block1.run = false;
+config.block1.beat_frex = 1.5*ones(1,2);
+frex_vector = (config.block1.beat_frex(1)/8: ...
+    config.block1.beat_frex(1)/8:config.block1.beat_frex(1)*4)';
+config.block1.frex = repmat(frex_vector,1,2);
+config.block1.duration = config.timing.analysisDurationSeconds;
+config.block1.fwidth = [];
+config.block1.filter = 'logarithmic';
+config.block1.regularisation = 0.01;
+config.block1.ncomps = 4;
+config.block1.overwrite_flag = false;
+config.block1.save_flag = true;
+config.block1.max_dyads = inf;
+
 config.naming.teacherFolder = "Michalina";
 config.output.figureVisible = "on";
 

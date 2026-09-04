@@ -10,7 +10,7 @@ must not be edited for study-specific behavior.
 |:---:|---|---|
 | ☑ | Import and handle data | **Complete:** folder normalization, recursive import, frame/rate/name/marker/gap QC, explicit file- and participant-level exclusions, and the processed-MAT timing rule are implemented. |
 | ☑ | Create artificial dyads | **Complete:** every eligible participant trial is paired with its condition-labelled model recording and stored as `[coordinates x time x participants]`, with synchronized bad-sample lists. |
-| ☐ | Run toolbox analyses | **Blocked:** `FREQNESS_NetworkEstimation_Mocap` does not yet accept `bad_segments` or exclude them from both covariance matrices. This must be fixed before analysis. |
+| ◐ | Run toolbox analyses | **BLOCK 1 implemented:** the resumable FREQ runner passes synchronized `bad_segments`, validates outputs, and saves beside each dyad. Production execution remains off pending review of the provisional 1.5 Hz beat frequency. |
 | ☐ | Replicate with previously excluded participants | Not started. Repair excluded recordings where scientifically defensible, document every repair, rerun the identical pipeline, and compare the sensitivity results with the primary analysis. |
 
 ## Pipeline
@@ -28,12 +28,16 @@ Run `EmpaticMirroring_MainPipeline.m` from MATLAB. The implemented stages:
 7. prepares each model file once at 120 Hz, including its resampled
    bad-sample mask;
 8. builds every artificial dyad by reusing the prepared model and aligning
-   it with one participant recording; and
+   it with one participant recording;
 9. saves the dyadic input and synchronized bad-sample indices required for
-   later covariance exclusion.
+   covariance exclusion; and
+10. when enabled, runs resumable FREQ network estimation and saves each core
+    output beside its artificial-dyad input.
 
 The QC stage writes `recording_exclusions.csv`, `participant_qc_summary.csv`,
 `participant_exclusions.csv`, and `model_exclusions.csv` to `outputs/qc/`.
+Core estimation additionally writes `core_analysis_manifest.csv` with the
+output path and created, existing, or error status of every selected dyad.
 Every excluded recording can carry multiple standardized reasons so that,
 for example, an annotation, a short duration, and an incomplete marker layout
 are preserved rather than reduced to one label.
@@ -79,10 +83,24 @@ pipeline run. The prepared result is cached in memory and reused for every
 matching participant; an auditable copy is saved in `outputs/preprocessed_models/`.
 Artificial dyads are saved in `outputs/participants/<ID>/` using the
 DyadicDance convention, with the model first and participant second. The dyad
-file contains both member-specific and shared bad-sample lists. Future core
-`FREQ` outputs will be written alongside these inputs in the same participant
-folder. This dedicated results tree keeps raw QTM exports immutable and mirrors
+file contains both member-specific and shared bad-sample lists. Core `FREQ`
+outputs are written alongside these inputs in the same participant folder.
+This dedicated results tree keeps raw QTM exports immutable and mirrors
 the template pipeline's separation of raw data and generated results.
+
+## Core FREQ-NESS analysis
+
+BLOCK 1 mirrors `FREQNESS_DyadicDance_Mocap`: four components are retained,
+the `FREQ` output contains the complete checked eigenspectrum,
+frequencies are also stored normalized by `beat_frex`, existing outputs are
+skipped unless `overwrite_flag` is enabled, and every result retains its
+`marker_reference`, dyad metadata, sampling rate, and analysis settings.
+
+The current provisional `beat_frex` is 1.5 Hz for both members of each
+artificial dyad. Following the template, `frex` contains 32 points from
+beat/8 to beat×4 in beat/8 increments (0.1875–6 Hz). This value is explicitly
+documented and must be reviewed against definitive stimulus timing before the
+production run. `config.block1.run` is therefore `false` by default.
 
 Generated QC tables and figures are written to `outputs/`, which is ignored by
 Git. Raw `.mat`, `.qtm`, and `.avi` files are also ignored repository-wide.

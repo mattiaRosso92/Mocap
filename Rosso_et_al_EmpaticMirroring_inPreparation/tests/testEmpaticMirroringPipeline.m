@@ -10,8 +10,13 @@ function setupOnce(testCase)
 
 testRoot = fileparts(mfilename('fullpath'));
 studyRoot = fileparts(testRoot);
+repositoryRoot = fileparts(studyRoot);
+toolboxRoot = fullfile(repositoryRoot,'FREQNESS_Mocap_Toolbox');
 addpath(fullfile(studyRoot,'functions'));
+addpath(fullfile(toolboxRoot,'FREQNESS_Functions'));
+addpath(fullfile(toolboxRoot,'FREQNESS_ExternalFunctions'));
 testCase.TestData.studyRoot = studyRoot;
+testCase.TestData.toolboxRoot = toolboxRoot;
 
 end
 
@@ -207,6 +212,88 @@ verifyEqual(testCase,manifest.ParticipantFile,"participant.mat");
 verifyEqual(testCase,manifest.TeacherFile,"model.mat");
 verifyEqual(testCase,manifest.PairingStatus,"matched");
 verifyTrue(testCase,manifest.ReadyForAlignment);
+
+end
+
+
+function testProvisionalCoreFrequencyGrid(testCase)
+
+config = EmpaticMirroring_Config();
+expectedBeatFrequency = 1.5*ones(1,2);
+expectedFrexVector = (1.5/8:1.5/8:1.5*4)';
+
+verifyEqual(testCase,config.block1.beat_frex,expectedBeatFrequency);
+verifyEqual(testCase,config.block1.frex, ...
+    repmat(expectedFrexVector,1,2));
+verifyEqual(testCase,config.block1.ncomps,4);
+verifyFalse(testCase,config.block1.run);
+
+end
+
+
+function testCoreAnalysisIsResumableAndUsesBadSegments(testCase)
+
+temporaryRoot = string(tempname);
+mkdir(temporaryRoot);
+cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
+
+config = EmpaticMirroring_Config();
+config.paths.qcOutputRoot = fullfile(temporaryRoot,'qc');
+config.block1.beat_frex = 1.5*ones(1,2);
+config.block1.frex = repmat([1;2],1,2);
+config.block1.duration = 2;
+config.block1.fwidth = repmat([0.3;0.4],1,2);
+config.block1.regularisation = 0.01;
+config.block1.ncomps = 2;
+config.block1.overwrite_flag = false;
+config.block1.save_flag = true;
+config.block1.max_dyads = inf;
+
+participantOutputRoot = fullfile(temporaryRoot,'participants','001');
+mkdir(participantOutputRoot);
+dyadFile = fullfile(participantOutputRoot, ...
+    'S001_T01_mir_low_v1_mov1.mat');
+rng(109);
+markData = randn(6,240,2);
+srate = 120;
+bad_segments = [20 30];
+markData(:,bad_segments,:) = 0;
+marker_reference = markData(:,1,:);
+dyad_info = struct('subject',"001",'trialIndex',1);
+save(dyadFile,'markData','srate','bad_segments', ...
+    'marker_reference','dyad_info');
+
+DyadFile = string(dyadFile);
+DyadStatus = "created";
+dyadManifest = table(DyadFile,DyadStatus);
+networkEstimatorContract = ...
+    EmpaticMirroring_CheckNetworkEstimatorContract(config);
+
+[firstManifest,firstSummary] = EmpaticMirroring_RunCoreAnalysis( ...
+    dyadManifest,config,networkEstimatorContract);
+
+verifyEqual(testCase,firstManifest.CoreStatus,"created");
+verifyEqual(testCase,firstSummary.createdCount,1);
+verifyEqual(testCase,firstSummary.errorCount,0);
+verifyTrue(testCase,isfile(firstManifest.CoreFile));
+verifyEqual(testCase,fileparts(firstManifest.CoreFile), ...
+    string(participantOutputRoot));
+
+savedCore = load(firstManifest.CoreFile,'FREQ','beat_frex','srate');
+verifyEqual(testCase,savedCore.beat_frex,config.block1.beat_frex);
+verifyEqual(testCase,savedCore.srate,srate);
+verifyEqual(testCase,savedCore.FREQ.frex,config.block1.frex);
+verifyEqual(testCase,savedCore.FREQ.frex_norm, ...
+    config.block1.frex./config.block1.beat_frex);
+verifyEqual(testCase,savedCore.FREQ.bad_segments,bad_segments);
+verifySize(testCase,savedCore.FREQ.evals,[6 2 2]);
+verifySize(testCase,savedCore.FREQ.evecs,[6 2 2 2]);
+
+[secondManifest,secondSummary] = EmpaticMirroring_RunCoreAnalysis( ...
+    dyadManifest,config,networkEstimatorContract);
+verifyEqual(testCase,secondManifest.CoreStatus,"existing");
+verifyEqual(testCase,secondSummary.existingCount,1);
+verifyEqual(testCase,secondSummary.createdCount,0);
 
 end
 
