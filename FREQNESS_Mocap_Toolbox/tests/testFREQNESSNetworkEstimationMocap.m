@@ -320,6 +320,45 @@ end
 end
 
 
+function testSingleParticipantOutputContract(testCase)
+
+rng(101);
+nCoordinates = 6;
+srate = 120;
+duration = 2;
+nSamplesToKeep = duration*srate;
+frex = [1 2];
+fwidth = [0.2 0.3];
+regularisation = 0.05;
+ncomps = 1;
+data = randn(nCoordinates,480);
+
+FREQ = FREQNESS_NetworkEstimation_Mocap(data,frex,srate, ...
+    'duration',duration,'fwidth',fwidth, ...
+    'regularisation',regularisation,'ncomps',ncomps);
+
+verifyEqual(testCase,size(FREQ.evals,1),nCoordinates);
+verifyEqual(testCase,size(FREQ.evals,2),numel(frex));
+verifyEqual(testCase,size(FREQ.evals,3),1);
+
+verifyEqual(testCase,size(FREQ.evecs,1),nCoordinates);
+verifyEqual(testCase,size(FREQ.evecs,2),ncomps);
+verifyEqual(testCase,size(FREQ.evecs,3),numel(frex));
+verifyEqual(testCase,size(FREQ.evecs,4),1);
+verifyEqual(testCase,size(FREQ.pats),size(FREQ.evecs));
+
+verifyEqual(testCase,size(FREQ.ts,1),ncomps);
+verifyEqual(testCase,size(FREQ.ts,2),nSamplesToKeep);
+verifyEqual(testCase,size(FREQ.ts,3),numel(frex));
+verifyEqual(testCase,size(FREQ.ts,4),1);
+
+verifyEqual(testCase,FREQ.srate,srate);
+verifyEqual(testCase,FREQ.duration,duration);
+verifyEqual(testCase,FREQ.regularisation,regularisation);
+
+end
+
+
 function outputData = replaceDataValue(inputData,replacementValue)
 
 outputData = inputData;

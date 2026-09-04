@@ -66,11 +66,13 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 %                    [nMarkerCoordinates x nFrex x nParticipants]. This
 %                    always contains all eigenvalues, independently of
 %                    ncomps.
-%      - FREQ.evecs : Retained eigenvectors.
-%      - FREQ.pats  : Retained spatial activation patterns.
-%      - FREQ.ts    : Retained network time series.
-%                If more participants are given as input, outputs will be
-%                stored along an extra dimension for every individual.
+%      - FREQ.evecs : Retained eigenvectors
+%                    [nMarkerCoordinates x ncomps x nFrex x nParticipants].
+%      - FREQ.pats  : Retained spatial activation patterns, with the same
+%                    component dimensions as FREQ.evecs.
+%      - FREQ.ts    : Retained component time series
+%                    [ncomps x nTime x nFrex x nParticipants].
+%                   Additional fields support second-order functions.
 %
 % ------------------------------------------------------------------------
 %  AUTHORS:
@@ -359,29 +361,21 @@ for subi = 1:nsubs
 
 end
 
-
-% If only 1 single participant was analyzed, squeeze the outputs before
-% final assignment
-if nsubs == 1
-    GEDevals = squeeze(GEDevals);
-    GEDevecs = squeeze(GEDevecs);
-    GEDpats  = squeeze(GEDpats);
-    GEDts    = squeeze(GEDts);
-end
-
 % Assign outputs to structure
-FREQ.evals = GEDevals; % complete normalized eigenspectrum
-FREQ.evecs = GEDevecs; % eigenvectors
-FREQ.pats  = GEDpats;  % spatial activation patterns
-FREQ.ts    = GEDts;    % time series
+FREQ.evals = GEDevals;    % complete normalized eigenspectrum
+FREQ.evecs = GEDevecs;    % eigenvectors
+FREQ.pats  = GEDpats;     % spatial activation patterns
+FREQ.ts    = GEDts;       % time series
 if shared_frequencies
-    FREQ.frex = frex;
+    FREQ.frex = frex;     % analyzed frequencies shared by all participants
 else
-    FREQ.frex = frex_by_participant;
+    FREQ.frex = frex_by_participant; % participant-specific analyzed frequencies
 end
-FREQ.fwhm = fwidth_all;
+FREQ.fwhm = fwidth_all;                  % corresponding filter widths
+FREQ.srate = srate;                      % sampling rate for secondary functions
 FREQ.duration = pnts2keep/srate;        % analyzed duration in seconds
 FREQ.bad_segments = idx2remove;         % excluded sample indices
+FREQ.regularisation = regularisation;   % covariance shrinkage factor
 
 
 end
