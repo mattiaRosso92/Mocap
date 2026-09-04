@@ -54,6 +54,10 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 %  - 'ncomps'          : Number of components to retain per frequency.
 %                        Default: 30.
 %
+%  - 'bad_segments'    : Vector of sample indices (e.g., 1-based timepoints)
+%                        to be excluded from the analysis.
+%                        These will be removed from covariance computations.
+%
 % ------------------------------------------------------------------------
 %  OUTPUT ARGUMENTS:
 % ------------------------------------------------------------------------
@@ -62,11 +66,13 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 %                    [nMarkerCoordinates x nFrex x nParticipants]. This
 %                    always contains all eigenvalues, independently of
 %                    ncomps.
-%      - FREQ.evecs : Retained eigenvectors.
-%      - FREQ.pats  : Retained spatial activation patterns.
-%      - FREQ.ts    : Retained network time series.
-%                If more participants are given as input, outputs will be
-%                stored along an extra dimension for every individual.
+%      - FREQ.evecs : Retained eigenvectors
+%                    [nMarkerCoordinates x ncomps x nFrex x nParticipants].
+%      - FREQ.pats  : Retained spatial activation patterns, with the same
+%                    component dimensions as FREQ.evecs.
+%      - FREQ.ts    : Retained component time series
+%                    [ncomps x nTime x nFrex x nParticipants].
+%                   Additional fields support second-order functions.
 %
 % ------------------------------------------------------------------------
 %  AUTHORS:
@@ -87,17 +93,44 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 % contrast enhancement, and dimension reduction in multichannel electrophysiology')
 
 
+%% Check mandatory inputs
+
+if nargin < 3
+    error('data, frex, and srate are required inputs.');
+end
+
+if ~isnumeric(data) || ~isreal(data) || isempty(data) || ...
+        ndims(data) > 3 || any(~isfinite(data(:)))
+    error(['data must be a non-empty, real, finite numeric array in ' ...
+        '[marker coordinates x time] or ' ...
+        '[marker coordinates x time x participants] format.']);
+end
+
+if ~isnumeric(srate) || ~isreal(srate) || ~isscalar(srate) || ...
+        ~isfinite(srate) || srate <= 0
+    error('srate must be one positive finite scalar.');
+end
+
+if ~isnumeric(frex) || ~isreal(frex) || isempty(frex) || ...
+        ndims(frex) > 2 || any(~isfinite(frex(:))) || any(frex(:) <= 0)
+    error('frex must contain positive finite frequencies.');
+end
+
+if any(frex(:) >= srate/2)
+    error('All frequencies in frex must be lower than the Nyquist frequency.');
+end
+
 %% Handle Optional Arguments
 
 % Define default values
-opts = struct('duration', [], 'fwidth', [], 'filter', 'logarithmic', 'regularisation', 0.01, 'ncomps', 30);
+opts = struct('duration', [], 'fwidth', [], 'filter', 'logarithmic', ...
+    'regularisation', 0.01, 'ncomps', 30, 'bad_segments',[]);
 
 % Parse name-value pair arguments
 opts = parse_name_value_pairs(opts, varargin{:});
 
 % If duration is empty, use full data duration
 if isempty(opts.duration)
-    % disp("Duration not provided. Using full data duration.");
     opts.duration = size(data, 2) / srate;
 end
 
@@ -107,28 +140,76 @@ fwidth         = opts.fwidth;
 filter         = opts.filter;
 regularisation = opts.regularisation;
 ncomps         = opts.ncomps;
+idx2remove     = opts.bad_segments; % in the current version, these apply to all subjects in the input
+
+% Validate optional inputs
+if ~isempty(duration) && (~isnumeric(duration) || ~isreal(duration) || ...
+        ~isscalar(duration) || ~isfinite(duration) || duration <= 0)
+    error('duration must be one positive finite scalar expressed in seconds.');
+end
+
+if ~(ischar(filter) || (isstring(filter) && isscalar(filter))) || ...
+        ~(strcmpi(filter,'logarithmic') || strcmpi(filter,'linear'))
+    error('filter must be either ''logarithmic'' or ''linear''.');
+end
+
+if ~isnumeric(regularisation) || ~isreal(regularisation) || ...
+        ~isscalar(regularisation) || ~isfinite(regularisation) || ...
+        regularisation < 0 || regularisation >= 1
+    error('regularisation must be one finite scalar in the interval [0, 1).');
+end
 
 if ~isnumeric(ncomps) || ~isreal(ncomps) || ~isscalar(ncomps) || ...
-        ~isfinite(ncomps) || ncomps ~= round(ncomps) || ncomps < 1 || ...
-        ncomps > size(data,1)
-    error('ncomps must be an integer from 1 to the number of marker coordinates.');
+        ~isfinite(ncomps) || ncomps ~= round(ncomps) || ncomps < 1
+    error('ncomps must be one positive integer.');
+end
+
+
+if ncomps > size(data,1)
+    error('ncomps cannot exceed the number of marker coordinates.');
 end
 
 % Compute necessary parameters
 pnts2keep = duration * srate;
 
-% Check input size to verify if more than one participant is being analyzed
-if ndims(data) < 3
-    nsubs = 1;
-else
-    nsubs = size(data,3);
+if abs(pnts2keep - round(pnts2keep)) > eps(max(1,pnts2keep))
+    error('duration multiplied by srate must define an integer number of samples.');
+end
+pnts2keep = round(pnts2keep);
+
+% Check duration
+if pnts2keep > size(data,2)
+    error('Requested duration exceeds the length of the data.');
 end
 
-% Normalize shared or participant-specific frequency input
-if ~isnumeric(frex) || ~isreal(frex) || isempty(frex) || ...
-        any(~isfinite(frex(:))) || any(frex(:) <= 0)
-    error('frex must contain positive finite frequencies.');
+if pnts2keep < 2
+    error('The requested duration must contain at least two samples.');
 end
+
+if ~isempty(idx2remove) && (~isnumeric(idx2remove) || ...
+        ~isreal(idx2remove) || ~isvector(idx2remove) || ...
+        any(~isfinite(idx2remove)) || ...
+        any(idx2remove ~= round(idx2remove)))
+    error('bad_segments must contain finite integer sample indices.');
+end
+
+idx2remove = unique(idx2remove(:)','stable');
+
+% Check that the range of the bad segments falls within the requested duration
+if any(idx2remove < 1) || any(idx2remove > pnts2keep)
+    error('One or more indices in bad_segments fall outside the analyzed time range.');
+end
+
+% Define good indexes to keep for computing the covariance matrices
+idx2cov = setdiff(1:pnts2keep,idx2remove);
+if numel(idx2cov) < 2
+    error('Fewer than two samples remain for covariance estimation.');
+end
+
+% Check input size to verify if more than one participant is being analyzed
+nsubs = size(data,3);
+
+% Normalize shared or participant-specific frequency input
 if isvector(frex)
     frex = sort(frex(:),'ascend');
     nfrex = numel(frex);
@@ -158,14 +239,16 @@ if isempty(fwidth)
         [~,idx] = min(abs(frex_all-frex_by_participant(1,subi)));
         starting_width(subi) = reference_widths(idx);
     end
-elseif isnumeric(fwidth) && isscalar(fwidth) && ...
+elseif isnumeric(fwidth) && isreal(fwidth) && isscalar(fwidth) && ...
         isfinite(fwidth) && fwidth > 0
     starting_width = repmat(fwidth,1,nsubs);
-elseif isnumeric(fwidth) && isvector(fwidth) && ...
-        numel(fwidth) == nfrex && all(isfinite(fwidth)) && all(fwidth > 0)
+elseif isnumeric(fwidth) && isreal(fwidth) && isvector(fwidth) && ...
+        numel(fwidth) == nfrex && all(isfinite(fwidth(:))) && ...
+        all(fwidth(:) > 0)
     fwidth_all = repmat(fwidth(:),1,nsubs);
     starting_width = [];
-elseif isnumeric(fwidth) && isequal(size(fwidth),[nfrex nsubs]) && ...
+elseif isnumeric(fwidth) && isreal(fwidth) && ...
+        isequal(size(fwidth),[nfrex nsubs]) && ...
         all(isfinite(fwidth(:))) && all(fwidth(:) > 0)
     fwidth_all = fwidth;
     starting_width = [];
@@ -189,52 +272,75 @@ if ~isempty(starting_width)
     end
 end
 
-%% GED Computation
-% disp(['Data given for ' num2str(nsubs) ' participants']);
+if ~isnumeric(fwidth_all) || ~isreal(fwidth_all) || ...
+        any(~isfinite(fwidth_all(:))) || any(fwidth_all(:) <= 0)
+    error('fwidth must contain positive finite values.');
+end
 
-% Initialize GED outputs (subjects as last dimension)
-FREQ = []; % output structure
+%% Generalized eigendecomposition (GED)
+
+fprintf('\nFREQNESS Network Estimation: estimating frequency-resolved networks for %d participants.\n', nsubs);
+
+% Initialize output structure
+FREQ = [];
+
+% Initialize GED outputs
 GEDevals = zeros(size(data,1), nfrex, nsubs);
 [GEDevecs, GEDpats] = deal(zeros(size(data,1), ncomps, nfrex, nsubs));
-GEDts = zeros(ncomps, size(data,2), nfrex, nsubs);
+GEDts = zeros(ncomps, pnts2keep, nfrex, nsubs);
 
-% Run FREQ-NESS on each subject, separately
+% Loop over participants (also works with one single participant)
 for subi = 1:nsubs
+    disp(['FREQNESS Network Estimation: participant #' num2str(subi)]);
 
-    % Assign broadband marker data from each participant
-    broadData = data(:, 1:pnts2keep, subi); % subi indexing works even if singleton
+    % Assign broadband marker data
+    broadData = data(:, 1:pnts2keep, subi);
 
-    % Perform frequency-resolved brain network separation via GED
+    % Remove bad segments, if any bad segments is provided as input
+    if ~isempty(idx2remove)
+        pct_removed = 100 * length(idx2remove) / pnts2keep;
+        disp(['Removing ' num2str(length(idx2remove)) ' bad timepoints ' ...
+            '(' num2str(pct_removed) '% of the input data).']);
+    end
+
+    % Compute and regularise the broadband covariance matrix once
+    covR = cov(broadData(:,idx2cov)');
+    evalsR = eig(covR);
+    covR = (1-regularisation)*covR + ...
+        regularisation * mean(evalsR) * eye(size(covR));
+
+    % Perform frequency-resolved network separation via GED
     for frexi = 1:nfrex % loop over input frequencies
-        % display(['Processing frequency #' num2str(frexi)])
+        disp(['Estimating network at ' ...
+            num2str(frex_by_participant(frexi,subi)) ' Hz'])
 
         % Filter data
         narrowData = filterFGx(broadData,srate, ...
-            frex_by_participant(frexi,subi),fwidth_all(frexi,subi),0);
+            frex_by_participant(frexi,subi),fwidth_all(frexi,subi),0); % turn the last argument to 1 to visualize the filter
 
-        % Compute covariance matrices
-        covS = cov(narrowData');
-        covR = cov(broadData');
+        % Compute narrowband covariance matrix
+        covS = cov(narrowData(:,idx2cov)');
 
-        % Regularisation (to bring covariance matrices to full rank)
+        % Regularisation (to bring the covariance matrix to full rank)
         covS = covS  + 1e-6*eye(size(covS)); % regularise the S covariance matrix by adding a small perturbation/noise
-        evalsR = eig(covR ); % re-compute eigenvalues of R covariance matrix for its regularisation
-        covR  = (1-regularisation)*covR  + regularisation * mean(evalsR) * eye(size(covR)); % regularise the R covariance matrix
 
         % Eigendecomposition
         [evecs,evals] = eig(covS ,covR);
         [evals,sidx]  = sort( diag(evals),'descend' ); % the first output returns sorted evals extracted from diagonal
         evecs = evecs(:,sidx);          % sort eigenvectors
+        if ~isfinite(sum(evals)) || abs(sum(evals)) < realmin
+            error('Generalized eigenvalues cannot be normalized because their sum is zero or non-finite.');
+        end
         evals = evals.*100./sum(evals); % normalize eigenvalues to percent variance explained
         % Assign temporary variables to output
         GEDevecs(:,:,frexi,subi) = evecs(:,1:ncomps);
         GEDevals(:,frexi,subi) = evals;
 
-        % Brain networks' spatial activation patterns and time series
+        % Networks' spatial activation patterns and time series
         for compi = 1:ncomps
 
             % Compute spatial activation patterns and flip sign
-            GEDpats(:,compi,frexi,subi) = GEDevecs(:,compi,frexi,subi)' * covS; % get component
+            GEDpats(:,compi,frexi,subi) = covS * GEDevecs(:,compi,frexi,subi); % get component
             [~,idxmax] = max(abs(GEDpats(:,compi,frexi,subi)));     % find max magnitude
             GEDpats(:,compi,frexi,subi)  = GEDpats(:,compi,frexi,subi) * sign(GEDpats(idxmax,compi,frexi,subi)); % possible sign flip
 
@@ -255,27 +361,21 @@ for subi = 1:nsubs
 
 end
 
-
-% If only 1 single participant was analyzed, squeeze the outputs before
-% final assignment
-if nsubs == 1
-    GEDevals = squeeze(GEDevals);
-    GEDevecs = squeeze(GEDevecs);
-    GEDpats  = squeeze(GEDpats);
-    GEDts    = squeeze(GEDts);
-end
-
 % Assign outputs to structure
-FREQ.evals = GEDevals; % complete normalized eigenspectrum
-FREQ.evecs = GEDevecs; % eigenvectors
-FREQ.pats  = GEDpats;  % spatial activation patterns
-FREQ.ts    = GEDts;    % time series
+FREQ.evals = GEDevals;    % complete normalized eigenspectrum
+FREQ.evecs = GEDevecs;    % eigenvectors
+FREQ.pats  = GEDpats;     % spatial activation patterns
+FREQ.ts    = GEDts;       % time series
 if shared_frequencies
-    FREQ.frex = frex;
+    FREQ.frex = frex;     % analyzed frequencies shared by all participants
 else
-    FREQ.frex = frex_by_participant;
+    FREQ.frex = frex_by_participant; % participant-specific analyzed frequencies
 end
-FREQ.fwhm = fwidth_all;
+FREQ.fwhm = fwidth_all;                  % corresponding filter widths
+FREQ.srate = srate;                      % sampling rate for secondary functions
+FREQ.duration = pnts2keep/srate;        % analyzed duration in seconds
+FREQ.bad_segments = idx2remove;         % excluded sample indices
+FREQ.regularisation = regularisation;   % covariance shrinkage factor
 
 
 end
