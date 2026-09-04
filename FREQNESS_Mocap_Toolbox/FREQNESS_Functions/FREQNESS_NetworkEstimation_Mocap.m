@@ -275,20 +275,24 @@ if ~isnumeric(fwidth_all) || ~isreal(fwidth_all) || ...
     error('fwidth must contain positive finite values.');
 end
 
-%% GED Computation
-% disp(['Data given for ' num2str(nsubs) ' participants']);
+%% Generalized eigendecomposition (GED)
 
-% Initialize GED outputs (subjects as last dimension)
-FREQ = []; % output structure
+fprintf('\nFREQNESS Network Estimation: estimating frequency-resolved networks for %d participants.\n', nsubs);
+
+% Initialize output structure
+FREQ = [];
+
+% Initialize GED outputs
 GEDevals = zeros(size(data,1), nfrex, nsubs);
 [GEDevecs, GEDpats] = deal(zeros(size(data,1), ncomps, nfrex, nsubs));
 GEDts = zeros(ncomps, pnts2keep, nfrex, nsubs);
 
-% Run FREQ-NESS on each subject, separately
+% Loop over participants (also works with one single participant)
 for subi = 1:nsubs
+    disp(['FREQNESS Network Estimation: participant #' num2str(subi)]);
 
-    % Assign broadband marker data from each participant
-    broadData = data(:, 1:pnts2keep, subi); % subi indexing works even if singleton
+    % Assign broadband marker data
+    broadData = data(:, 1:pnts2keep, subi);
 
     % Remove bad segments, if any bad segments is provided as input
     if ~isempty(idx2remove)
@@ -297,22 +301,26 @@ for subi = 1:nsubs
             '(' num2str(pct_removed) '% of the input data).']);
     end
 
-    % Perform frequency-resolved brain network separation via GED
+    % Compute and regularise the broadband covariance matrix once
+    covR = cov(broadData(:,idx2cov)');
+    evalsR = eig(covR);
+    covR = (1-regularisation)*covR + ...
+        regularisation * mean(evalsR) * eye(size(covR));
+
+    % Perform frequency-resolved network separation via GED
     for frexi = 1:nfrex % loop over input frequencies
-        % display(['Processing frequency #' num2str(frexi)])
+        disp(['Estimating network at ' ...
+            num2str(frex_by_participant(frexi,subi)) ' Hz'])
 
         % Filter data
         narrowData = filterFGx(broadData,srate, ...
-            frex_by_participant(frexi,subi),fwidth_all(frexi,subi),0);
+            frex_by_participant(frexi,subi),fwidth_all(frexi,subi),0); % turn the last argument to 1 to visualize the filter
 
-        % Compute covariance matrices
+        % Compute narrowband covariance matrix
         covS = cov(narrowData(:,idx2cov)');
-        covR = cov(broadData(:,idx2cov)');
 
-        % Regularisation (to bring covariance matrices to full rank)
+        % Regularisation (to bring the covariance matrix to full rank)
         covS = covS  + 1e-6*eye(size(covS)); % regularise the S covariance matrix by adding a small perturbation/noise
-        evalsR = eig(covR ); % re-compute eigenvalues of R covariance matrix for its regularisation
-        covR  = (1-regularisation)*covR  + regularisation * mean(evalsR) * eye(size(covR)); % regularise the R covariance matrix
 
         % Eigendecomposition
         [evecs,evals] = eig(covS ,covR);
@@ -326,11 +334,11 @@ for subi = 1:nsubs
         GEDevecs(:,:,frexi,subi) = evecs(:,1:ncomps);
         GEDevals(:,frexi,subi) = evals;
 
-        % Brain networks' spatial activation patterns and time series
+        % Networks' spatial activation patterns and time series
         for compi = 1:ncomps
 
             % Compute spatial activation patterns and flip sign
-            GEDpats(:,compi,frexi,subi) = GEDevecs(:,compi,frexi,subi)' * covS; % get component
+            GEDpats(:,compi,frexi,subi) = covS * GEDevecs(:,compi,frexi,subi); % get component
             [~,idxmax] = max(abs(GEDpats(:,compi,frexi,subi)));     % find max magnitude
             GEDpats(:,compi,frexi,subi)  = GEDpats(:,compi,frexi,subi) * sign(GEDpats(idxmax,compi,frexi,subi)); % possible sign flip
 

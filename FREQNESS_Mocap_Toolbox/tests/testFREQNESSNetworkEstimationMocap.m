@@ -263,6 +263,63 @@ verifySize(testCase,FREQ.evecs,[6 2 2 2]);
 end
 
 
+function testGEDLoopParity(testCase)
+
+rng(97);
+nCoordinates = 6;
+nSamples = 480;
+nParticipants = 2;
+srate = 120;
+frex = [1 1.5; 2 2.5];
+fwidth = [0.2 0.25; 0.3 0.35];
+regularisation = 0.01;
+ncomps = 2;
+data = randn(nCoordinates,nSamples,nParticipants);
+
+commandWindowOutput = evalc(['FREQ = FREQNESS_NetworkEstimation_Mocap(' ...
+    'data,frex,srate,''fwidth'',fwidth,''regularisation'',' ...
+    'regularisation,''ncomps'',ncomps);']);
+
+verifySubstring(testCase,commandWindowOutput, ...
+    ['FREQNESS Network Estimation: estimating frequency-resolved ' ...
+    'networks for 2 participants.']);
+for participantIndex = 1:nParticipants
+    verifySubstring(testCase,commandWindowOutput, ...
+        ['FREQNESS Network Estimation: participant #' ...
+        num2str(participantIndex)]);
+
+    broadData = data(:,:,participantIndex);
+    covR = cov(broadData');
+    evalsR = eig(covR);
+    covR = (1-regularisation)*covR + ...
+        regularisation*mean(evalsR)*eye(size(covR));
+
+    for frequencyIndex = 1:size(frex,1)
+        verifySubstring(testCase,commandWindowOutput, ...
+            ['Estimating network at ' ...
+            num2str(frex(frequencyIndex,participantIndex)) ' Hz']);
+
+        narrowData = filterFGx(broadData,srate, ...
+            frex(frequencyIndex,participantIndex), ...
+            fwidth(frequencyIndex,participantIndex),0);
+        covS = cov(narrowData') + 1e-6*eye(nCoordinates);
+
+        for componentIndex = 1:ncomps
+            expectedPattern = covS * FREQ.evecs( ...
+                :,componentIndex,frequencyIndex,participantIndex);
+            [~,maximumIndex] = max(abs(expectedPattern));
+            expectedPattern = expectedPattern * ...
+                sign(expectedPattern(maximumIndex));
+            verifyEqual(testCase,FREQ.pats( ...
+                :,componentIndex,frequencyIndex,participantIndex), ...
+                expectedPattern,'AbsTol',1e-10);
+        end
+    end
+end
+
+end
+
+
 function outputData = replaceDataValue(inputData,replacementValue)
 
 outputData = inputData;
