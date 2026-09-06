@@ -44,6 +44,7 @@ participantCounts = zeros(design.nconds,1);
 frex2plot = firstCore.FREQ.frex_norm(:,1);
 marker_reference = firstCore.marker_reference;
 marklabels = defaultMarkerLabels(nCoordinates);
+bones = zeros(0,2);
 firstDyadFile = string(dyadManifest.DyadFile(eligibleRows(1)));
 if isfile(firstDyadFile)
     labelInput = load(firstDyadFile,'marklabels');
@@ -51,6 +52,16 @@ if isfile(firstDyadFile)
             numel(labelInput.marklabels) == nCoordinates/3
         marklabels = labelInput.marklabels;
     end
+end
+if nCoordinates/3 == config.markers.expectedCount
+    expectedLabels = string(config.markers.labels(:));
+    actualLabels = string(marklabels(:));
+    if ~isequal(lower(strtrim(actualLabels)),lower(strtrim(expectedLabels)))
+        error('EmpaticMirroring:VisualizationMarkerOrder', ...
+            ['The stored marker order differs from the study layout; ' ...
+             'bone links cannot be applied safely.']);
+    end
+    bones = config.markers.bones;
 end
 
 for condi = 1:design.nconds
@@ -139,7 +150,7 @@ if config.block5.save_flag
         'sem_pats','avg_ED','sem_ED','avg_pattern_correlation', ...
         'sem_pattern_correlation','frex2plot','participantCounts', ...
         'analysisRows','designTable','participantIds', ...
-        'marker_reference','marklabels','-v7.3');
+        'marker_reference','marklabels','bones','-v7.3');
 end
 
 coordinationGroup = summarizeCoordination(config,designTable);
@@ -155,7 +166,7 @@ figureFiles = strings(0,1);
 if config.block5.make_figures
     figureFiles = createGroupFigures(avg_evals,sem_evals,avg_pats, ...
         avg_ED,sem_ED,avg_pattern_correlation,frex2plot, ...
-        marker_reference,marklabels,coordinationGroup,phaseGroup, ...
+        marker_reference,marklabels,bones,coordinationGroup,phaseGroup, ...
         designTable,config);
 end
 
@@ -408,7 +419,7 @@ end
 
 function files = createGroupFigures(avg_evals,sem_evals,avg_pats, ...
     avg_ED,sem_ED,avg_pattern_correlation,frex,marker_reference, ...
-    marklabels,coordinationGroup,phaseGroup,designTable,config)
+    marklabels,bones,coordinationGroup,phaseGroup,designTable,config)
 
 files = strings(0,1);
 conditionLabels = designTable.Instruction + "-" + ...
@@ -474,7 +485,7 @@ for compi = config.block5.pattern_components
         'comp',compi, ...
         'srate',config.sampling.outputHz, ...
         'start',.25, ...
-        'bones',standardBones(numel(marklabels)), ...
+        'bones',bones, ...
         'plot_bones',config.block5.plot_pattern_bones, ...
         'plot_matrix',false, ...
         'animate',false, ...
@@ -496,19 +507,6 @@ newFiles = metricFigures(phaseGroup, ...
     'PhaseRQA',conditionLabels,config);
 files = [files(:);newFiles(:)];
 close all
-
-end
-
-
-function bones = standardBones(nmarkers)
-
-if nmarkers == 22
-    bones = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10; ...
-        7,11;11,12;12,13;14,15;14,16;15,16;15,17;17,18;18,19; ...
-        16,20;20,21;21,22];
-else
-    bones = zeros(0,2);
-end
 
 end
 

@@ -46,8 +46,17 @@ config.dyads.storageClass = "single";
 config.dyads.overwrite = false;
 config.dyads.save = true;
 
-% Every valid QTM export is expected to use the shared 22-marker layout.
-config.markers.expectedCount = 22;
+% Same 22-marker anatomy as the DyadicDance template and Markers_layout.docx,
+% remapped to this study's QTM export order. Apply the same links to model
+% and participant because both dyad members use this shared marker layout.
+config.markers.labels = {'L Head','R Head','T Head','Sternum', ...
+    'L Shoulder','L Elbow','L Wrist','L Hand','R Shoulder','R Elbow', ...
+    'R Wrist','R Hand','L Knee','R Knee','B Head','L Hip','R Hip', ...
+    'Pelvis','L Ankle','R Ankle','R Foot','L Foot'};
+config.markers.bones = [1,3;3,2;2,15;15,1;4,5;4,9;5,9;5,6;6,7;7,8; ...
+    9,10;10,11;11,12;18,16;18,17;16,17;16,13;13,19;19,22; ...
+    17,14;14,20;20,21];
+config.markers.expectedCount = numel(config.markers.labels);
 
 % Exact optional-argument convention used by FREQNESS NetworkEstimation.
 config.network.badSegmentsOptionName = "bad_segments";
@@ -135,7 +144,7 @@ config.block5.make_figures = true;
 config.block5.ncomps2keep = 4;
 config.block5.pattern_components = 1:2;
 config.block5.pattern_frequencies = [.25 .5 1 2];
-config.block5.plot_pattern_bones = false;
+config.block5.plot_pattern_bones = true;
 config.block5.max_dyads = inf;
 
 % BLOCK 6 - R-READY STATISTICAL EXPORT. Trial-level results remain in

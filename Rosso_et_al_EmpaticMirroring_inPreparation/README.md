@@ -187,8 +187,9 @@ pattern, and effective-dimensionality summaries are saved; complete trial
 arrays remain in their individual files. Coordination and phase-space
 summaries use the same order of averaging, and optional figures cover all 24
 factorial cells. Activation-pattern figures show only components 1 and 2 at
-`[0.25 0.5 1 2]` times the beat; bones are disabled so marker-wise XYZ
-activation weights remain visually unobstructed.
+`[0.25 0.5 1 2]` times the beat. Their skeleton uses the same anatomical
+links as the Dyadic Dance study, remapped to this study's QTM marker order;
+the identical bone matrix is applied to model and participant.
 
 BLOCK 6 exports one row per Participant × Instruction × Complexity ×
 Version × Movement × Meter × Component. It includes spatial mirroring,
