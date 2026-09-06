@@ -22,25 +22,28 @@ Run `EmpaticMirroring_MainPipeline.m` from MATLAB. The implemented stages:
 3. reports and plots the distribution of frame counts;
 4. flags recordings that cannot contain the requested aligned interval;
 5. parses instruction, complexity, version, and movement from filenames;
-6. excludes annotated or nonconforming files/folders, short recordings,
-   incomplete marker layouts, and recordings with fewer than two usable
-   samples while retaining them in the QC audit table;
-7. prepares each model file once at 120 Hz, including its resampled
+6. reorders every recording to one canonical, symmetric 13-marker subset,
+   interpolates retained-marker gaps up to 50 ms for filter continuity, and
+   excludes recordings with any longer retained-marker gap;
+7. excludes annotated or nonconforming files/folders, short recordings,
+   incomplete raw marker layouts, and recordings that violate the fixed
+   marker policy while retaining them in the QC audit table;
+8. prepares each model file once at 120 Hz, including its resampled
    bad-sample mask;
-8. builds every artificial dyad by reusing the prepared model and aligning
+9. builds every artificial dyad by reusing the prepared model and aligning
    it with one participant recording;
-9. saves the dyadic input and synchronized bad-sample indices required for
+10. saves the dyadic input and synchronized bad-sample indices required for
    covariance exclusion; and
-10. when enabled, runs resumable FREQ network estimation and saves each core
+11. when enabled, runs resumable FREQ network estimation and saves each core
     output beside its artificial-dyad input; and
-11. derives per-recording network landscapes and effective dimensionality,
+12. derives per-recording network landscapes and effective dimensionality,
     then writes a lightweight experimental-design catalogue; and
-12. computes per-recording spatial mirroring for each selected component,
+13. computes per-recording spatial mirroring for each selected component,
     plus compact summaries for statistics;
-13. computes phase-space RQA for temporal coordination;
-14. streams individual outputs to create participant-level group means, SEM,
+14. computes phase-space RQA for temporal coordination;
+15. streams individual outputs to create participant-level group means, SEM,
     and optional figures without saving dense trial-level copies; and
-15. averages repetitions within participant-condition cells and exports
+16. averages repetitions within participant-condition cells and exports
     long-format CSV/XLSX tables for R.
 
 The QC stage writes `recording_exclusions.csv`, `participant_qc_summary.csv`,
@@ -83,14 +86,21 @@ stretched, or truncated to a shorter common duration. The extra one-second
 filter guard is preferred but not part of the analysis interval; reflection
 padding supplies it where genuine boundary context is unavailable.
 
-Gaps of at most 50 ms were filled during the earlier QTM preprocessing. This
-pipeline does not interpolate again. Remaining gaps are reported, replaced by
-finite zero placeholders for storage, and listed as bad samples. The dyad's
-shared `bad_segments` vector is the union of model and participant masks, so
-both covariance matrices can use exactly the same valid timepoints. Historical
-QTM preprocessing also trimmed small movement-dependent intervals at the
-recording extremes; these are documented in the main script and require no
-additional operation.
+The raw 22-marker layout is checked first. Every recording is then reordered
+to the same symmetric 13-marker analysis set: four head markers, sternum,
+bilateral shoulders, knees, ankles, and feet. Elbows, wrists, hands, hips, and
+pelvis are excluded globally because their persistent model gaps would make
+cross-trial spatial patterns anatomically inconsistent. A retained-marker gap
+of at most 50 ms is interpolated marker-wise in MATLAB solely to make filtering
+continuous. Its original location remains in the marker-level mask and the
+dyad's shared `bad_segments` union, so it is not treated as an observed sample
+in covariance estimation. A longer gap in any retained marker excludes the
+recording; markers are never removed trial by trial. This avoids modifying the
+global FFT-based FREQ-NESS filter or introducing zero/noise placeholders.
+Historical QTM
+preprocessing also trimmed small movement-dependent intervals at the recording
+extremes; these are documented in the main script and require no additional
+operation.
 
 Each of the 18 condition-labelled model files is loaded, downsampled from 300
 to 120 Hz, aligned, and assigned its post-resampling bad-sample mask once per

@@ -500,20 +500,24 @@ for compi = config.block5.pattern_components
 end
 
 newFiles = metricFigures(coordinationGroup, ...
-    {'MIRROR'},'SpatialCoordination',conditionLabels,config);
+    {'MIRROR'},'SpatialCoordination',conditionLabels, ...
+    config.block3.metric_levels,config);
 files = [files(:);newFiles(:)];
 newFiles = metricFigures(phaseGroup, ...
     {'RR','L','DET','ENTR','TT','LAM','Vmax','DIV'}, ...
-    'PhaseRQA',conditionLabels,config);
+    'PhaseRQA',conditionLabels,config.block4.metric_levels,config);
 files = [files(:);newFiles(:)];
 close all
 
 end
 
 
-function files = metricFigures(results,fields,prefix,conditionLabels,config)
+function files = metricFigures(results,fields,prefix,conditionLabels, ...
+    metricLevels,config)
 
 files = strings(0,1);
+metricLabels = compose('%g',metricLevels) + " x beat (" + ...
+    compose('%.3g',metricLevels*config.block1.beat_frex(1)) + " Hz)";
 for componenti = 1:numel(results)
     for fieldi = 1:numel(fields)
         field = fields{fieldi};
@@ -530,7 +534,7 @@ for componenti = 1:numel(results)
         xtickangle(90);
         title(sprintf('%s %s - Component %d',prefix,field, ...
             results(componenti).Component));
-        legend("Metric " + string(1:size(mu,2)),'Location','best');
+        legend(metricLabels,'Location','best');
         grid on
         name = sprintf('%s_%s_Comp%d',prefix,field, ...
             results(componenti).Component);

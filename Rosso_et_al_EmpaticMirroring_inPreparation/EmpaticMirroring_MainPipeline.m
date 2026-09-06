@@ -43,6 +43,10 @@ assert(networkEstimatorContract.ReadyForNetworkEstimation, ...
 % Earlier QTM preprocessing trimmed small edge intervals (movement 1: about
 % 1.26 s at the start and 5.12 s at the end; movement 2: about 0.26 s and
 % 2.11 s). These historical trims are documented but need no extra action.
+% MARKER POLICY: every file is reordered to the same symmetric 13-marker
+% subset. Gaps <=50 ms are interpolated marker-wise only to maintain filter
+% continuity and remain flagged as bad samples. A longer gap in any retained
+% marker excludes that recording; the FREQ-NESS filter is not modified.
 
 frameQC = EmpaticMirroring_FrameCountQC(config);
 
@@ -82,9 +86,12 @@ fprintf('Review QC outputs in: %s\n\n',config.paths.qcOutputRoot);
 
 %% 4. Materialize artificial dyads in the DyadicDance input format
 
-% markData is [XYZ marker coordinates x time x participants], ordered model
-% then participant. bad_segments is the synchronized union of the two
-% participant-specific lists, so both covariance matrices use the same times.
+% markData is [39 canonical XYZ coordinates x time x participants], ordered
+% model then participant. bad_segments is the synchronized union of the two
+% original-missing lists, so both covariance matrices use the same observed
+% times even though short interpolations keep the stored signal continuous.
+% Recordings with long retained-marker gaps never reach this stage; zero or
+% white-noise filling is forbidden.
 % Each condition-labelled model file is imported, downsampled, aligned, and
 % assigned its post-resampling bad-sample mask once, then reused for all dyads.
 % Each dyad (including its bad-sample lists) is saved in that participant's

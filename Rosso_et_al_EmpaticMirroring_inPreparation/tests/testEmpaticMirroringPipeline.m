@@ -23,7 +23,7 @@ end
 
 function testTriggerRelativeAlignment(testCase)
 
-config = EmpaticMirroring_Config();
+config = syntheticAlignmentConfig();
 frequencyHz = 1.5;
 
 teacherTime = (0:40*config.sampling.teacherHz-1) / ...
@@ -87,7 +87,7 @@ end
 
 function testRemainingGapBecomesBadSegment(testCase)
 
-config = EmpaticMirroring_Config();
+config = syntheticAlignmentConfig();
 nTeacher = 40*config.sampling.teacherHz;
 nParticipant = 40*config.sampling.participantHz;
 teacher = syntheticRecording(zeros(1,nTeacher), ...
@@ -102,21 +102,22 @@ verifyTrue(testCase,all(isfinite(dyad.data),'all'));
 verifyEqual(testCase,dyad.badSegmentsByParticipant{1},zeros(1,0));
 verifyEqual(testCase,dyad.badSegmentsByParticipant{2},100);
 verifyEqual(testCase,dyad.badSegments,100);
-verifyTrue(testCase,all(dyad.data(:,100,2) == 0,'all'));
+verifyTrue(testCase,all(isfinite(dyad.data(:,100,2)),'all'));
+verifyEqual(testCase,dyad.badMarkerSampleMask(:,100,2),[true;false]);
 
 end
 
 
 function testTeacherGapMaskSurvivesResampling(testCase)
 
-config = EmpaticMirroring_Config();
+config = syntheticAlignmentConfig();
 nTeacher = 40*config.sampling.teacherHz;
 nParticipant = 40*config.sampling.participantHz;
 teacher = syntheticRecording(ones(1,nTeacher), ...
     config.sampling.teacherHz,"teacher.mat");
 participant = syntheticRecording(ones(1,nParticipant), ...
     config.sampling.participantHz,"participant.mat");
-teacher.coordinates(1:3,300:315) = NaN;
+teacher.coordinates(1:3,300:314) = NaN;
 
 dyad = EmpaticMirroring_AlignArtificialDyad(teacher,participant,config);
 
@@ -124,21 +125,22 @@ verifyNotEmpty(testCase,dyad.badSegmentsByParticipant{1});
 verifyEmpty(testCase,dyad.badSegmentsByParticipant{2});
 verifyEqual(testCase,dyad.badSegments, ...
     dyad.badSegmentsByParticipant{1});
-verifyTrue(testCase,all(dyad.data(:,dyad.badSegments,1) == 0,'all'));
+verifyTrue(testCase,all(isfinite( ...
+    dyad.data(:,dyad.badSegments,1)),'all'));
 
 end
 
 
 function testPreparedTeacherCanBeReusedWithoutRawTeacher(testCase)
 
-config = EmpaticMirroring_Config();
+config = syntheticAlignmentConfig();
 nTeacher = 40*config.sampling.teacherHz;
 nParticipant = 40*config.sampling.participantHz;
 teacher = syntheticRecording(ones(1,nTeacher), ...
     config.sampling.teacherHz,"teacher.mat");
 participant = syntheticRecording(ones(1,nParticipant), ...
     config.sampling.participantHz,"participant.mat");
-teacher.coordinates(1:3,300:315) = NaN;
+teacher.coordinates(1:3,300:314) = NaN;
 
 [emptyDyad,preparedTeacher] = EmpaticMirroring_AlignArtificialDyad( ...
     teacher,[],config);
@@ -150,6 +152,49 @@ verifySize(testCase,reusedDyad.data,[6 3960 2]);
 verifyEqual(testCase,reusedDyad.data(:,:,1),preparedTeacher.data);
 verifyEqual(testCase,reusedDyad.badSampleMask(:,1), ...
     preparedTeacher.badMask(:));
+
+end
+
+
+function testLongGapInRetainedMarkerExcludesRecording(testCase)
+
+config = syntheticAlignmentConfig();
+nTeacher = 40*config.sampling.teacherHz;
+nParticipant = 40*config.sampling.participantHz;
+teacher = syntheticRecording(ones(1,nTeacher), ...
+    config.sampling.teacherHz,"teacher.mat");
+participant = syntheticRecording(ones(1,nParticipant), ...
+    config.sampling.participantHz,"participant.mat");
+participant.coordinates(1:3,100:106) = NaN;
+
+verifyError(testCase,@() EmpaticMirroring_AlignArtificialDyad( ...
+    teacher,participant,config), ...
+    'EmpaticMirroring:LongRetainedMarkerGap');
+
+end
+
+
+function testMarkerPolicyUsesCanonicalFixedSubset(testCase)
+
+config = EmpaticMirroring_Config();
+rawLabels = string([config.markers.excludedLabels ...
+    config.markers.labels]);
+nMarkers = numel(rawLabels);
+nSamples = 20;
+coordinates = zeros(3*nMarkers,nSamples);
+for markerIndex = 1:nMarkers
+    coordinates(3*markerIndex+(-2:0),:) = markerIndex;
+end
+
+[retained,labels,policy] = EmpaticMirroring_ApplyMarkerPolicy( ...
+    coordinates,rawLabels,120,config);
+
+verifyEqual(testCase,labels,string(config.markers.labels(:)));
+verifySize(testCase,retained,[3*config.markers.expectedCount nSamples]);
+expectedMarkerIndices = (numel(config.markers.excludedLabels)+1:nMarkers)';
+verifyEqual(testCase,retained(1:3:end,1),expectedMarkerIndices);
+verifyTrue(testCase,policy.isEligible);
+verifyEmpty(testCase,policy.unresolvedMarkerLabels);
 
 end
 
@@ -230,15 +275,15 @@ verifyFalse(testCase,config.block1.run);
 verifyEqual(testCase,config.block5.pattern_components,1:2);
 verifyEqual(testCase,config.block5.pattern_frequencies,[.25 .5 1 2]);
 verifyTrue(testCase,config.block5.plot_pattern_bones);
-verifyEqual(testCase,config.markers.expectedCount,22);
+verifyEqual(testCase,config.markers.rawExpectedCount,22);
+verifyEqual(testCase,config.markers.expectedCount,13);
+verifyEqual(testCase,config.markers.policyVersion,"hybrid_fixed13_v1");
 verifyEqual(testCase,string(config.markers.labels(:)),[ ...
-    "L Head";"R Head";"T Head";"Sternum";"L Shoulder";"L Elbow"; ...
-    "L Wrist";"L Hand";"R Shoulder";"R Elbow";"R Wrist";"R Hand"; ...
-    "L Knee";"R Knee";"B Head";"L Hip";"R Hip";"Pelvis"; ...
-    "L Ankle";"R Ankle";"R Foot";"L Foot"]);
+    "L Head";"R Head";"T Head";"B Head";"Sternum"; ...
+    "L Shoulder";"R Shoulder";"L Knee";"R Knee"; ...
+    "L Ankle";"R Ankle";"L Foot";"R Foot"]);
 verifyEqual(testCase,config.markers.bones,[ ...
-    1,3;3,2;2,15;15,1;4,5;4,9;5,9;5,6;6,7;7,8;9,10;10,11; ...
-    11,12;18,16;18,17;16,17;16,13;13,19;19,22;17,14;14,20;20,21]);
+    1,3;3,2;2,4;4,1;5,6;5,7;6,7;8,10;10,12;9,11;11,13]);
 
 end
 
@@ -310,7 +355,7 @@ temporaryRoot = string(tempname);
 mkdir(temporaryRoot);
 cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
 
-config = EmpaticMirroring_Config();
+config = syntheticAlignmentConfig();
 config.paths.qcOutputRoot = fullfile(temporaryRoot,'qc');
 config.block1.beat_frex = 1.67*ones(1,2);
 config.block1.frex = repmat([1;2],1,2);
@@ -332,9 +377,10 @@ srate = 120;
 bad_segments = [20 30];
 markData(:,bad_segments,:) = 0;
 marker_reference = markData(:,1,:);
+marker_policy = struct('version',config.markers.policyVersion);
 dyad_info = struct('subject',"001",'trialIndex',1);
 save(dyadFile,'markData','srate','bad_segments', ...
-    'marker_reference','dyad_info');
+    'marker_reference','marker_policy','dyad_info');
 
 DyadFile = string(dyadFile);
 DyadStatus = "created";
@@ -837,5 +883,18 @@ recording.file = fileName;
 recording.sampleRate = sampleRate;
 recording.labels = ["A";"B"];
 recording.coordinates = repmat(signal,6,1);
+
+end
+
+
+function config = syntheticAlignmentConfig()
+
+config = EmpaticMirroring_Config();
+config.markers.rawExpectedCount = 2;
+config.markers.policyVersion = "synthetic_fixed2_v1";
+config.markers.labels = {'A','B'};
+config.markers.excludedLabels = {};
+config.markers.bones = [1 2];
+config.markers.expectedCount = 2;
 
 end

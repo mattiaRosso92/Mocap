@@ -33,10 +33,12 @@ config.timing.participantOffsetSeconds = 0;
 config.timing.analysisDurationSeconds = 33;
 config.timing.filterPaddingSeconds = 1;
 
-% QTM preprocessing already filled gaps <=50 ms. Remaining missing samples
-% are never treated as observations: they are represented by finite zero
-% placeholders and listed in bad_segments for covariance exclusion.
+% QTM preprocessing previously filled gaps <=50 ms. MATLAB repeats this
+% rule marker-wise after selecting the fixed analysis markers, because some
+% missing values remain in the exports. Filled samples support continuous
+% filtering but remain listed in bad_segments and are not observations.
 config.preprocessing.upstreamFilledGapLimitSeconds = 0.050;
+config.preprocessing.shortGapInterpolationSeconds = 0.050;
 
 % Match the DyadicDance template: [coordinates x time x participants], with
 % model first and participant second. Single precision limits regenerated
@@ -46,16 +48,20 @@ config.dyads.storageClass = "single";
 config.dyads.overwrite = false;
 config.dyads.save = true;
 
-% Same 22-marker anatomy as the DyadicDance template and Markers_layout.docx,
-% remapped to this study's QTM export order. Apply the same links to model
-% and participant because both dyad members use this shared marker layout.
-config.markers.labels = {'L Head','R Head','T Head','Sternum', ...
-    'L Shoulder','L Elbow','L Wrist','L Hand','R Shoulder','R Elbow', ...
-    'R Wrist','R Hand','L Knee','R Knee','B Head','L Hip','R Hip', ...
-    'Pelvis','L Ankle','R Ankle','R Foot','L Foot'};
-config.markers.bones = [1,3;3,2;2,15;15,1;4,5;4,9;5,9;5,6;6,7;7,8; ...
-    9,10;10,11;11,12;18,16;18,17;16,17;16,13;13,19;19,22; ...
-    17,14;14,20;20,21];
+% HYBRID MARKER POLICY: require the complete raw 22-marker layout, then
+% retain one symmetric, teacher-gap-free 13-marker subset in one canonical
+% order for every recording. A retained marker is never removed per trial.
+% A gap >50 ms instead excludes that recording, preserving one common
+% spatial meaning without changing the FREQ-NESS filter implementation.
+config.markers.rawExpectedCount = 22;
+config.markers.policyVersion = "hybrid_fixed13_v1";
+config.markers.labels = {'L Head','R Head','T Head','B Head','Sternum', ...
+    'L Shoulder','R Shoulder','L Knee','R Knee','L Ankle','R Ankle', ...
+    'L Foot','R Foot'};
+config.markers.excludedLabels = {'L Elbow','R Elbow','L Wrist','R Wrist', ...
+    'L Hand','R Hand','L Hip','R Hip','Pelvis'};
+config.markers.bones = [1,3;3,2;2,4;4,1;5,6;5,7;6,7; ...
+    8,10;10,12;9,11;11,13];
 config.markers.expectedCount = numel(config.markers.labels);
 
 % Exact optional-argument convention used by FREQNESS NetworkEstimation.
