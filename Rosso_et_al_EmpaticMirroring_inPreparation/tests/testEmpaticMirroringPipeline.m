@@ -265,7 +265,7 @@ function testConfirmedCoreFrequencyGrid(testCase)
 
 config = EmpaticMirroring_Config();
 expectedBeatFrequency = 1.67*ones(1,2);
-expectedFrexVector = (1.67/8:1.67/8:1.67*4)';
+expectedFrexVector = (1.67/4:1.67/8:1.67*4)';
 
 verifyEqual(testCase,config.block1.beat_frex,expectedBeatFrequency);
 verifyEqual(testCase,config.block1.frex, ...

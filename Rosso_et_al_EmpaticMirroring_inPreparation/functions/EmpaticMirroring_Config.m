@@ -74,7 +74,7 @@ config.network.badSegmentsOptionName = "bad_segments";
 % every artificial dyad.
 config.block1.run = false;
 config.block1.beat_frex = 1.67*ones(1,2);
-frex_vector = (config.block1.beat_frex(1)/8: ...
+frex_vector = (config.block1.beat_frex(1)/4: ...
     config.block1.beat_frex(1)/8:config.block1.beat_frex(1)*4)';
 config.block1.frex = repmat(frex_vector,1,2);
 config.block1.duration = config.timing.analysisDurationSeconds;

@@ -123,8 +123,8 @@ skipped unless `overwrite_flag` is enabled, and every result retains its
 
 The confirmed `beat_frex` is 1.67 Hz for both members of every artificial
 dyad and applies to all trials and conditions. Following the template, `frex`
-contains 32 points from beat/8 to beat×4 in beat/8 increments
-(0.20875–6.68 Hz). `config.block1.run` remains `false` by default so a full
+contains 31 points from beat/4 to beat×4 in beat/8 increments
+(0.4175–6.68 Hz). `config.block1.run` remains `false` by default so a full
 production run starts only when explicitly requested.
 
 Generated QC tables and figures are written to `outputs/`, which is ignored by
