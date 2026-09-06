@@ -156,6 +156,71 @@ verifyEqual(testCase,reusedDyad.badSampleMask(:,1), ...
 end
 
 
+function testArtificialDyadBuilderWritesCompleteMetadata(testCase)
+
+temporaryRoot = string(tempname);
+mkdir(temporaryRoot);
+cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
+
+config = syntheticAlignmentConfig();
+config.markers.excludedLabels = {'Excluded marker'};
+config.paths.dataRoot = fullfile(temporaryRoot,'data');
+config.paths.outputRoot = fullfile(temporaryRoot,'outputs');
+config.paths.qcOutputRoot = fullfile(config.paths.outputRoot,'qc');
+config.paths.modelOutputRoot = fullfile(config.paths.outputRoot, ...
+    'preprocessed_models');
+config.paths.participantsOutputRoot = fullfile(config.paths.outputRoot, ...
+    'participants');
+config.dyads.overwrite = true;
+mkdir(config.paths.qcOutputRoot);
+
+teacherFolder = fullfile(config.paths.dataRoot,'Michalina','1_mat');
+participantFolder = fullfile(config.paths.dataRoot,'001','1_mat');
+mkdir(teacherFolder);
+mkdir(participantFolder);
+teacherFile = string(fullfile(teacherFolder,'1_mir_low_v1_mov1.mat'));
+participantFile = string(fullfile(participantFolder, ...
+    '1_mir_low_v1_mov1.mat'));
+writeSyntheticQtm(teacherFile,config.sampling.teacherHz,40);
+writeSyntheticQtm(participantFile,config.sampling.participantHz,40);
+
+Subject = "001";
+TrialIndex = 1;
+Instruction = "mir";
+Complexity = "low";
+Version = 1;
+Movement = 1;
+PairingKey = "low_v1_mov1";
+ParticipantFile = participantFile;
+TeacherFile = teacherFile;
+PairingStatus = "matched";
+ReadyForAlignment = true;
+dyadManifest = table(Subject,TrialIndex,Instruction,Complexity,Version, ...
+    Movement,PairingKey,ParticipantFile,TeacherFile,PairingStatus, ...
+    ReadyForAlignment);
+File = teacherFile;
+Role = "teacher";
+frameQC = table(File,Role,ReadyForAlignment);
+
+[savedManifest,summary] = EmpaticMirroring_CreateArtificialDyads( ...
+    dyadManifest,config,frameQC);
+
+verifyEqual(testCase,summary.createdCount,1);
+verifyEqual(testCase,summary.errorCount,0);
+verifyEqual(testCase,summary.availableCount,summary.eligibleCount);
+verifyTrue(testCase,isfile(savedManifest.DyadFile));
+saved = load(savedManifest.DyadFile,'markData','dyad_info', ...
+    'marker_policy','bad_segments');
+verifySize(testCase,saved.markData,[6 3960 2]);
+verifyEqual(testCase,saved.dyad_info.excludedMarkers, ...
+    config.markers.excludedLabels);
+verifyEqual(testCase,saved.marker_policy.excludedLabels, ...
+    config.markers.excludedLabels);
+verifyEmpty(testCase,saved.bad_segments);
+
+end
+
+
 function testLongGapInRetainedMarkerExcludesRecording(testCase)
 
 config = syntheticAlignmentConfig();
@@ -475,10 +540,16 @@ verifyEqual(testCase,fileparts(firstManifest.LandscapeFile), ...
     correctTestEigenvalueNoise(FREQ);
 [expectedH2,expectedED] = FREQNESS_EffectDim_Mocap( ...
     expectedFREQ,'figure',false);
-savedLandscape = load(firstManifest.LandscapeFile,'H2','ED_trial', ...
-    'eigenvalue_qc');
-verifyEqual(testCase,savedLandscape.H2,expectedH2,'AbsTol',eps);
-verifyEqual(testCase,savedLandscape.ED_trial,expectedED,'AbsTol',eps);
+savedLandscape = load(firstManifest.LandscapeFile,'H2_teacher', ...
+    'H2_participant','ED_teacher','ED_participant','eigenvalue_qc');
+verifyEqual(testCase,savedLandscape.H2_teacher, ...
+    expectedH2(:,1),'AbsTol',eps);
+verifyEqual(testCase,savedLandscape.H2_participant, ...
+    expectedH2(:,2),'AbsTol',eps);
+verifyEqual(testCase,savedLandscape.ED_teacher, ...
+    expectedED(:,1),'AbsTol',eps);
+verifyEqual(testCase,savedLandscape.ED_participant, ...
+    expectedED(:,2),'AbsTol',eps);
 verifyEqual(testCase,savedLandscape.eigenvalue_qc.correctedCount, ...
     expectedCorrectionCount);
 verifyEqual(testCase,firstManifest.NegativeEigenvalueCount, ...
@@ -758,14 +829,18 @@ for triali = 1:2
         "FREQNESS_LANDSCAPE_S001_T0" + triali + ...
         "_mir_low_v1_mov1.mat");
     value = 2*triali-1;
+    roleEvals = nan(6,2,2);
+    roleEvals(:,:,1) = 10*value;
+    roleEvals(:,:,2) = value;
     FREQ = struct( ...
-        'evals',value*ones(6,2,2), ...
+        'evals',roleEvals, ...
         'pats',value*ones(6,2,2,2), ...
         'frex_norm',repmat([2/3;4/3],1,2));
     marker_reference = zeros(6,1,2);
-    ED_trial = value*ones(2,2);
+    ED_teacher = 10*value*ones(2,1);
+    ED_participant = value*ones(2,1);
     save(coreFiles(triali),'FREQ','marker_reference');
-    save(landscapeFiles(triali),'ED_trial');
+    save(landscapeFiles(triali),'ED_teacher','ED_participant');
 end
 
 DyadFile = ["dyad1.mat";"dyad2.mat"];
@@ -819,11 +894,16 @@ save(fullfile(phaseFolder, ...
 
 groupSummary = EmpaticMirroring_RunGroupAnalysis(dyadManifest,config);
 verifyEqual(testCase,groupSummary.recordingCount,2);
-network = load(groupSummary.networkSummaryFile,'avg_evals', ...
-    'avg_pats','avg_ED','participantCounts');
-verifyEqual(testCase,network.avg_evals(1,:,:),2*ones(1,6,2));
+network = load(groupSummary.networkSummaryFile);
+verifyFalse(testCase,isfield(network,'sem_evals_teacher'));
+verifyFalse(testCase,isfield(network,'sem_ED_teacher'));
+verifyEqual(testCase,network.avg_evals_teacher(1,:,:), ...
+    20*ones(1,6,2));
+verifyEqual(testCase,network.avg_evals_participant(1,:,:), ...
+    2*ones(1,6,2));
 verifyEqual(testCase,network.avg_pats(1,:,:,:,:),2*ones(1,6,2,2,2));
-verifyEqual(testCase,network.avg_ED(1,:),2*ones(1,2));
+verifyEqual(testCase,network.avg_ED_teacher(1,:),20*ones(1,2));
+verifyEqual(testCase,network.avg_ED_participant(1,:),2*ones(1,2));
 verifyEqual(testCase,network.participantCounts(1),1);
 
 % BLOCK 6 uses only trials available to both spatial and temporal analyses.
@@ -883,6 +963,27 @@ recording.file = fileName;
 recording.sampleRate = sampleRate;
 recording.labels = ["A";"B"];
 recording.coordinates = repmat(signal,6,1);
+
+end
+
+
+function writeSyntheticQtm(filePath,sampleRate,durationSeconds)
+
+nFrames = sampleRate*durationSeconds;
+time = (0:nFrames-1)/sampleRate;
+trajectory = zeros(2,4,nFrames);
+for markerIndex = 1:2
+    trajectory(markerIndex,1,:) = sin(2*pi*1.5*time) + markerIndex;
+    trajectory(markerIndex,2,:) = cos(2*pi*1.5*time) + markerIndex;
+    trajectory(markerIndex,3,:) = 0.5*sin(2*pi*0.75*time) + markerIndex;
+    trajectory(markerIndex,4,:) = 1;
+end
+qtm_test = struct( ...
+    'Frames',nFrames, ...
+    'FrameRate',sampleRate, ...
+    'Trajectories',struct('Labeled',struct( ...
+    'Data',trajectory,'Labels',{{'A','B'}})));
+save(filePath,'qtm_test');
 
 end
 

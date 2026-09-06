@@ -99,6 +99,16 @@ fprintf('Review QC outputs in: %s\n\n',config.paths.qcOutputRoot);
 [dyadManifest,dyadSummary] = ...
     EmpaticMirroring_CreateArtificialDyads(dyadManifest,config,frameQC);
 
+% Never let incomplete regeneration fall through to cached downstream files.
+% A forced production run must materialize every currently eligible dyad.
+assert(dyadSummary.errorCount == 0 && ...
+    dyadSummary.availableCount == dyadSummary.eligibleCount, ...
+    'EmpaticMirroring:IncompleteDyadGeneration', ...
+    ['Artificial-dyad generation produced %d errors and only %d/%d ' ...
+     'available files. Downstream blocks were stopped to prevent mixing ' ...
+     'stale and current outputs.'],dyadSummary.errorCount, ...
+    dyadSummary.availableCount,dyadSummary.eligibleCount);
+
 fprintf('Artificial dyads available: %d\n',dyadSummary.availableCount);
 fprintf('Network estimator compatible with bad_segments: %d\n', ...
     networkEstimatorContract.ReadyForNetworkEstimation);
@@ -128,13 +138,11 @@ end
 %% ========================================================================
 % BLOCK 2 - NETWORK LANDSCAPES AND EFFECTIVE DIMENSIONALITY
 % =========================================================================
-% As in FREQNESS_DyadicDance_Mocap, retain the complete eigenspectrum for
-% effective dimensionality and only the requested leading spatial patterns
-% for later visualization. Complete FREQ arrays remain in one file per
-% recording rather than being duplicated in a large dense group file. A
-% lightweight catalogue indexes participants x conditions x repetitions;
-% the 24 conditions encode Instruction x Complexity x Version x Movement.
-% Missing/excluded recordings are absent and false in validTrialMask.
+% Unlike a natural dyad, model and participant are not exchangeable here.
+% Retain their network landscapes and effective dimensionality separately.
+% Participant summaries use participants as observations; teacher summaries
+% are diagnostic curves without inferential SEM. Complete FREQ arrays remain
+% in one file per recording; a lightweight catalogue indexes the 24 cells.
 
 if config.block2.run
     [dyadManifest,landscapeSummary] = ...
