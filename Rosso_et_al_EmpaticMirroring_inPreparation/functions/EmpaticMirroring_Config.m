@@ -34,11 +34,17 @@ config.timing.analysisDurationSeconds = 33;
 config.timing.filterPaddingSeconds = 1;
 
 % QTM preprocessing previously filled gaps <=50 ms. MATLAB repeats this
-% rule marker-wise after selecting the fixed analysis markers, because some
-% missing values remain in the exports. Filled samples support continuous
-% filtering but remain listed in bad_segments and are not observations.
+% rule and reconstructs longer gaps up to 2 s with cubic splines. This
+% method was selected by blocked artificial-gap and FREQ-output validation
+% against linear, PCHIP and low-rank alternatives. Observed coordinates are
+% held fixed. Every originally missing timepoint remains in bad_segments and
+% is never a covariance or downstream time-series observation; reconstruction exists
+% solely to support continuous resampling and narrow-band filtering.
 config.preprocessing.upstreamFilledGapLimitSeconds = 0.050;
 config.preprocessing.shortGapInterpolationSeconds = 0.050;
+config.preprocessing.maximumReconstructedGapSeconds = 2;
+config.preprocessing.minimumCompleteTimepointFraction = 0.50;
+config.preprocessing.reconstructionMethod = "cubic_spline";
 
 % Match the DyadicDance template: [coordinates x time x participants], with
 % model first and participant second. Single precision limits regenerated
@@ -48,20 +54,23 @@ config.dyads.storageClass = "single";
 config.dyads.overwrite = false;
 config.dyads.save = true;
 
-% HYBRID MARKER POLICY: require the complete raw 22-marker layout, then
-% retain one symmetric, teacher-gap-free 13-marker subset in one canonical
-% order for every recording. A retained marker is never removed per trial.
-% A gap >50 ms instead excludes that recording, preserving one common
-% spatial meaning without changing the FREQ-NESS filter implementation.
+% FULL-SKELETON POLICY: retain all 22 markers in one canonical order for
+% every recording. Missing coordinates are reconstructed under the policy
+% above but remain excluded samples. Recordings exceeding reconstruction or
+% observed-data coverage limits are excluded rather than silently repaired.
 config.markers.rawExpectedCount = 22;
-config.markers.policyVersion = "hybrid_fixed13_v1";
-config.markers.labels = {'L Head','R Head','T Head','B Head','Sternum', ...
-    'L Shoulder','R Shoulder','L Knee','R Knee','L Ankle','R Ankle', ...
-    'L Foot','R Foot'};
-config.markers.excludedLabels = {'L Elbow','R Elbow','L Wrist','R Wrist', ...
-    'L Hand','R Hand','L Hip','R Hip','Pelvis'};
-config.markers.bones = [1,3;3,2;2,4;4,1;5,6;5,7;6,7; ...
-    8,10;10,12;9,11;11,13];
+config.markers.policyVersion = "full22_spline_v1";
+config.markers.labels = {'L Elbow','L Wrist','L Hand','L Shoulder', ...
+    'R Shoulder','Sternum','R Elbow','R Wrist','R Hand','L Hip', ...
+    'R Hip','Pelvis','L Knee','R Knee','L Ankle','R Ankle', ...
+    'L Foot','R Foot','B Head','L Head','R Head','T Head'};
+config.markers.excludedLabels = {};
+% Same anatomical link logic as DyadicDance, remapped to this study's
+% marker order: head, upper torso, arms, pelvis and both legs.
+config.markers.bones = [20,22;22,21;21,19;19,20;19,6; ...
+    4,6;6,5;4,5;4,1;1,2;2,3;5,7;7,8;8,9; ...
+    6,12;10,12;11,12;10,11;10,13;13,15;15,17; ...
+    11,14;14,16;16,18];
 config.markers.expectedCount = numel(config.markers.labels);
 
 % Exact optional-argument convention used by FREQNESS NetworkEstimation.

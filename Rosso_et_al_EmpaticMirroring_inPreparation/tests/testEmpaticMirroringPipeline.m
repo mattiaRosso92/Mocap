@@ -108,6 +108,50 @@ verifyEqual(testCase,dyad.badMarkerSampleMask(:,100,2),[true;false]);
 end
 
 
+function testShortBoundaryGapsUseNearestObservedSample(testCase)
+
+config = syntheticAlignmentConfig();
+coordinates = ones(6,20);
+coordinates(1:3,1:3) = NaN;
+coordinates(4:6,18:20) = NaN;
+
+[interpolated,~,policy] = EmpaticMirroring_ApplyMarkerPolicy( ...
+    coordinates,["A";"B"],120,config);
+
+verifyTrue(testCase,all(isfinite(interpolated),'all'));
+verifyEqual(testCase,interpolated(:,[1:3 18:20]), ...
+    ones(6,6));
+verifyEqual(testCase,policy.interpolatedSampleCount,6);
+verifyFalse(testCase,any(policy.unresolvedMask,'all'));
+
+end
+
+
+function testLongGapIsReconstructedButRemainsExcluded(testCase)
+
+config = syntheticAlignmentConfig();
+nSamples = 600;
+time = linspace(0,4*pi,nSamples);
+coordinates = [sin(time);cos(time);.5*sin(time); ...
+    2+sin(time);3+cos(time);4+.5*sin(time)];
+observed = coordinates;
+gap = 200:260;
+coordinates(1:3,gap) = NaN;
+
+[reconstructed,~,policy] = EmpaticMirroring_ApplyMarkerPolicy( ...
+    coordinates,["A";"B"],120,config);
+
+verifyTrue(testCase,all(isfinite(reconstructed),'all'));
+verifyEqual(testCase,reconstructed(:,setdiff(1:nSamples,gap)), ...
+    observed(:,setdiff(1:nSamples,gap)),'AbsTol',0);
+verifyTrue(testCase,all(policy.reconstructedMask(1,gap)));
+verifyTrue(testCase,all(policy.originalBadSampleMask(gap)));
+verifyEqual(testCase,policy.filledMask,policy.originalMissingMask);
+verifyFalse(testCase,any(policy.unresolvedMask,'all'));
+
+end
+
+
 function testTeacherGapMaskSurvivesResampling(testCase)
 
 config = syntheticAlignmentConfig();
@@ -221,7 +265,7 @@ verifyEmpty(testCase,saved.bad_segments);
 end
 
 
-function testLongGapInRetainedMarkerExcludesRecording(testCase)
+function testGapBeyondReconstructionLimitExcludesRecording(testCase)
 
 config = syntheticAlignmentConfig();
 nTeacher = 40*config.sampling.teacherHz;
@@ -230,20 +274,19 @@ teacher = syntheticRecording(ones(1,nTeacher), ...
     config.sampling.teacherHz,"teacher.mat");
 participant = syntheticRecording(ones(1,nParticipant), ...
     config.sampling.participantHz,"participant.mat");
-participant.coordinates(1:3,100:106) = NaN;
+participant.coordinates(1:3,100:341) = NaN;
 
 verifyError(testCase,@() EmpaticMirroring_AlignArtificialDyad( ...
     teacher,participant,config), ...
-    'EmpaticMirroring:LongRetainedMarkerGap');
+    'EmpaticMirroring:MarkerReconstructionIneligible');
 
 end
 
 
-function testMarkerPolicyUsesCanonicalFixedSubset(testCase)
+function testMarkerPolicyUsesCanonicalFullSkeleton(testCase)
 
 config = EmpaticMirroring_Config();
-rawLabels = string([config.markers.excludedLabels ...
-    config.markers.labels]);
+rawLabels = circshift(string(config.markers.labels),5);
 nMarkers = numel(rawLabels);
 nSamples = 20;
 coordinates = zeros(3*nMarkers,nSamples);
@@ -256,7 +299,11 @@ end
 
 verifyEqual(testCase,labels,string(config.markers.labels(:)));
 verifySize(testCase,retained,[3*config.markers.expectedCount nSamples]);
-expectedMarkerIndices = (numel(config.markers.excludedLabels)+1:nMarkers)';
+expectedMarkerIndices = zeros(nMarkers,1);
+for markerIndex = 1:nMarkers
+    expectedMarkerIndices(markerIndex) = find( ...
+        rawLabels == string(config.markers.labels{markerIndex}));
+end
 verifyEqual(testCase,retained(1:3:end,1),expectedMarkerIndices);
 verifyTrue(testCase,policy.isEligible);
 verifyEmpty(testCase,policy.unresolvedMarkerLabels);
@@ -341,14 +388,17 @@ verifyEqual(testCase,config.block5.pattern_components,1:2);
 verifyEqual(testCase,config.block5.pattern_frequencies,[.25 .5 1 2]);
 verifyTrue(testCase,config.block5.plot_pattern_bones);
 verifyEqual(testCase,config.markers.rawExpectedCount,22);
-verifyEqual(testCase,config.markers.expectedCount,13);
-verifyEqual(testCase,config.markers.policyVersion,"hybrid_fixed13_v1");
+verifyEqual(testCase,config.markers.expectedCount,22);
+verifyEqual(testCase,config.markers.policyVersion,"full22_spline_v1");
 verifyEqual(testCase,string(config.markers.labels(:)),[ ...
-    "L Head";"R Head";"T Head";"B Head";"Sternum"; ...
-    "L Shoulder";"R Shoulder";"L Knee";"R Knee"; ...
-    "L Ankle";"R Ankle";"L Foot";"R Foot"]);
+    "L Elbow";"L Wrist";"L Hand";"L Shoulder";"R Shoulder"; ...
+    "Sternum";"R Elbow";"R Wrist";"R Hand";"L Hip";"R Hip"; ...
+    "Pelvis";"L Knee";"R Knee";"L Ankle";"R Ankle"; ...
+    "L Foot";"R Foot";"B Head";"L Head";"R Head";"T Head"]);
 verifyEqual(testCase,config.markers.bones,[ ...
-    1,3;3,2;2,4;4,1;5,6;5,7;6,7;8,10;10,12;9,11;11,13]);
+    20,22;22,21;21,19;19,20;19,6;4,6;6,5;4,5;4,1;1,2;2,3; ...
+    5,7;7,8;8,9;6,12;10,12;11,12;10,11;10,13;13,15;15,17; ...
+    11,14;14,16;16,18]);
 
 end
 
