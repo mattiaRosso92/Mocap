@@ -99,8 +99,8 @@ config.block3.components = 1:2;
 config.block3.metric_levels = [.25 .5 1 2];
 config.block3.max_dyads = inf;
 
-% BLOCK 4 - PHASE-SPACE RQA. This temporal-coordination method uses the
-% DyadicDance frequencies, components, interval, and 24 Hz working rate.
+% BLOCK 4 - GAP-AWARE PHASE-SPACE RQA. Filter continuous valid runs
+% independently, downsample to 24 Hz, and exclude remapped bad samples.
 config.block4.run = false;
 config.block4.output_path = fullfile(config.paths.outputRoot, ...
     '04_PhaseSpaceRQA');

@@ -165,8 +165,10 @@ end
 % =========================================================================
 % Follow the DyadicDance phase-space RQA block using the selected components,
 % metric levels, proportional interval, anti-alias filter, and 24 Hz working
-% rate. One result is saved per recording/component and compact summaries
-% retain the complete 24-cell experimental design.
+% rate. Valid runs are filtered separately so gaps cannot contaminate their
+% neighbors; remapped bad samples are excluded by the toolbox RQA function.
+% One result is saved per recording/component and compact summaries retain
+% the complete 24-cell experimental design and valid-data coverage.
 
 if config.block4.run
     [dyadManifest,phaseRQASummary] = ...

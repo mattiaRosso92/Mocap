@@ -577,6 +577,10 @@ FREQ = struct();
 FREQ.ts = randn(2,600,2,2);
 FREQ.frex = repmat([1;2],1,2);
 FREQ.srate = 120;
+% The six-sample valid island 121:126 is too short for filtfilt and must be
+% added to the remapped mask rather than joined to neighboring valid runs.
+FREQ.bad_segments = [101:120 127:140 301:305];
+FREQ.ts(:,FREQ.bad_segments,:,:) = 1e6;
 beat_frex = [1.67 1.67];
 save(coreFile,'FREQ','beat_frex');
 
@@ -599,21 +603,29 @@ verifyEqual(testCase,firstSummary.createdCount,1);
 verifyEqual(testCase,firstSummary.errorCount,0);
 outputFile = firstSummary.phaseRQAManifest.PhaseRQAFile;
 verifyTrue(testCase,isfile(outputFile));
-saved = load(outputFile,'FREQrqa','PhaseRQA','analysis_info');
+saved = load(outputFile,'FREQrqa','PhaseRQA','analysis_info', ...
+    'preprocessing_qc');
 verifyEqual(testCase,saved.PhaseRQA.component,1);
 verifyEqual(testCase,saved.analysis_info.outputSrate,60);
+verifyEqual(testCase,saved.analysis_info.implementation,"gap_aware_v1");
 verifyEqual(testCase,numel(saved.FREQrqa),1);
 verifyFalse(testCase,isfield(saved.FREQrqa,'DistanceMatrix') && ...
     ~isempty(saved.FREQrqa.DistanceMatrix));
+verifyGreaterThan(testCase,saved.FREQrqa.ExcludedSampleCount,0);
+verifyLessThan(testCase,saved.FREQrqa.ValidSampleCount, ...
+    numel(saved.FREQrqa.SelectedSampleIndices));
+verifyEqual(testCase,saved.preprocessing_qc.ShortRunExcludedSampleCount,6);
 
 summaryFile = fullfile(config.block4.output_path,'Component_1', ...
-    'FREQNESS_PHASERQA_SUMMARY_Comp#1.mat');
+    'FREQNESS_PHASERQA_GAPAWARE_SUMMARY_Comp#1.mat');
 verifyTrue(testCase,isfile(summaryFile));
 group = load(summaryFile,'PhaseRQA','designTable', ...
     'componentRows','validTrialMask');
 verifySize(testCase,group.PhaseRQA.output.RR,[1 24]);
 verifyEqual(testCase,group.PhaseRQA.output.RR(1,1,1,1), ...
     saved.FREQrqa.RR);
+verifyEqual(testCase,group.PhaseRQA.coverage.ValidSampleCount(1,1,1,1), ...
+    saved.FREQrqa.ValidSampleCount);
 verifyEqual(testCase,height(group.designTable),24);
 verifyEqual(testCase,group.componentRows.ConditionIndex,1);
 verifyTrue(testCase,group.validTrialMask(1,1,1));
@@ -706,7 +718,16 @@ for fieldi = 1:numel(phaseFields)
     PhaseRQA.output.(phaseFields{fieldi}) = nan(1,24,1,2);
     PhaseRQA.output.(phaseFields{fieldi})(1,1,1,:) = [1 3];
 end
-save(fullfile(phaseFolder,'FREQNESS_PHASERQA_SUMMARY_Comp#1.mat'), ...
+coverageFields = {'ValidSampleCount','ExcludedSampleCount', ...
+    'EligiblePairCount','EligiblePairFraction'};
+coverageValues = {[10 20],[2 4],[100 400],[.5 .7]};
+for fieldi = 1:numel(coverageFields)
+    PhaseRQA.coverage.(coverageFields{fieldi}) = nan(1,24,1,2);
+    PhaseRQA.coverage.(coverageFields{fieldi})(1,1,1,:) = ...
+        coverageValues{fieldi};
+end
+save(fullfile(phaseFolder, ...
+    'FREQNESS_PHASERQA_GAPAWARE_SUMMARY_Comp#1.mat'), ...
     'PhaseRQA','meter','participantIds','designTable', ...
     'componentRows','validTrialMask');
 
@@ -719,6 +740,13 @@ verifyEqual(testCase,network.avg_pats(1,:,:,:,:),2*ones(1,6,2,2,2));
 verifyEqual(testCase,network.avg_ED(1,:),2*ones(1,2));
 verifyEqual(testCase,network.participantCounts(1),1);
 
+% BLOCK 6 uses only trials available to both spatial and temporal analyses.
+phaseSummaryFile = fullfile(phaseFolder, ...
+    'FREQNESS_PHASERQA_GAPAWARE_SUMMARY_Comp#1.mat');
+phaseSummary = load(phaseSummaryFile);
+phaseSummary.validTrialMask(1,1,2) = false;
+save(phaseSummaryFile,'-struct','phaseSummary');
+
 statistics = EmpaticMirroring_ExportStatistics(config);
 verifyEqual(testCase,statistics.rowCount,1);
 T = statistics.statisticsTable;
@@ -727,11 +755,16 @@ verifyEqual(testCase,T.Instruction,"mir");
 verifyEqual(testCase,T.Complexity,"low");
 verifyEqual(testCase,T.Version,1);
 verifyEqual(testCase,T.Movement,1);
-verifyEqual(testCase,T.NRepetitions,2);
-verifyEqual(testCase,T.Mirror,2);
+verifyEqual(testCase,T.NRepetitions,1);
+verifyEqual(testCase,T.Mirror,1);
 verifyFalse(testCase,ismember('RR_JRQA',T.Properties.VariableNames));
 verifyFalse(testCase,ismember('DET_JRQA',T.Properties.VariableNames));
-verifyEqual(testCase,T.RR_Phase,2);
+verifyEqual(testCase,T.RR_Phase,1);
+verifyEqual(testCase,T.ValidSamples_Phase,10);
+verifyEqual(testCase,T.ExcludedSamples_Phase,2);
+verifyEqual(testCase,T.EligiblePairs_Phase,100);
+verifyEqual(testCase,T.EligiblePairFraction_Phase,.5, ...
+    'AbsTol',eps);
 verifyTrue(testCase,isfile(statistics.combinedCsvFile));
 
 end

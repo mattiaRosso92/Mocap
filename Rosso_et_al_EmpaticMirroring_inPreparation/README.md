@@ -51,7 +51,8 @@ Landscape analysis writes `landscape_analysis_manifest.csv` with the same
 per-recording audit trail. Spatial coordination writes
 `spatial_coordination_analysis_manifest.csv` with one row per recording and
 component.
-Phase-space RQA writes `phase_rqa_analysis_manifest.csv` in the same format.
+Phase-space RQA writes `phase_rqa_gapaware_analysis_manifest.csv`, including
+valid-sample and eligible-pair coverage for every recording and component.
 Every excluded recording can carry multiple standardized reasons so that,
 for example, an annotation, a short duration, and an incomplete marker layout
 are preserved rather than reduced to one label.
@@ -167,6 +168,16 @@ maximum-distance fraction of `0.1`, and retain RR, L, DET, ENTR, TT, LAM,
 Vmax, and DIV. Distance and recurrence matrices are not stored by default.
 Each recording/component is independently resumable.
 
+The shared `FREQ.bad_segments` mask is honored throughout BLOCK 4. Each
+continuous valid run is zero-phase filtered independently before decimation,
+so placeholder values cannot bleed across gaps. Runs shorter than the filter
+minimum are added to the exclusion mask. The mask is then remapped from 120
+to 24 Hz and passed in `FREQ` to the toolbox RQA function. Invalid samples do
+not enter standardization, distance or threshold estimation, or recurrence
+rate denominators; retained time positions break recurrence lines at gaps.
+Individual outputs, compact summaries, and QC report the resulting sample and
+pair coverage. Gap-aware filenames prevent reuse of earlier pilot outputs.
+
 ## Group analysis and statistical export
 
 BLOCK 5 streams individual core and landscape files one condition at a time.
@@ -182,9 +193,10 @@ activation weights remain visually unobstructed.
 BLOCK 6 exports one row per Participant × Instruction × Complexity ×
 Version × Movement × Meter × Component. It includes spatial mirroring,
 all eight phase-space RQA measures, and the number of recordings
-averaged into each cell. TrialIndex is intentionally absent because it is
-acquisition provenance; per-recording results remain available for audit and
-verification.
+averaged into each cell, plus phase-space valid-sample and eligible-pair
+coverage. Only trials available to both spatial and temporal analyses enter a
+combined row. TrialIndex is intentionally absent because it is acquisition
+provenance; per-recording results remain available for audit and verification.
 
 ## Current timing check
 
