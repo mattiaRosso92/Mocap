@@ -231,3 +231,13 @@ else
     fprintf(['BLOCK 6 statistical export is configured but disabled. ' ...
         'Enable it after BLOCKS 3 and 4 have completed.\n']);
 end
+
+
+%% ========================================================================
+% BLOCK 7 - STATISTICAL MODELLING IN R
+% =========================================================================
+% After BLOCK 6, run EmpaticMirroring_Stats.R. It validates factorial and
+% RQA coverage, fits participant-level mixed models separately by component,
+% and writes inferential results and diagnostics below outputs/07_Statistics_Results.
+% Teacher-only summaries remain descriptive because all artificial dyads
+% reuse the same teacher recording.
