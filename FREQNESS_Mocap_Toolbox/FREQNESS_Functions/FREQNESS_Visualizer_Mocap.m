@@ -39,6 +39,7 @@ function figures = FREQNESS_Visualizer_Mocap(FREQ,Landscape,Patterns,varargin)
 %
 %    Optional Patterns fields:
 %  - Patterns.bones              : marker links [nLinks x 2]
+%  - Patterns.plot_bones         : show marker links (default: true)
 %  - Patterns.animate            : true/false; if absent, ask interactively
 %  - Patterns.plot_matrix        : show labelled XYZ matrices (default: true)
 %  - Patterns.animation_duration : maximum displayed seconds (default: Inf)
@@ -282,10 +283,22 @@ else
     frequency_unit = 'Hz';
 end
 
-if isfield(Patterns,'bones') && ~isempty(Patterns.bones)
-    bones = Patterns.bones;
+if isfield(Patterns,'plot_bones') && ~isempty(Patterns.plot_bones)
+    plot_bones = Patterns.plot_bones;
 else
-    bones = default_bones(nmarkers);
+    plot_bones = true;
+end
+if ~islogical(plot_bones) || ~isscalar(plot_bones)
+    error('Patterns.plot_bones must be one logical value.');
+end
+if plot_bones
+    if isfield(Patterns,'bones') && ~isempty(Patterns.bones)
+        bones = Patterns.bones;
+    else
+        bones = default_bones(nmarkers);
+    end
+else
+    bones = zeros(0,2);
 end
 validate_bones(bones,nmarkers)
 
