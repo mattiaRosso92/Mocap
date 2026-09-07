@@ -10,8 +10,8 @@ must not be edited for study-specific behavior.
 |:---:|---|---|
 | ☑ | Import and handle data | **Complete:** folder normalization, recursive import, frame/rate/name/marker/gap QC, explicit file- and participant-level exclusions, and the processed-MAT timing rule are implemented. |
 | ☑ | Create artificial dyads | **Complete:** every eligible participant trial is paired with its condition-labelled model recording and stored as `[coordinates x time x participants]`, with synchronized bad-sample lists. |
-| ◐ | Run toolbox analyses | **BLOCKS 1–6 implemented:** all per-recording analyses, streamed group summaries, and cell-averaged statistical exports preserve the complete design without duplicating the large FREQ arrays. The confirmed 1.67 Hz beat frequency is configured; production execution remains intentionally disabled until the full run is requested. |
-| ☐ | Replicate with previously excluded participants | Not started. Repair excluded recordings where scientifically defensible, document every repair, rerun the identical pipeline, and compare the sensitivity results with the primary analysis. |
+| ☑ | Run toolbox analyses | **Complete:** BLOCKS 1–7 have been run for the retained sample at the confirmed 1.67 Hz beat frequency. Per-recording outputs, group summaries, statistical exports, and mixed-model results are available below the ignored `outputs/` tree. |
+| ☑ | Replicate with previously excluded participants | **Complete:** the dedicated recovery workflow waives only the three documented participant-folder annotations, retains all objective QC rules, computes only newly admitted recordings, reuses primary results, and writes an explicit primary-versus-sensitivity comparison. |
 
 ## Pipeline
 
@@ -22,9 +22,10 @@ Run `EmpaticMirroring_MainPipeline.m` from MATLAB. The implemented stages:
 3. reports and plots the distribution of frame counts;
 4. flags recordings that cannot contain the requested aligned interval;
 5. parses instruction, complexity, version, and movement from filenames;
-6. reorders every recording to one canonical, symmetric 13-marker subset,
-   interpolates retained-marker gaps up to 50 ms for filter continuity, and
-   excludes recordings with any longer retained-marker gap;
+6. reorders every recording to the complete canonical 22-marker skeleton,
+   interpolates gaps up to 50 ms and reconstructs gaps up to 2 seconds for
+   filter continuity, while retaining all original missing indices in the
+   bad-sample mask;
 7. excludes annotated or nonconforming files/folders, short recordings,
    incomplete raw marker layouts, and recordings that violate the fixed
    marker policy while retaining them in the QC audit table;
@@ -86,17 +87,17 @@ stretched, or truncated to a shorter common duration. The extra one-second
 filter guard is preferred but not part of the analysis interval; reflection
 padding supplies it where genuine boundary context is unavailable.
 
-The raw 22-marker layout is checked first. Every recording is then reordered
-to the same symmetric 13-marker analysis set: four head markers, sternum,
-bilateral shoulders, knees, ankles, and feet. Elbows, wrists, hands, hips, and
-pelvis are excluded globally because their persistent model gaps would make
-cross-trial spatial patterns anatomically inconsistent. A retained-marker gap
-of at most 50 ms is interpolated marker-wise in MATLAB solely to make filtering
-continuous. Its original location remains in the marker-level mask and the
-dyad's shared `bad_segments` union, so it is not treated as an observed sample
-in covariance estimation. A longer gap in any retained marker excludes the
-recording; markers are never removed trial by trial. This avoids modifying the
-global FFT-based FREQ-NESS filter or introducing zero/noise placeholders.
+The raw 22-marker layout is checked first and every recording is reordered to
+that same complete canonical skeleton. A gap of at most 50 ms is interpolated
+marker-wise; a longer gap up to 2 seconds is reconstructed with the validated
+cubic-spline policy solely to keep resampling and filtering continuous.
+Observed coordinates are not altered. Every originally missing timepoint
+remains in the marker-level mask and the dyad's shared `bad_segments` union,
+so reconstructed values are never treated as observations in covariance or
+downstream time-resolved analyses. A recording is excluded when a gap exceeds
+the reconstruction ceiling or when all-marker observed coverage is below 50%.
+This preserves one interpretable 22-marker skeleton without zero/noise
+placeholders.
 Historical QTM
 preprocessing also trimmed small movement-dependent intervals at the recording
 extremes; these are documented in the main script and require no additional
@@ -209,6 +210,30 @@ coverage. Only trials available to both spatial and temporal analyses enter a
 combined row. TrialIndex is intentionally absent because it is acquisition
 provenance; per-recording results remain available for audit and verification.
 
+## Excluded-recording sensitivity analysis
+
+Run `EmpaticMirroring_RecoverySensitivity.m` after setting
+`config.sensitivity.run = true`. The script is resume-aware and writes only
+below `outputs/08_ExcludedSensitivity/`; the primary output tree is treated as
+read-only. Its console output reports four explicit stages:
+
+1. reuse or refresh QC and write a recording-level recovery decision audit;
+2. create dyads and run BLOCKS 1–4 only for objectively valid recordings from
+   participants 002, 022, and 046;
+3. reference the existing retained-sample core/landscape files, merge compact
+   BLOCK 3/4 arrays, and rebuild combined group/statistical outputs; and
+4. fit the identical R models and compare factorial coverage, descriptive
+   cell means, and BH-adjusted Type-III tests with the primary analysis.
+
+The only waived criterion is `FolderStatus == "annotated subject folder"` for
+those three named participants. Filename annotations, unexpected sampling
+rates, short duration, invalid marker layouts, gaps beyond 2 seconds,
+insufficient all-marker coverage, and insufficient valid samples still cause
+exclusion. Reconstructed indices remain excluded through `bad_segments` just
+as in the primary analysis. The comparison script additionally verifies that
+all retained-sample statistical rows are numerically unchanged and aborts if
+the combined dataset is not a strict superset.
+
 ## Current timing check
 
 The first full scan on 2026-09-03 found a median participant duration of about
@@ -219,8 +244,8 @@ The scan also flags four unexpected 100 Hz exports separately.
 
 ## Current participant exclusions
 
-The 2026-09-03 audit retains 2187 participant recordings for dyad creation,
-excludes 238 recordings, and excludes three of 52 participants entirely. File
+The current full-skeleton audit retains 1901 of 2425 participant recordings,
+excludes 524 recordings, and excludes three of 52 participants entirely. File
 counts overlap when one recording has multiple problems; the generated CSV
 files are the authoritative audit trail.
 
@@ -229,6 +254,12 @@ files are the authoritative audit trail.
 | 002 | Folder annotated “only 5”; all five recordings are excluded by the folder annotation. |
 | 022 | Folder annotated “very bad quality data, disappeared hips”; all 47 recordings are excluded. |
 | 046 | Folder annotated “only 28 trials”; all 28 recordings are excluded. |
+
+When only those folder annotations are waived, 47 recordings pass every
+remaining objective rule: 5/5 for participant 002, 15/47 for participant 022,
+and 27/28 for participant 046. The other 33 candidate recordings remain
+excluded. These counts are regenerated in
+`recovery_participant_summary.csv`, not hard-coded into the analysis logic.
 
 The 18 model-labeled files are three exact complexity copies of six underlying
 mocap trajectories. Across those six unique 33-second trajectories there are
