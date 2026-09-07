@@ -619,9 +619,9 @@ end
 
 function file = saveGroupFigure(fig,name,config)
 
-stem = fullfile(config.block5.figure_path,name);
-figFile = [stem '.fig'];
-pngFile = [stem '.png'];
+stem = string(fullfile(config.block5.figure_path,name));
+figFile = stem + ".fig";
+pngFile = stem + ".png";
 if ~isfile(figFile) || config.block5.overwrite_flag
     savefig(fig,figFile);
 end

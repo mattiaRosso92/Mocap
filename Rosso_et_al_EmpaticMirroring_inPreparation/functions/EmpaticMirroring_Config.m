@@ -171,6 +171,26 @@ config.block6.output_path = fullfile(config.paths.outputRoot, ...
 config.block6.overwrite_flag = false;
 config.block6.write_xlsx = true;
 
+% EXCLUDED-RECORDING SENSITIVITY ANALYSIS. This is deliberately separate
+% from the primary output tree. Only the participant-folder annotations are
+% waived for the named participants; every objective file, timing, marker,
+% sample-rate, gap-reconstruction, and coverage rule remains unchanged.
+config.sensitivity.run = false;
+config.sensitivity.refresh_qc = false;
+config.sensitivity.run_recovery_core = true;
+config.sensitivity.run_recovered_blocks = true;
+config.sensitivity.build_combined_outputs = true;
+config.sensitivity.run_statistics = true;
+config.sensitivity.compare_results = true;
+config.sensitivity.overwrite = false;
+config.sensitivity.subjects = ["002" "022" "046"];
+config.sensitivity.subject_annotations = [ ...
+    "only 5 recordings" ...
+    "very bad quality; disappeared hips" ...
+    "only 28 recordings"];
+config.sensitivity.output_root = fullfile(config.paths.outputRoot, ...
+    '08_ExcludedSensitivity');
+
 config.naming.teacherFolder = "Michalina";
 config.output.figureVisible = "on";
 

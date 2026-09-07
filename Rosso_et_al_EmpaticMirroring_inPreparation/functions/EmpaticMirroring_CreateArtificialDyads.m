@@ -51,7 +51,8 @@ fprintf('Prepared %d model recordings once for reuse.\n', ...
 for eligibleIndex = 1:numel(eligibleRows)
     rowIndex = eligibleRows(eligibleIndex);
     participantOutputRoot = EmpaticMirroring_ParticipantResultsFolder( ...
-        dyadManifest.ParticipantFile(rowIndex),config);
+        dyadManifest.ParticipantFile(rowIndex),config, ...
+        dyadManifest.Subject(rowIndex));
     if ~isfolder(participantOutputRoot)
         mkdir(participantOutputRoot);
     end
@@ -246,8 +247,18 @@ end
 
 function name = dyadFileName(row)
 
+subject = string(row.Subject);
+numericSubject = str2double(subject);
+if isfinite(numericSubject) && numericSubject >= 0 && ...
+        numericSubject == round(numericSubject)
+    subject = compose("%03d",numericSubject);
+end
+if isempty(regexp(subject,'^\d{3}$','once'))
+    error('EmpaticMirroring:DyadFileSubject', ...
+        'Dyad filenames require a canonical three-digit subject ID.');
+end
 name = sprintf('S%s_T%02d_%s_%s_v%d_mov%d.mat', ...
-    char(row.Subject),row.TrialIndex,char(row.Instruction), ...
+    char(subject),row.TrialIndex,char(row.Instruction), ...
     char(row.Complexity),row.Version,row.Movement);
 
 end

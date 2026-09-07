@@ -228,7 +228,9 @@ participantFile = string(fullfile(participantFolder, ...
 writeSyntheticQtm(teacherFile,config.sampling.teacherHz,40);
 writeSyntheticQtm(participantFile,config.sampling.participantHz,40);
 
-Subject = "001";
+% Numeric IDs can arise when a cached CSV is imported; filenames must still
+% use the canonical three-digit representation rather than char(1).
+Subject = 1;
 TrialIndex = 1;
 Instruction = "mir";
 Complexity = "low";
@@ -253,6 +255,7 @@ verifyEqual(testCase,summary.createdCount,1);
 verifyEqual(testCase,summary.errorCount,0);
 verifyEqual(testCase,summary.availableCount,summary.eligibleCount);
 verifyTrue(testCase,isfile(savedManifest.DyadFile));
+verifyTrue(testCase,contains(savedManifest.DyadFile,"S001_T01"));
 saved = load(savedManifest.DyadFile,'markData','dyad_info', ...
     'marker_policy','bad_segments');
 verifySize(testCase,saved.markData,[6 3960 2]);
@@ -982,6 +985,248 @@ verifyEqual(testCase,T.EligiblePairs_Phase,100);
 verifyEqual(testCase,T.EligiblePairFraction_Phase,.5, ...
     'AbsTol',eps);
 verifyTrue(testCase,isfile(statistics.combinedCsvFile));
+
+end
+
+
+function testRecoverySensitivityWaivesOnlyFolderAnnotation(testCase)
+
+temporaryRoot = string(tempname);
+mkdir(temporaryRoot);
+cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
+
+config = EmpaticMirroring_Config();
+config.paths.qcOutputRoot = char(temporaryRoot);
+File = ["accepted.mat";"wrong_rate.mat";"bad_marker.mat"; ...
+    "teacher.mat"];
+Subject = ["002";"002";"022";"Michalina"];
+Role = ["participant";"participant";"participant";"teacher"];
+FolderStatus = ["annotated subject folder"; ...
+    "annotated subject folder";"annotated subject folder";"ok"];
+LoadStatus = repmat("ok",4,1);
+NameStatus = repmat("ok",4,1);
+MarkerStatus = ["ok";"ok";"expected 22, found 21";"ok"];
+MarkerPolicyStatus = repmat("ok",4,1);
+SampleRate = [120;100;120;300];
+LengthStatus = repmat("ok",4,1);
+RetainedBadTimepointCount = zeros(4,1);
+RequiredFrames = [3960;3300;3960;9900];
+OverallStatus = [repmat("annotated subject folder",3,1);"ok"];
+ExcludeRecording = [true;true;true;false];
+ExclusionReasons = [repmat( ...
+    "folder: annotated subject folder",3,1);""];
+ReadyForAlignment = [false;false;false;true];
+frameQC = table(File,Subject,Role,FolderStatus,LoadStatus,NameStatus, ...
+    MarkerStatus,MarkerPolicyStatus,SampleRate,LengthStatus, ...
+    RetainedBadTimepointCount,RequiredFrames,OverallStatus, ...
+    ExcludeRecording,ExclusionReasons,ReadyForAlignment);
+
+[sensitivityQC,audit,summary] = ...
+    EmpaticMirroring_BuildRecoverySensitivityQC(frameQC,config);
+
+verifyEqual(testCase,summary.recoveredCount,1);
+verifyEqual(testCase,summary.remainingExcludedCount,2);
+verifyEqual(testCase,audit.RecoverForSensitivity,[true;false;false]);
+accepted = sensitivityQC.File == "accepted.mat";
+verifyEqual(testCase,sensitivityQC.FolderStatus(accepted),"ok");
+verifyTrue(testCase,sensitivityQC.ReadyForAlignment(accepted));
+verifyFalse(testCase,sensitivityQC.ExcludeRecording(accepted));
+wrongRate = audit.File == "wrong_rate.mat";
+verifyTrue(testCase,contains( ...
+    audit.ObjectiveExclusionReasons(wrongRate),"sample rate"));
+badMarker = audit.File == "bad_marker.mat";
+verifyTrue(testCase,contains( ...
+    audit.ObjectiveExclusionReasons(badMarker),"marker layout"));
+verifyTrue(testCase,isfile(fullfile(temporaryRoot, ...
+    'recovery_recording_audit.csv')));
+
+end
+
+
+function testRecoverySensitivityOutputPathsAreIsolated(testCase)
+
+primary = EmpaticMirroring_Config();
+primaryRoot = string(primary.paths.outputRoot);
+[recovered,combined] = ...
+    EmpaticMirroring_ConfigureRecoverySensitivity(primary);
+
+verifyEqual(testCase,string(primary.paths.outputRoot),primaryRoot);
+verifyTrue(testCase,startsWith(string(recovered.paths.outputRoot), ...
+    string(primary.sensitivity.output_root)));
+verifyTrue(testCase,startsWith(string(combined.paths.outputRoot), ...
+    string(primary.sensitivity.output_root)));
+verifyNotEqual(testCase,string(recovered.paths.outputRoot),primaryRoot);
+verifyNotEqual(testCase,string(combined.paths.outputRoot),primaryRoot);
+verifyNotEqual(testCase,string(recovered.paths.outputRoot), ...
+    string(combined.paths.outputRoot));
+verifyEqual(testCase,string(recovered.paths.qcOutputRoot), ...
+    string(combined.paths.qcOutputRoot));
+
+end
+
+
+function testAnnotatedParticipantFolderUsesValidatedManifestId(testCase)
+
+temporaryRoot = string(tempname);
+mkdir(temporaryRoot);
+cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
+config = EmpaticMirroring_Config();
+config.paths.dataRoot = char(temporaryRoot);
+config.paths.participantsOutputRoot = fullfile(temporaryRoot,'outputs');
+participantFile = fullfile(temporaryRoot,'002-only 5','2_mat', ...
+    '1_mir_low_v1_mov1.mat');
+
+resultsFolder = EmpaticMirroring_ParticipantResultsFolder( ...
+    participantFile,config,"002");
+
+verifyEqual(testCase,string(resultsFolder), ...
+    string(fullfile(config.paths.participantsOutputRoot,'002')));
+
+end
+
+
+function testSensitivityManifestCombinesOnlyAvailableDisjointRows(testCase)
+
+temporaryRoot = string(tempname);
+mkdir(temporaryRoot);
+cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
+primaryFile = fullfile(temporaryRoot,'primary.mat');
+recoveredFile = fullfile(temporaryRoot,'recovered.mat');
+unused = 1; %#ok<NASGU>
+save(primaryFile,'unused');
+save(recoveredFile,'unused');
+
+primary = sensitivityManifestFixture("001",1,"p1.mat", ...
+    primaryFile,"created");
+primary = [primary; sensitivityManifestFixture("003",2,"p3.mat", ...
+    "missing.mat","not eligible")];
+recovered = sensitivityManifestFixture("002",1,"p2.mat", ...
+    recoveredFile,"existing");
+outputFile = fullfile(temporaryRoot,'combined.csv');
+
+[combined,summary] = EmpaticMirroring_CombineSensitivityManifests( ...
+    primary,recovered,"CoreStatus","CoreFile",outputFile);
+
+verifyEqual(testCase,summary.primaryCount,1);
+verifyEqual(testCase,summary.recoveredCount,1);
+verifyEqual(testCase,summary.combinedCount,2);
+verifyEqual(testCase,string(combined.Subject),["001";"002"]);
+verifyEqual(testCase,string(combined.AnalysisCohort), ...
+    ["primary retained";"recovered sensitivity"]);
+verifyTrue(testCase,isfile(outputFile));
+
+end
+
+
+function testSensitivityCompactSummaryMergePreservesParticipantOrder(testCase)
+
+temporaryRoot = string(tempname);
+mkdir(temporaryRoot);
+cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
+primary = EmpaticMirroring_Config();
+primary.paths.outputRoot = fullfile(temporaryRoot,'primary');
+primary.block2.output_path = fullfile(primary.paths.outputRoot,'02_Landscape');
+primary.block3.output_path = fullfile(primary.paths.outputRoot,'03_Coordination');
+primary.block4.output_path = fullfile(primary.paths.outputRoot,'04_PhaseSpaceRQA');
+primary.block3.components = 1;
+primary.block4.components = 1;
+recovered = primary;
+recovered.paths.outputRoot = fullfile(temporaryRoot,'recovered');
+recovered.block3.output_path = fullfile(recovered.paths.outputRoot, ...
+    '03_Coordination');
+recovered.block4.output_path = fullfile(recovered.paths.outputRoot, ...
+    '04_PhaseSpaceRQA');
+combined = primary;
+combined.paths.outputRoot = fullfile(temporaryRoot,'combined');
+combined.paths.qcOutputRoot = fullfile(combined.paths.outputRoot,'qc');
+combined.block3.output_path = fullfile(combined.paths.outputRoot, ...
+    '03_Coordination');
+combined.block4.output_path = fullfile(combined.paths.outputRoot, ...
+    '04_PhaseSpaceRQA');
+
+writeCompactSensitivityFixtures(primary,["001";"003"],[10;30],2);
+writeCompactSensitivityFixtures(recovered,"002",20,1);
+summary = EmpaticMirroring_MergeSensitivitySummaries( ...
+    primary,recovered,combined);
+
+mergedFile = fullfile(combined.block3.output_path,'Component_1', ...
+    'FREQNESS_SPATIALCOORDINATION_SUMMARY_Comp#1.mat');
+S = load(mergedFile,'MIRROR','participantIds','validTrialMask');
+verifyEqual(testCase,string(S.participantIds),["001";"002";"003"]);
+verifyEqual(testCase,squeeze(S.MIRROR(:,1,1,1)),[10;20;30]);
+verifySize(testCase,S.MIRROR,[3 24 1 2]);
+verifyEqual(testCase,summary.audit.CombinedParticipants,3);
+verifyEqual(testCase,summary.audit.CombinedValidRecordings,3);
+
+end
+
+
+function manifest = sensitivityManifestFixture( ...
+    subject,trialIndex,participantFile,coreFile,coreStatus)
+
+ParticipantFile = string(participantFile);
+Subject = string(subject);
+TrialIndex = trialIndex;
+Instruction = "mir";
+Complexity = "low";
+Version = 1;
+Movement = 1;
+DyadFile = "dyad.mat";
+CoreStatus = string(coreStatus);
+CoreFile = string(coreFile);
+manifest = table(ParticipantFile,Subject,TrialIndex,Instruction, ...
+    Complexity,Version,Movement,DyadFile,CoreStatus,CoreFile);
+
+end
+
+
+function writeCompactSensitivityFixtures(config,participantIds,values,ntrials)
+
+participantIds = string(participantIds(:));
+values = values(:);
+nparticipants = numel(participantIds);
+condition = (1:24)';
+instruction = repmat("mir",24,1);
+complexity = repmat("low",24,1);
+version = ones(24,1);
+movement = ones(24,1);
+designTable = table(condition,instruction,complexity,version,movement, ...
+    'VariableNames',{'ConditionIndex','Instruction','Complexity', ...
+    'Version','Movement'});
+meter = 1;
+which_comp = 1;
+MIRROR = nan(nparticipants,24,1,ntrials);
+validTrialMask = false(nparticipants,24,ntrials);
+for participanti = 1:nparticipants
+    MIRROR(participanti,1,1,1) = values(participanti);
+    validTrialMask(participanti,1,1) = true;
+end
+ParticipantLabel = participantIds;
+ParticipantIndex = (1:nparticipants)';
+componentRows = table(ParticipantLabel,ParticipantIndex);
+coordinationFolder = fullfile(config.block3.output_path,'Component_1');
+mkdir(coordinationFolder);
+save(fullfile(coordinationFolder, ...
+    'FREQNESS_SPATIALCOORDINATION_SUMMARY_Comp#1.mat'), ...
+    'MIRROR','which_comp','meter','participantIds','designTable', ...
+    'componentRows','validTrialMask');
+
+PhaseRQA = struct();
+phaseFields = {'RR','L','DET','ENTR','TT','LAM','Vmax','DIV'};
+for fieldi = 1:numel(phaseFields)
+    PhaseRQA.output.(phaseFields{fieldi}) = MIRROR;
+end
+coverageFields = {'ValidSampleCount','ExcludedSampleCount', ...
+    'EligiblePairCount','EligiblePairFraction'};
+for fieldi = 1:numel(coverageFields)
+    PhaseRQA.coverage.(coverageFields{fieldi}) = MIRROR;
+end
+phaseFolder = fullfile(config.block4.output_path,'Component_1');
+mkdir(phaseFolder);
+save(fullfile(phaseFolder, ...
+    'FREQNESS_PHASERQA_GAPAWARE_SUMMARY_Comp#1.mat'), ...
+    'PhaseRQA','which_comp','meter','participantIds','designTable', ...
+    'componentRows','validTrialMask');
 
 end
 
