@@ -9,9 +9,10 @@
 %  1) Participant-level network estimation
 %  2) Effective dimensionality of the bodily-network eigenspectrum
 %  3) Network-landscape and bodily-pattern visualization
-%  4) Phase-space temporal coordination across participants
-%  5) JRQA temporal coordination across participants (alternative)
-%  6) Spatial coordination across participants
+%  4) Network-landscape similarity across participants
+%  5) Phase-space temporal coordination across participants
+%  6) JRQA temporal coordination across participants (alternative)
+%  7) Spatial coordination across participants
 %
 %  Place each dataset in a separate folder inside FREQNESS_Data. A dataset
 %  may be stored as one group-level .mat array or as one .mat file per
@@ -56,6 +57,7 @@ clc
 % second- and third-order functions.
 run_effect_dim  = true;
 run_visualizer  = false;
+run_landscape_similarity = false;
 run_phase_rqa   = false;
 run_time_coord  = false;
 run_space_coord = false;
@@ -122,7 +124,17 @@ patterns_bones = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10; ...
 
 
 % ------------------------------------------------------------------------
-% BLOCK #4: FREQNESS_PhaseSpaceRQA_Mocap
+% BLOCK #4: FREQNESS_LandscapeSimilarity
+% ------------------------------------------------------------------------
+
+% Leave the frequency range empty to use all frequencies. Otherwise, the
+% two bounds are matched to their nearest neighbors in FREQ.frex.
+landscape_similarity_component = 1;
+landscape_similarity_frequency_range = [];
+
+
+% ------------------------------------------------------------------------
+% BLOCK #5: FREQNESS_PhaseSpaceRQA_Mocap
 % ------------------------------------------------------------------------
 
 % target_frex may be one frequency reused for all participants or one value
@@ -149,7 +161,7 @@ phaserqa_animation_pause = 0.01;
 
 
 % ------------------------------------------------------------------------
-% BLOCK #5: FREQNESS_TimeCoord_Mocap (JRQA alternative)
+% BLOCK #6: FREQNESS_TimeCoord_Mocap (JRQA alternative)
 % ------------------------------------------------------------------------
 
 % Embedding settings determined before running temporal coordination.
@@ -162,7 +174,7 @@ timecoord_duration = [0.15 0.85];
 
 
 % ------------------------------------------------------------------------
-% BLOCK #6: FREQNESS_SpaceCoord_Mocap
+% BLOCK #7: FREQNESS_SpaceCoord_Mocap
 % ------------------------------------------------------------------------
 
 spacecoord_metric_levels = [0.25 0.5 1 2];
@@ -178,6 +190,8 @@ ndatasets = numel(allData);
 FREQ       = cell(ndatasets,1);
 H2         = cell(ndatasets,1);
 ED         = cell(ndatasets,1);
+similarity_comp = cell(ndatasets,1);
+similarity_entropy = cell(ndatasets,1);
 FREQrqa    = cell(ndatasets,1);
 FREQjrqa   = cell(ndatasets,1);
 FREQmirror = cell(ndatasets,1);
@@ -301,7 +315,21 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #4: FREQNESS_PhaseSpaceRQA_Mocap
+    % BLOCK #4: FREQNESS_LandscapeSimilarity
+    % =====================================================================
+
+    if run_landscape_similarity
+
+        [similarity_comp{datai},similarity_entropy{datai}] = ...
+            FREQNESS_LandscapeSimilarity(FREQ{datai}, ...
+            'component',landscape_similarity_component,'frequency_range', ...
+            landscape_similarity_frequency_range);
+
+    end
+
+
+    %% ====================================================================
+    % BLOCK #5: FREQNESS_PhaseSpaceRQA_Mocap
     % =====================================================================
 
     if run_phase_rqa %#ok<UNRCH>
@@ -328,7 +356,7 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #5: FREQNESS_TimeCoord_Mocap (JRQA alternative)
+    % BLOCK #6: FREQNESS_TimeCoord_Mocap (JRQA alternative)
     % =====================================================================
 
     if run_time_coord
@@ -353,7 +381,7 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #6: FREQNESS_SpaceCoord_Mocap
+    % BLOCK #7: FREQNESS_SpaceCoord_Mocap
     % =====================================================================
 
     if run_space_coord %#ok<UNRCH>
