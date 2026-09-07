@@ -26,9 +26,10 @@ across corresponding participant-level FREQ-NESS outputs using separate
 functions for network-landscape similarity (`FREQNESS_LandscapeSimilarity`),
 phase-space temporal coordination (`FREQNESS_PhaseSpaceRQA_Mocap`), JRQA
 temporal coordination (`FREQNESS_TimeCoord_Mocap`), and spatial coordination
-(`FREQNESS_SpaceCoord_Mocap`). Landscape similarity correlates the complete
-eigenspectra between participants across all frequencies or a requested
-nearest-neighbor frequency range. Phase-space RQA treats every participant's
+(`FREQNESS_SpaceCoord_Mocap`). Landscape similarity correlates both a selected
+component's eigenvalue trajectory and the H2 entropy landscape between
+participants across all frequencies or a requested nearest-neighbor frequency
+range. Phase-space RQA treats every participant's
 selected network time series as one dimension of the joint group state and
 therefore supports dyads and larger groups without scalar delay embedding.
 Its frequency and component inputs can be scalars shared by the whole group

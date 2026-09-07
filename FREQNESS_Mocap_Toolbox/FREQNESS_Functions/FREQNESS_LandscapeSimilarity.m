@@ -1,14 +1,16 @@
-function [landscape_similarity,selected_frex] = FREQNESS_LandscapeSimilarity(FREQ,varargin)
+function [similarity_comp,similarity_entropy,selected_frex] = ...
+    FREQNESS_LandscapeSimilarity(FREQ,varargin)
 
 % ========================================================================
 %
 %  FREQUENCY-RESOLVED NETWORK ESTIMATION TOOLBOX - MOCAP VERSION
 %
 % ========================================================================
-%  This function estimates similarity between participants' complete
-%  frequency-resolved network landscapes. Each participant's selected
-%  FREQ.evals values are vectorized across eigenvalues and frequencies,
-%  and Pearson correlations are computed between those vectors.
+%  This function estimates similarity between participants' component and
+%  entropy landscapes across frequency. Component similarity correlates
+%  the selected eigenvalue trajectory. Entropy similarity calls
+%  FREQNESS_EffectDim_Mocap and correlates the resulting quadratic Rényi
+%  entropy (H2) trajectories.
 %
 % ------------------------------------------------------------------------
 %  INPUT ARGUMENTS:
@@ -20,7 +22,10 @@ function [landscape_similarity,selected_frex] = FREQNESS_LandscapeSimilarity(FRE
 %                         [nFrex x nParticipants] matrix containing the
 %                         same frequency grid for every participant
 %
-%  - Optional name-value pair:
+%  - Optional name-value pairs:
+%      - 'component'       : eigenvalue/component trajectory to correlate.
+%                            Default: 1.
+%
 %      - 'frequency_range' : two-element [low high] frequency range.
 %                            Each bound is matched to its nearest neighbor
 %                            in FREQ.frex and the inclusive interval is
@@ -29,15 +34,19 @@ function [landscape_similarity,selected_frex] = FREQNESS_LandscapeSimilarity(FRE
 % ------------------------------------------------------------------------
 %  OUTPUT ARGUMENTS:
 % ------------------------------------------------------------------------
-%  - landscape_similarity : Pearson correlation between the two landscape
-%                           vectors for a dyad, or an
-%                           [nParticipants x nParticipants] correlation
-%                           matrix for a larger group. Empty when fewer
-%                           than two participants are present.
+%  - similarity_comp    : Pearson correlation of the selected component's
+%                         eigenvalue trajectory for a dyad, or an
+%                         [nParticipants x nParticipants] correlation
+%                         matrix for a larger group.
 %
-%  - selected_frex        : frequencies included in the correlations after
-%                           nearest-neighbor matching. Empty when fewer
-%                           than two participants are present.
+%  - similarity_entropy : Pearson correlation of the H2 entropy landscape
+%                         for a dyad, or an [nParticipants x nParticipants]
+%                         correlation matrix for a larger group.
+%
+%  - selected_frex      : frequencies included in the correlations after
+%                         nearest-neighbor matching.
+%
+%  All outputs are empty when fewer than two participants are present.
 %
 % ------------------------------------------------------------------------
 %  AUTHORS:
@@ -54,8 +63,9 @@ function [landscape_similarity,selected_frex] = FREQNESS_LandscapeSimilarity(FRE
 
 %% Handle optional arguments
 
-opts = struct('frequency_range',[]);
+opts = struct('component',1,'frequency_range',[]);
 opts = parse_name_value_pairs(opts,varargin{:});
+component = opts.component;
 frequency_range = opts.frequency_range;
 
 if ~isempty(frequency_range) && (~isnumeric(frequency_range) || ...
@@ -89,7 +99,8 @@ end
 
 nfrex = size(eigenspectrum,2);
 nsubs = size(eigenspectrum,3);
-landscape_similarity = [];
+similarity_comp = [];
+similarity_entropy = [];
 selected_frex = [];
 
 if nsubs < 2
@@ -97,6 +108,17 @@ if nsubs < 2
         ['Landscape similarity requires at least two participants in the ' ...
         'last dimension of FREQ.evals. No output was produced.']);
     return
+end
+
+if ~isnumeric(component) || ~isreal(component) || ~isscalar(component) || ...
+        ~isfinite(component) || component < 1 || component ~= round(component) || ...
+        component > size(eigenspectrum,1)
+    error(['component must be one positive integer indexing the first ' ...
+        'dimension of FREQ.evals.']);
+end
+
+if any(sum(eigenspectrum,1) <= 0,'all')
+    error('Every participant-frequency eigenspectrum must have a positive sum.');
 end
 
 if ~isfield(FREQ,'frex') || isempty(FREQ.frex)
@@ -143,27 +165,43 @@ selected_frex = shared_frex(selected_indices);
 
 %% Compute between-participant landscape similarity
 
-landscapes = reshape(eigenspectrum(:,selected_indices,:),[],nsubs);
-if size(landscapes,1) < 2
-    error(['At least two eigenvalue-frequency observations are required ' ...
+if numel(selected_indices) < 2
+    error(['At least two selected frequencies are required ' ...
         'to compute landscape similarity.']);
 end
 
+component_landscapes = reshape( ...
+    eigenspectrum(component,selected_indices,:),numel(selected_indices),nsubs);
+[H2,~] = FREQNESS_EffectDim_Mocap(FREQ,'figure',false);
+entropy_landscapes = H2(selected_indices,:);
+
+similarity_comp = correlate_landscapes( ...
+    component_landscapes,nsubs,'Component');
+similarity_entropy = correlate_landscapes( ...
+    entropy_landscapes,nsubs,'Entropy');
+
+fprintf(['\nFREQNESS Landscape Similarity: correlated component #%d and ' ...
+    'H2 entropy landscapes for %d participants across %d frequencies.\n'], ...
+    component,nsubs,numel(selected_frex));
+
+end
+
+
+%% Helper function: Correlate participant landscapes
+function similarity = correlate_landscapes(landscapes,nsubs,landscape_name)
+
 if any(std(landscapes,0,1) == 0)
-    warning('FREQNESS:LandscapeSimilarity:ConstantLandscape', ...
-        ['At least one participant has a constant landscape; its ' ...
-        'correlations are undefined.']);
+    warning(['FREQNESS:LandscapeSimilarity:Constant' landscape_name 'Landscape'], ...
+        ['At least one participant has a constant ' lower(landscape_name) ...
+        ' landscape; its correlations are undefined.']);
 end
 
 correlation_matrix = corrcoef(landscapes);
 if nsubs == 2
-    landscape_similarity = correlation_matrix(1,2);
+    similarity = correlation_matrix(1,2);
 else
-    landscape_similarity = correlation_matrix;
+    similarity = correlation_matrix;
 end
-
-fprintf(['\nFREQNESS Landscape Similarity: correlated %d participants ' ...
-    'across %d frequencies.\n'],nsubs,numel(selected_frex));
 
 end
 

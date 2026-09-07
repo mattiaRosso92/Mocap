@@ -127,8 +127,9 @@ patterns_bones = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10; ...
 % BLOCK #4: FREQNESS_LandscapeSimilarity
 % ------------------------------------------------------------------------
 
-% Leave empty to correlate complete landscapes. Otherwise, the two bounds
-% are matched to their nearest neighbors in FREQ.frex.
+% Leave the frequency range empty to use all frequencies. Otherwise, the
+% two bounds are matched to their nearest neighbors in FREQ.frex.
+landscape_similarity_component = 1;
 landscape_similarity_frequency_range = [];
 
 
@@ -189,7 +190,8 @@ ndatasets = numel(allData);
 FREQ       = cell(ndatasets,1);
 H2         = cell(ndatasets,1);
 ED         = cell(ndatasets,1);
-LandscapeSimilarity = cell(ndatasets,1);
+similarity_comp = cell(ndatasets,1);
+similarity_entropy = cell(ndatasets,1);
 FREQrqa    = cell(ndatasets,1);
 FREQjrqa   = cell(ndatasets,1);
 FREQmirror = cell(ndatasets,1);
@@ -318,8 +320,9 @@ for datai = 1:ndatasets
 
     if run_landscape_similarity
 
-        LandscapeSimilarity{datai} = FREQNESS_LandscapeSimilarity( ...
-            FREQ{datai},'frequency_range', ...
+        [similarity_comp{datai},similarity_entropy{datai}] = ...
+            FREQNESS_LandscapeSimilarity(FREQ{datai}, ...
+            'component',landscape_similarity_component,'frequency_range', ...
             landscape_similarity_frequency_range);
 
     end
