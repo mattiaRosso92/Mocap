@@ -2,9 +2,9 @@
 
 Study-specific FREQ-NESS MoCap pipeline for artificial model-participant
 dyads. The main script is intentionally chronological and keeps the scientific
-settings, analysis order, and output routing visible in one place. Helper
-functions are reserved for repetitive import, alignment, bookkeeping, and
-plotting.
+settings, import, QC, alignment, analysis, output routing, and plotting visible
+in one place. Only general-purpose `FREQNESS_*` operations are delegated to the
+MoCap toolbox; there is no study-specific helper layer.
 
 ## Progress
 
@@ -13,7 +13,7 @@ plotting.
 | ☑ | Import and handle data | Recursive import, frame/rate/name/marker/gap QC, explicit exclusions, and auditable reports. |
 | ☑ | Create artificial dyads | Every objectively usable participant trial is paired with its matching teacher stimulus in `[coordinates x time x members]` format. |
 | ☑ | Run toolbox analyses | Core FREQ-NESS, role-specific landscapes/ED, interaction analyses, group summaries, and figures. |
-| ☑ | Recover annotated participants | Folder annotations are audited and waived; all objective data-quality rules remain active. |
+| ☑ | Recover annotated participants | Folder annotations are audited rather than treated as automatic exclusions; all objective data-quality rules remain active. |
 | ☑ | Statistical modelling | R-ready exports, mixed-effects models, diagnostics, contrasts, and multiplicity correction. |
 
 ## Running the pipeline
@@ -42,8 +42,8 @@ sections. The numbered analysis blocks are:
 6. **Mixed-effects modelling in R** - factorial models, diagnostics, simple
    effects, and corrected omnibus tables.
 
-A final unnumbered validation section compares the cleaned export with the
-earlier all-participant export.
+A final unnumbered validation section can compare every numerical summary and
+statistical export with a supplied reference run.
 
 ## Experimental design and alignment
 
@@ -111,7 +111,7 @@ outputs/
 |-- 04_Group/
 |-- 05_Statistics_R/
 |-- 06_Statistics_Results/
-`-- 07_CleanupValidation/
+`-- 09_CleanupValidation/
 ```
 
 Artificial dyads and core `FREQ` outputs are stored beside one another in each
@@ -131,24 +131,14 @@ modelling; exported values remain correlations on their original scale.
 
 ## Validated full run
 
-The 2026-09-08 production rebuild scanned 2,425 participant recordings and 18
+The 2026-09-08 production workflow scanned 2,425 participant recordings and 18
 teacher files. After auditing the three annotated participant folders, 1,951
 recordings from all 52 participants passed every objective rule and completed
-all six blocks without analysis errors. The final exports contain 8,864
-meter-resolved rows and 2,216 landscape-similarity rows.
+all six blocks. The final exports contain 8,864 meter-resolved rows and 2,216
+landscape-similarity rows.
 
-The earlier all-participant export contained 8,856 rows. The cleaned pipeline
-retains all 8,856 legacy keys and adds eight rows for one newly complete
-participant-condition cell. Exact numerical identity is therefore rejected.
-Across common rows, mean absolute differences are small (for spatial
-coordination, about `1.51e-4`) and reflect preserved observed coordinates,
-real post-window interpolation context, and the three additional usable
-recordings. Most importantly, the BH-corrected significance classification of
-all 558 legacy full-model terms is unchanged.
-
-## Legacy sensitivity workflow
-
-`EmpaticMirroring_RecoverySensitivity.m` remains available as an audit of the
-older retained-versus-recovered split. The current main pipeline already
-includes all objectively usable recordings from those annotated folders, so
-the sensitivity script is not required for the primary cleaned analysis.
+The single-script rewrite was checked against the latest pre-refactor run.
+Both components' RQA metrics and coverage, spatial coordination, both landscape
+similarities, role-specific group network summaries, and all four statistical
+exports were exactly identical: all 47 parity checks passed with a maximum
+absolute difference of zero.
