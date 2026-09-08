@@ -33,18 +33,19 @@ config.timing.participantOffsetSeconds = 0;
 config.timing.analysisDurationSeconds = 33;
 config.timing.filterPaddingSeconds = 1;
 
-% QTM preprocessing previously filled gaps <=50 ms. MATLAB repeats this
-% rule and reconstructs longer gaps up to 2 s with cubic splines. This
-% method was selected by blocked artificial-gap and FREQ-output validation
-% against linear, PCHIP and low-rank alternatives. Observed coordinates are
-% held fixed. Every originally missing timepoint remains in bad_segments and
-% is never a covariance or downstream time-series observation; reconstruction exists
-% solely to support continuous resampling and narrow-band filtering.
+% QTM preprocessing previously filled gaps <=50 ms. The shared MoCap
+% toolbox repeats this rule and reconstructs longer gaps up to 2 s with
+% cubic splines. At the required analysis boundaries only, nearest observed
+% values provide filter continuity when two-sided interpolation is impossible.
+% Observed coordinates are held fixed. Every originally missing timepoint
+% remains in bad_segments and is never a covariance or downstream time-series
+% observation; reconstruction exists solely to support resampling/filtering.
 config.preprocessing.upstreamFilledGapLimitSeconds = 0.050;
 config.preprocessing.shortGapInterpolationSeconds = 0.050;
 config.preprocessing.maximumReconstructedGapSeconds = 2;
 config.preprocessing.minimumCompleteTimepointFraction = 0.50;
 config.preprocessing.reconstructionMethod = "cubic_spline";
+config.preprocessing.boundaryMethod = "nearest";
 
 % Match the DyadicDance template: [coordinates x time x participants], with
 % model first and participant second. Single precision limits regenerated
@@ -59,7 +60,7 @@ config.dyads.save = true;
 % above but remain excluded samples. Recordings exceeding reconstruction or
 % observed-data coverage limits are excluded rather than silently repaired.
 config.markers.rawExpectedCount = 22;
-config.markers.policyVersion = "full22_spline_v1";
+config.markers.policyVersion = "full22_toolbox_context_v4";
 config.markers.labels = {'L Elbow','L Wrist','L Hand','L Shoulder', ...
     'R Shoulder','Sternum','R Elbow','R Wrist','R Hand','L Hip', ...
     'R Hip','Pelvis','L Knee','R Knee','L Ankle','R Ankle', ...
@@ -112,64 +113,61 @@ config.block2.max_dyads = inf;
 % still rejects any spectrum exceeding this empirically verified bound.
 config.block2.eigenvalue_negative_tolerance = 2e-4;
 
-% BLOCK 3 - SPATIAL COORDINATION. JRQA is disabled because it cannot exclude
-% the study's gappy samples without biasing temporal recurrence estimates.
+% BLOCK 3 - INTERACTION ANALYSES, in this order: gap-aware phase-space RQA,
+% spatial coordination, and network-landscape similarity. JRQA is disabled
+% because it cannot exclude gappy samples without biasing recurrence.
 config.block3.run = false;
-config.block3.output_path = fullfile(config.paths.outputRoot, ...
-    '03_Coordination');
+config.block3.output_path = fullfile(config.paths.outputRoot,'03_Interaction');
+config.block3.rqa_output_path = fullfile(config.block3.output_path, ...
+    '01_PhaseSpaceRQA');
+config.block3.spatial_output_path = fullfile(config.block3.output_path, ...
+    '02_SpatialAndLandscape');
 config.block3.overwrite_flag = false;
 config.block3.save_flag = true;
 config.block3.components = 1:2;
 config.block3.metric_levels = [.25 .5 1 2];
+% Empty selects the complete FREQ.frex grid. Optional bounds are matched
+% to the nearest available frequencies by FREQNESS_LandscapeSimilarity.
+config.block3.landscape_frequency_range = [];
 config.block3.max_dyads = inf;
+% RQA-specific settings within BLOCK 3.
+config.block3.rqa_downsample_factor = 5;
+config.block3.rqa_lp_order = 4;
+config.block3.rqa_lp_cutoff_norm = .8;
+config.block3.rqa_duration = [.15 .85];
+config.block3.rqa_standardize = true;
+config.block3.rqa_threshold_method = 'max_fraction';
+config.block3.rqa_threshold = .1;
+config.block3.rqa_theiler_window = 0;
+config.block3.rqa_lmin = 2;
+config.block3.rqa_vmin = 2;
+config.block3.rqa_store_matrices = false;
+config.block3.rqa_figure = false;
+config.block3.rqa_animate = false;
 
-% BLOCK 4 - GAP-AWARE PHASE-SPACE RQA. Filter continuous valid runs
-% independently, downsample to 24 Hz, and exclude remapped bad samples.
-config.block4.run = false;
-config.block4.output_path = fullfile(config.paths.outputRoot, ...
-    '04_PhaseSpaceRQA');
-config.block4.overwrite_flag = false;
-config.block4.save_flag = true;
-config.block4.components = 1:2;
-config.block4.metric_levels = [.25 .5 1 2];
-config.block4.downsample_factor = 5;
-config.block4.lp_order = 4;
-config.block4.lp_cutoff_norm = .8;
-config.block4.duration = [.15 .85];
-config.block4.standardize = true;
-config.block4.threshold_method = 'max_fraction';
-config.block4.threshold = .1;
-config.block4.theiler_window = 0;
-config.block4.lmin = 2;
-config.block4.vmin = 2;
-config.block4.store_matrices = false;
-config.block4.figure = false;
-config.block4.animate = false;
-config.block4.max_dyads = inf;
-
-% BLOCK 5 - GROUP-LEVEL SUMMARIES AND VISUALIZATION. Stream individual
+% BLOCK 4 - GROUP-LEVEL SUMMARIES AND VISUALIZATION. Stream individual
 % results condition by condition; save means/SEMs rather than dense copies
 % of every FREQ output.
-config.block5.run = false;
-config.block5.output_path = fullfile(config.paths.outputRoot,'05_Group');
-config.block5.figure_path = fullfile(config.block5.output_path,'Figures');
-config.block5.overwrite_flag = false;
-config.block5.save_flag = true;
-config.block5.make_figures = true;
-config.block5.ncomps2keep = 4;
-config.block5.pattern_components = 1:2;
-config.block5.pattern_frequencies = [.25 .5 1 2];
-config.block5.plot_pattern_bones = true;
-config.block5.max_dyads = inf;
+config.block4.run = false;
+config.block4.output_path = fullfile(config.paths.outputRoot,'04_Group');
+config.block4.figure_path = fullfile(config.block4.output_path,'Figures');
+config.block4.overwrite_flag = false;
+config.block4.save_flag = true;
+config.block4.make_figures = true;
+config.block4.ncomps2keep = 4;
+config.block4.pattern_components = 1:2;
+config.block4.pattern_frequencies = [.25 .5 1 2];
+config.block4.plot_pattern_bones = true;
+config.block4.max_dyads = inf;
 
-% BLOCK 6 - R-READY STATISTICAL EXPORT. Trial-level results remain in
-% BLOCKS 3-4; this export averages repetitions within each participant and
+% BLOCK 5 - R-READY STATISTICAL EXPORT. Trial-level interaction results
+% remain in BLOCK 3; this export averages repetitions within participant and
 % factorial cell before statistical modelling.
-config.block6.run = false;
-config.block6.output_path = fullfile(config.paths.outputRoot, ...
-    '06_Statistics_R');
-config.block6.overwrite_flag = false;
-config.block6.write_xlsx = true;
+config.block5.run = false;
+config.block5.output_path = fullfile(config.paths.outputRoot, ...
+    '05_Statistics_R');
+config.block5.overwrite_flag = false;
+config.block5.write_xlsx = true;
 
 % EXCLUDED-RECORDING SENSITIVITY ANALYSIS. This is deliberately separate
 % from the primary output tree. Only the participant-folder annotations are

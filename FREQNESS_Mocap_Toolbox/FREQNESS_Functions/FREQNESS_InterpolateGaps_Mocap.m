@@ -28,6 +28,19 @@ function [data_filled,bad_segments,gap_info] = ...
 %                                     cubic-spline reconstruction. Default:
 %                                     [] (long-gap reconstruction disabled).
 %
+%      - 'required_samples'          : sample indices that must be fully
+%                                     reconstructed. Default: all samples.
+%                                     Other samples may provide interpolation
+%                                     context, but unresolved gaps confined to
+%                                     them do not cause an error.
+%
+%      - 'boundary_method'           : treatment of supported gaps touching
+%                                     either edge of required_samples.
+%                                     'reject' (default) leaves them
+%                                     unresolved; 'nearest' carries the
+%                                     nearest observed coordinate into the
+%                                     required interval for filter continuity.
+%
 % ------------------------------------------------------------------------
 %  OUTPUT ARGUMENTS:
 % ------------------------------------------------------------------------
@@ -42,9 +55,11 @@ function [data_filled,bad_segments,gap_info] = ...
 %  - gap_info : gap provenance and QC, including participant-specific
 %               bad samples and marker-level interpolation masks.
 %
-%  Boundary gaps and gaps exceeding the configured limits are unresolved
-%  and produce an error. Filled values support filtering only; they are not
-%  restored observations.
+%  Boundary gaps are unresolved by default. Opt-in nearest filling is useful
+%  when missing boundary samples must be represented only to support
+%  filtering; they remain in bad_segments. Gaps exceeding the configured
+%  limits remain unresolved. An error is produced when unresolved gaps
+%  intersect required_samples. Filled values are not restored observations.
 %
 % ------------------------------------------------------------------------
 %  AUTHORS:
@@ -66,7 +81,8 @@ if nargin < 2
 end
 
 opts = struct('maximum_interpolated_gap',0.05, ...
-    'maximum_reconstructed_gap',[]);
+    'maximum_reconstructed_gap',[],'required_samples',[], ...
+    'boundary_method','reject');
 opts = parse_name_value_pairs(opts,varargin{:});
 
 if ~isnumeric(data) || ~isreal(data) || isempty(data) || ...
@@ -94,6 +110,8 @@ if ~isempty(opts.maximum_reconstructed_gap)
             'equal to maximum_interpolated_gap.']);
     end
 end
+boundary_method = validatestring(opts.boundary_method,{'reject','nearest'}, ...
+    mfilename,'boundary_method');
 
 
 %% Detect marker and participant gaps
@@ -103,6 +121,12 @@ ncoordinates = size(data,1);
 nsamples = size(data,2);
 nparticipants = size(data,3);
 nmarkers = ncoordinates/3;
+if isempty(opts.required_samples)
+    required_samples = 1:nsamples;
+else
+    required_samples = validate_sample_indices( ...
+        opts.required_samples,nsamples,'required_samples');
+end
 
 original_missing_coordinate_mask = isnan(data);
 marker_missing_mask = reshape(any(reshape( ...
@@ -171,6 +195,43 @@ for participant_index = 1:nparticipants
     end
 end
 
+if strcmp(boundary_method,'nearest')
+    required_mask = false(1,nsamples);
+    required_mask(required_samples) = true;
+    required_start = required_samples(1);
+    required_end = required_samples(end);
+    for participant_index = 1:nparticipants
+        for marker_index = 1:nmarkers
+            unresolved = unresolved_mask(marker_index,:,participant_index) & ...
+                required_mask;
+            [gap_starts,gap_ends] = find_runs(unresolved);
+            coordinate_indices = (3*marker_index-2):(3*marker_index);
+            for gap_index = 1:numel(gap_starts)
+                indices = gap_starts(gap_index):gap_ends(gap_index);
+                touches_required_boundary = indices(1) == required_start || ...
+                    indices(end) == required_end;
+                if ~touches_required_boundary || ...
+                        numel(indices) > maximum_reconstructed_frames
+                    continue
+                end
+                [filled_marker,success] = fill_marker_gap( ...
+                    data_filled(coordinate_indices,:,participant_index), ...
+                    indices,'nearest');
+                if ~success
+                    continue
+                end
+                data_filled(coordinate_indices,:,participant_index) = filled_marker;
+                unresolved_mask(marker_index,indices,participant_index) = false;
+                if numel(indices) <= maximum_interpolated_frames
+                    interpolated_mask(marker_index,indices,participant_index) = true;
+                else
+                    reconstructed_mask(marker_index,indices,participant_index) = true;
+                end
+            end
+        end
+    end
+end
+
 
 %% Assemble output metadata
 
@@ -186,17 +247,21 @@ gap_info = struct( ...
     'maximum_interpolated_gap_frames',maximum_interpolated_frames, ...
     'maximum_reconstructed_gap_seconds',opts.maximum_reconstructed_gap, ...
     'maximum_reconstructed_gap_frames',maximum_reconstructed_frames, ...
+    'required_samples',required_samples, ...
+    'boundary_method',string(boundary_method), ...
     'missing_coordinate_sample_count',nnz(original_missing_coordinate_mask), ...
     'affected_marker_sample_count',nnz(marker_missing_mask), ...
     'affected_timepoint_count',numel(bad_segments), ...
     'participant_count',nparticipants, ...
     'has_gaps',~isempty(bad_segments));
 
-if any(unresolved_mask,'all')
+required_unresolved_mask = unresolved_mask(:,required_samples,:);
+if any(required_unresolved_mask,'all')
     error('FREQNESS:GapInterpolation:UnresolvedGaps', ...
-        ['%d marker samples remain unresolved because they touch a data ' ...
-        'boundary, exceed the configured gap limits, or lack sufficient ' ...
-        'observations for interpolation.'],nnz(unresolved_mask));
+        ['%d required marker samples remain unresolved because they touch ' ...
+        'a data boundary, exceed the configured gap limits, or lack ' ...
+        'sufficient observations for interpolation.'], ...
+        nnz(required_unresolved_mask));
 end
 
 if ~isempty(bad_segments)
@@ -224,6 +289,20 @@ end
 end
 
 
+%% Helper function: Validate a vector of sample indices
+function indices = validate_sample_indices(value,nsamples,name)
+
+if ~isnumeric(value) || ~isreal(value) || ~isvector(value) || ...
+        isempty(value) || any(~isfinite(value)) || ...
+        any(value ~= round(value)) || any(value < 1) || ...
+        any(value > nsamples)
+    error('%s must contain valid 1-based sample indices.',name);
+end
+indices = unique(double(value(:)'));
+
+end
+
+
 %% Helper function: Fill one marker gap without changing observed values
 function [marker_values,success] = fill_marker_gap(marker_values,indices,method)
 
@@ -240,13 +319,25 @@ for coordinate_index = 1:size(marker_values,1)
     if strcmp(method,'spline')
         minimum_observations = 4;
     end
+    if strcmp(method,'nearest')
+        minimum_observations = 1;
+    end
+    is_internal_method = ~strcmp(method,'nearest');
     if numel(observed) < minimum_observations || ...
-            targets(1) <= observed(1) || targets(end) >= observed(end)
+            (is_internal_method && ...
+            (targets(1) <= observed(1) || targets(end) >= observed(end)))
         success = false;
         return
     end
-    candidate(coordinate_index,targets) = interp1( ...
-        observed,row(observed),targets,method);
+    if strcmp(method,'nearest')
+        for target_index = targets
+            [~,closest] = min(abs(observed-target_index));
+            candidate(coordinate_index,target_index) = row(observed(closest));
+        end
+    else
+        candidate(coordinate_index,targets) = interp1( ...
+            observed,row(observed),targets,method);
+    end
 end
 marker_values = candidate;
 

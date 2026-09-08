@@ -108,21 +108,66 @@ verifyEqual(testCase,dyad.badMarkerSampleMask(:,100,2),[true;false]);
 end
 
 
-function testShortBoundaryGapsUseNearestObservedSample(testCase)
+function testBoundaryGapsUseNearestContinuityValues(testCase)
 
 config = syntheticAlignmentConfig();
 coordinates = ones(6,20);
 coordinates(1:3,1:3) = NaN;
 coordinates(4:6,18:20) = NaN;
 
-[interpolated,~,policy] = EmpaticMirroring_ApplyMarkerPolicy( ...
+[filled,~,policy] = EmpaticMirroring_ApplyMarkerPolicy( ...
     coordinates,["A";"B"],120,config);
 
-verifyTrue(testCase,all(isfinite(interpolated),'all'));
-verifyEqual(testCase,interpolated(:,[1:3 18:20]), ...
-    ones(6,6));
-verifyEqual(testCase,policy.interpolatedSampleCount,6);
-verifyFalse(testCase,any(policy.unresolvedMask,'all'));
+verifyTrue(testCase,all(isfinite(filled),'all'));
+verifyEqual(testCase,filled(1:3,1:3),ones(3,3));
+verifyEqual(testCase,filled(4:6,18:20),ones(3,3));
+verifyEqual(testCase,find(policy.originalBadSampleMask),[1:3 18:20]);
+verifyEqual(testCase,policy.gapInfo.boundary_method,"nearest");
+verifyTrue(testCase,policy.isEligible);
+
+end
+
+
+function testGapsOutsideAnalysisWindowDoNotAffectAlignment(testCase)
+
+config = syntheticAlignmentConfig();
+nTeacher = 40*config.sampling.teacherHz;
+nParticipant = 40*config.sampling.participantHz;
+teacher = syntheticRecording(ones(1,nTeacher), ...
+    config.sampling.teacherHz,"teacher.mat");
+participant = syntheticRecording(ones(1,nParticipant), ...
+    config.sampling.participantHz,"participant.mat");
+teacher.coordinates(1:3,end-100:end) = NaN;
+participant.coordinates(1:3,end-100:end) = NaN;
+
+dyad = EmpaticMirroring_AlignArtificialDyad(teacher,participant,config);
+
+verifyTrue(testCase,all(isfinite(dyad.data),'all'));
+verifyEmpty(testCase,dyad.badSegments);
+verifyEmpty(testCase,dyad.badSegmentsByParticipant{1});
+verifyEmpty(testCase,dyad.badSegmentsByParticipant{2});
+
+end
+
+
+function testPostWindowContextSupportsEndpointReconstruction(testCase)
+
+config = syntheticAlignmentConfig();
+nTeacher = 40*config.sampling.teacherHz;
+nParticipant = 40*config.sampling.participantHz;
+teacher = syntheticRecording(ones(1,nTeacher), ...
+    config.sampling.teacherHz,"teacher.mat");
+participant = syntheticRecording(ones(1,nParticipant), ...
+    config.sampling.participantHz,"participant.mat");
+analysisEnd = config.timing.analysisDurationSeconds* ...
+    config.sampling.participantHz;
+participant.coordinates(1:3,analysisEnd-5:analysisEnd+10) = NaN;
+
+dyad = EmpaticMirroring_AlignArtificialDyad(teacher,participant,config);
+
+verifyTrue(testCase,all(isfinite(dyad.data),'all'));
+verifyEqual(testCase,dyad.badSegmentsByParticipant{2}, ...
+    analysisEnd-5:analysisEnd);
 
 end
 
@@ -281,7 +326,7 @@ participant.coordinates(1:3,100:341) = NaN;
 
 verifyError(testCase,@() EmpaticMirroring_AlignArtificialDyad( ...
     teacher,participant,config), ...
-    'EmpaticMirroring:MarkerReconstructionIneligible');
+    'FREQNESS:GapInterpolation:UnresolvedGaps');
 
 end
 
@@ -387,12 +432,13 @@ verifyEqual(testCase,config.block1.frex, ...
     repmat(expectedFrexVector,1,2));
 verifyEqual(testCase,config.block1.ncomps,4);
 verifyFalse(testCase,config.block1.run);
-verifyEqual(testCase,config.block5.pattern_components,1:2);
-verifyEqual(testCase,config.block5.pattern_frequencies,[.25 .5 1 2]);
-verifyTrue(testCase,config.block5.plot_pattern_bones);
+verifyEqual(testCase,config.block4.pattern_components,1:2);
+verifyEqual(testCase,config.block4.pattern_frequencies,[.25 .5 1 2]);
+verifyTrue(testCase,config.block4.plot_pattern_bones);
 verifyEqual(testCase,config.markers.rawExpectedCount,22);
 verifyEqual(testCase,config.markers.expectedCount,22);
-verifyEqual(testCase,config.markers.policyVersion,"full22_spline_v1");
+verifyEqual(testCase,config.markers.policyVersion, ...
+    "full22_toolbox_context_v4");
 verifyEqual(testCase,string(config.markers.labels(:)),[ ...
     "L Elbow";"L Wrist";"L Hand";"L Shoulder";"R Shoulder"; ...
     "Sternum";"R Elbow";"R Wrist";"R Hand";"L Hip";"R Hip"; ...
@@ -493,11 +539,13 @@ rng(109);
 markData = randn(6,240,2);
 srate = 120;
 bad_segments = [20 30];
+bad_segments_by_participant = {20,30};
 markData(:,bad_segments,:) = 0;
 marker_reference = markData(:,1,:);
 marker_policy = struct('version',config.markers.policyVersion);
 dyad_info = struct('subject',"001",'trialIndex',1);
 save(dyadFile,'markData','srate','bad_segments', ...
+    'bad_segments_by_participant', ...
     'marker_reference','marker_policy','dyad_info');
 
 DyadFile = string(dyadFile);
@@ -523,6 +571,8 @@ verifyEqual(testCase,savedCore.FREQ.frex,config.block1.frex);
 verifyEqual(testCase,savedCore.FREQ.frex_norm, ...
     config.block1.frex./config.block1.beat_frex);
 verifyEqual(testCase,savedCore.FREQ.bad_segments,bad_segments);
+verifyEqual(testCase,savedCore.FREQ.bad_segments_by_participant, ...
+    bad_segments_by_participant);
 verifySize(testCase,savedCore.FREQ.evals,[6 2 2]);
 verifySize(testCase,savedCore.FREQ.evecs,[6 2 2 2]);
 
@@ -678,7 +728,8 @@ cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
 
 config = EmpaticMirroring_Config();
 config.paths.qcOutputRoot = fullfile(temporaryRoot,'qc');
-config.block3.output_path = fullfile(temporaryRoot,'03_Coordination');
+config.block3.spatial_output_path = fullfile(temporaryRoot, ...
+    '03_Interaction','02_SpatialAndLandscape');
 config.block3.overwrite_flag = false;
 config.block3.save_flag = true;
 config.block3.components = 1;
@@ -697,6 +748,8 @@ FREQ = struct();
 FREQ.ts = randn(2,600,2,2);
 FREQ.pats = randn(6,2,2,2);
 FREQ.frex = repmat([1;2],1,2);
+FREQ.evals = cat(3,[4 3;2 2;1 1;.5 .6;.3 .2;.1 .1], ...
+    [3 4;2 2;1 1;.6 .5;.2 .3;.1 .1]);
 FREQ.srate = 120;
 beat_frex = [1.67 1.67];
 save(coreFile,'FREQ','beat_frex');
@@ -720,20 +773,30 @@ verifyEqual(testCase,firstSummary.createdCount,1);
 verifyEqual(testCase,firstSummary.errorCount,0);
 outputFile = firstSummary.coordinationManifest.CoordinationFile;
 verifyTrue(testCase,isfile(outputFile));
-saved = load(outputFile,'FREQmirror','which_comp', ...
+saved = load(outputFile,'FREQmirror','landscape_similarity_comp', ...
+    'landscape_similarity_entropy','selected_frex','which_comp', ...
     'meter','analysis_info');
 verifyEqual(testCase,saved.which_comp,1);
 verifyEqual(testCase,saved.meter,1);
-verifyEqual(testCase,saved.analysis_info.method,"spatial_mirroring");
+verifyEqual(testCase,saved.analysis_info.method, ...
+    "spatial_mirroring_and_landscape_similarity");
 verifyEqual(testCase,numel(saved.FREQmirror),1);
+verifyTrue(testCase,isfinite(saved.landscape_similarity_comp));
+verifyTrue(testCase,isfinite(saved.landscape_similarity_entropy));
+verifyEqual(testCase,saved.selected_frex,[1;2]);
 
-summaryFile = fullfile(config.block3.output_path,'Component_1', ...
+summaryFile = fullfile(config.block3.spatial_output_path,'Component_1', ...
     'FREQNESS_SPATIALCOORDINATION_SUMMARY_Comp#1.mat');
 verifyTrue(testCase,isfile(summaryFile));
-group = load(summaryFile,'MIRROR','designTable', ...
+group = load(summaryFile,'MIRROR','LANDSCAPE_SIMILARITY_COMP', ...
+    'LANDSCAPE_SIMILARITY_ENTROPY','designTable', ...
     'componentRows','validTrialMask');
 verifySize(testCase,group.MIRROR,[1 24]);
 verifyEqual(testCase,group.MIRROR(1,1,1,1),saved.FREQmirror);
+verifyEqual(testCase,group.LANDSCAPE_SIMILARITY_COMP(1,1,1), ...
+    saved.landscape_similarity_comp);
+verifyEqual(testCase,group.LANDSCAPE_SIMILARITY_ENTROPY(1,1,1), ...
+    saved.landscape_similarity_entropy);
 verifyEqual(testCase,height(group.designTable),24);
 verifyEqual(testCase,group.componentRows.ConditionIndex,1);
 verifyTrue(testCase,group.validTrialMask(1,1,1));
@@ -755,25 +818,26 @@ cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
 
 config = EmpaticMirroring_Config();
 config.paths.qcOutputRoot = fullfile(temporaryRoot,'qc');
-config.block4.output_path = fullfile(temporaryRoot,'04_PhaseSpaceRQA');
-config.block4.overwrite_flag = false;
-config.block4.save_flag = true;
-config.block4.components = 1;
-config.block4.metric_levels = 1;
-config.block4.downsample_factor = 2;
-config.block4.lp_order = 4;
-config.block4.lp_cutoff_norm = .8;
-config.block4.duration = [.15 .85];
-config.block4.standardize = true;
-config.block4.threshold_method = 'max_fraction';
-config.block4.threshold = .2;
-config.block4.theiler_window = 0;
-config.block4.lmin = 2;
-config.block4.vmin = 2;
-config.block4.store_matrices = false;
-config.block4.figure = false;
-config.block4.animate = false;
-config.block4.max_dyads = inf;
+config.block3.rqa_output_path = fullfile(temporaryRoot, ...
+    '03_Interaction','01_PhaseSpaceRQA');
+config.block3.overwrite_flag = false;
+config.block3.save_flag = true;
+config.block3.components = 1;
+config.block3.metric_levels = 1;
+config.block3.rqa_downsample_factor = 2;
+config.block3.rqa_lp_order = 4;
+config.block3.rqa_lp_cutoff_norm = .8;
+config.block3.rqa_duration = [.15 .85];
+config.block3.rqa_standardize = true;
+config.block3.rqa_threshold_method = 'max_fraction';
+config.block3.rqa_threshold = .2;
+config.block3.rqa_theiler_window = 0;
+config.block3.rqa_lmin = 2;
+config.block3.rqa_vmin = 2;
+config.block3.rqa_store_matrices = false;
+config.block3.rqa_figure = false;
+config.block3.rqa_animate = false;
+config.block3.max_dyads = inf;
 
 participantOutputRoot = fullfile(temporaryRoot,'participants','001');
 mkdir(participantOutputRoot);
@@ -826,7 +890,7 @@ verifyLessThan(testCase,saved.FREQrqa.ValidSampleCount, ...
     numel(saved.FREQrqa.SelectedSampleIndices));
 verifyEqual(testCase,saved.preprocessing_qc.ShortRunExcludedSampleCount,6);
 
-summaryFile = fullfile(config.block4.output_path,'Component_1', ...
+summaryFile = fullfile(config.block3.rqa_output_path,'Component_1', ...
     'FREQNESS_PHASERQA_GAPAWARE_SUMMARY_Comp#1.mat');
 verifyTrue(testCase,isfile(summaryFile));
 group = load(summaryFile,'PhaseRQA','designTable', ...
@@ -857,18 +921,19 @@ cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
 
 config = EmpaticMirroring_Config();
 config.block2.output_path = fullfile(temporaryRoot,'02_Landscape');
-config.block3.output_path = fullfile(temporaryRoot,'03_Coordination');
+config.block3.spatial_output_path = fullfile(temporaryRoot, ...
+    '03_Interaction','02_SpatialAndLandscape');
 config.block3.components = 1;
-config.block4.output_path = fullfile(temporaryRoot,'04_PhaseSpaceRQA');
-config.block4.components = 1;
-config.block5.output_path = fullfile(temporaryRoot,'05_Group');
-config.block5.figure_path = fullfile(config.block5.output_path,'Figures');
-config.block5.make_figures = false;
-config.block5.ncomps2keep = 2;
-config.block5.max_dyads = inf;
-config.block6.output_path = fullfile(temporaryRoot,'06_Statistics_R');
-config.block6.overwrite_flag = false;
-config.block6.write_xlsx = false;
+config.block3.rqa_output_path = fullfile(temporaryRoot, ...
+    '03_Interaction','01_PhaseSpaceRQA');
+config.block4.output_path = fullfile(temporaryRoot,'04_Group');
+config.block4.figure_path = fullfile(config.block4.output_path,'Figures');
+config.block4.make_figures = false;
+config.block4.ncomps2keep = 2;
+config.block4.max_dyads = inf;
+config.block5.output_path = fullfile(temporaryRoot,'05_Statistics_R');
+config.block5.overwrite_flag = false;
+config.block5.write_xlsx = false;
 
 participantOutputRoot = fullfile(temporaryRoot,'participants','001');
 mkdir(participantOutputRoot);
@@ -915,16 +980,22 @@ meter = 1;
 validTrialMask = false(1,24,2);
 validTrialMask(1,1,1:2) = true;
 
-coordinationFolder = fullfile(config.block3.output_path,'Component_1');
+coordinationFolder = fullfile(config.block3.spatial_output_path, ...
+    'Component_1');
 mkdir(coordinationFolder);
 MIRROR = nan(1,24,1,2);
 MIRROR(1,1,1,:) = [1 3];
+LANDSCAPE_SIMILARITY_COMP = nan(1,24,2);
+LANDSCAPE_SIMILARITY_COMP(1,1,:) = [.2 .6];
+LANDSCAPE_SIMILARITY_ENTROPY = nan(1,24,2);
+LANDSCAPE_SIMILARITY_ENTROPY(1,1,:) = [.4 .8];
 save(fullfile(coordinationFolder, ...
     'FREQNESS_SPATIALCOORDINATION_SUMMARY_Comp#1.mat'), ...
-    'MIRROR','meter','participantIds','designTable', ...
+    'MIRROR','LANDSCAPE_SIMILARITY_COMP', ...
+    'LANDSCAPE_SIMILARITY_ENTROPY','meter','participantIds','designTable', ...
     'componentRows','validTrialMask');
 
-phaseFolder = fullfile(config.block4.output_path,'Component_1');
+phaseFolder = fullfile(config.block3.rqa_output_path,'Component_1');
 mkdir(phaseFolder);
 PhaseRQA = struct();
 phaseFields = {'RR','L','DET','ENTR','TT','LAM','Vmax','DIV'};
@@ -985,6 +1056,13 @@ verifyEqual(testCase,T.EligiblePairs_Phase,100);
 verifyEqual(testCase,T.EligiblePairFraction_Phase,.5, ...
     'AbsTol',eps);
 verifyTrue(testCase,isfile(statistics.combinedCsvFile));
+verifyTrue(testCase,isfile(statistics.landscapeSimilarityCsvFile));
+verifyEqual(testCase,height(statistics.landscapeSimilarityTable),1);
+verifyEqual(testCase, ...
+    statistics.landscapeSimilarityTable.LandscapeSimilarityComponent,.4);
+verifyEqual(testCase, ...
+    statistics.landscapeSimilarityTable.LandscapeSimilarityEntropy,.6, ...
+    'AbsTol',eps);
 
 end
 
@@ -1092,7 +1170,7 @@ mkdir(temporaryRoot);
 cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
 primaryFile = fullfile(temporaryRoot,'primary.mat');
 recoveredFile = fullfile(temporaryRoot,'recovered.mat');
-unused = 1; %#ok<NASGU>
+unused = 1;
 save(primaryFile,'unused');
 save(recoveredFile,'unused');
 
@@ -1126,30 +1204,31 @@ cleanup = onCleanup(@() rmdir(temporaryRoot,'s'));
 primary = EmpaticMirroring_Config();
 primary.paths.outputRoot = fullfile(temporaryRoot,'primary');
 primary.block2.output_path = fullfile(primary.paths.outputRoot,'02_Landscape');
-primary.block3.output_path = fullfile(primary.paths.outputRoot,'03_Coordination');
-primary.block4.output_path = fullfile(primary.paths.outputRoot,'04_PhaseSpaceRQA');
+primary.block3.spatial_output_path = fullfile(primary.paths.outputRoot, ...
+    '03_Interaction','02_SpatialAndLandscape');
+primary.block3.rqa_output_path = fullfile(primary.paths.outputRoot, ...
+    '03_Interaction','01_PhaseSpaceRQA');
 primary.block3.components = 1;
-primary.block4.components = 1;
 recovered = primary;
 recovered.paths.outputRoot = fullfile(temporaryRoot,'recovered');
-recovered.block3.output_path = fullfile(recovered.paths.outputRoot, ...
-    '03_Coordination');
-recovered.block4.output_path = fullfile(recovered.paths.outputRoot, ...
-    '04_PhaseSpaceRQA');
+recovered.block3.spatial_output_path = fullfile( ...
+    recovered.paths.outputRoot,'03_Interaction','02_SpatialAndLandscape');
+recovered.block3.rqa_output_path = fullfile( ...
+    recovered.paths.outputRoot,'03_Interaction','01_PhaseSpaceRQA');
 combined = primary;
 combined.paths.outputRoot = fullfile(temporaryRoot,'combined');
 combined.paths.qcOutputRoot = fullfile(combined.paths.outputRoot,'qc');
-combined.block3.output_path = fullfile(combined.paths.outputRoot, ...
-    '03_Coordination');
-combined.block4.output_path = fullfile(combined.paths.outputRoot, ...
-    '04_PhaseSpaceRQA');
+combined.block3.spatial_output_path = fullfile( ...
+    combined.paths.outputRoot,'03_Interaction','02_SpatialAndLandscape');
+combined.block3.rqa_output_path = fullfile( ...
+    combined.paths.outputRoot,'03_Interaction','01_PhaseSpaceRQA');
 
 writeCompactSensitivityFixtures(primary,["001";"003"],[10;30],2);
 writeCompactSensitivityFixtures(recovered,"002",20,1);
 summary = EmpaticMirroring_MergeSensitivitySummaries( ...
     primary,recovered,combined);
 
-mergedFile = fullfile(combined.block3.output_path,'Component_1', ...
+mergedFile = fullfile(combined.block3.spatial_output_path,'Component_1', ...
     'FREQNESS_SPATIALCOORDINATION_SUMMARY_Comp#1.mat');
 S = load(mergedFile,'MIRROR','participantIds','validTrialMask');
 verifyEqual(testCase,string(S.participantIds),["001";"002";"003"]);
@@ -1196,19 +1275,27 @@ designTable = table(condition,instruction,complexity,version,movement, ...
 meter = 1;
 which_comp = 1;
 MIRROR = nan(nparticipants,24,1,ntrials);
+LANDSCAPE_SIMILARITY_COMP = nan(nparticipants,24,ntrials);
+LANDSCAPE_SIMILARITY_ENTROPY = nan(nparticipants,24,ntrials);
 validTrialMask = false(nparticipants,24,ntrials);
 for participanti = 1:nparticipants
     MIRROR(participanti,1,1,1) = values(participanti);
+    LANDSCAPE_SIMILARITY_COMP(participanti,1,1) = values(participanti)/100;
+    LANDSCAPE_SIMILARITY_ENTROPY(participanti,1,1) = ...
+        values(participanti)/100;
     validTrialMask(participanti,1,1) = true;
 end
 ParticipantLabel = participantIds;
 ParticipantIndex = (1:nparticipants)';
 componentRows = table(ParticipantLabel,ParticipantIndex);
-coordinationFolder = fullfile(config.block3.output_path,'Component_1');
+coordinationFolder = fullfile(config.block3.spatial_output_path, ...
+    'Component_1');
 mkdir(coordinationFolder);
 save(fullfile(coordinationFolder, ...
     'FREQNESS_SPATIALCOORDINATION_SUMMARY_Comp#1.mat'), ...
-    'MIRROR','which_comp','meter','participantIds','designTable', ...
+    'MIRROR','LANDSCAPE_SIMILARITY_COMP', ...
+    'LANDSCAPE_SIMILARITY_ENTROPY','which_comp','meter', ...
+    'participantIds','designTable', ...
     'componentRows','validTrialMask');
 
 PhaseRQA = struct();
@@ -1221,7 +1308,7 @@ coverageFields = {'ValidSampleCount','ExcludedSampleCount', ...
 for fieldi = 1:numel(coverageFields)
     PhaseRQA.coverage.(coverageFields{fieldi}) = MIRROR;
 end
-phaseFolder = fullfile(config.block4.output_path,'Component_1');
+phaseFolder = fullfile(config.block3.rqa_output_path,'Component_1');
 mkdir(phaseFolder);
 save(fullfile(phaseFolder, ...
     'FREQNESS_PHASERQA_GAPAWARE_SUMMARY_Comp#1.mat'), ...
