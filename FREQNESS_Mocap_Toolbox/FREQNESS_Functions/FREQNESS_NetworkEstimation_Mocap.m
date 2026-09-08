@@ -42,11 +42,18 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 %  - 'duration'        : Duration of the recording to analyze (seconds).
 %                        Default: full data duration.
 %
-%  - 'fwidth'          : Full-width at half-maximum (FWHM) of the frequency filter.
-%                        Default: computed based on reference values.
+%  - 'fwidth'          : Full-width at half-maximum (FWHM) of the frequency
+%                        filter in Hz. A scalar applies the same width to
+%                        every frequency and participant; a vector supplies
+%                        one shared width per frequency; a matrix supplies
+%                        participant-specific widths. Default: []
+%                        (automatic physical widths).
 %
 %  - 'filter'          : Filter design method. Options:
-%                        'logarithmic' (default) or 'linear'.
+%                        'logarithmic' (default) varies Q smoothly from 7
+%                        to 3.5 over each participant's numerical frequency
+%                        range; 'linear' uses constant Q = 5. This option is
+%                        used only when 'fwidth' is empty.
 %
 %  - 'regularisation'  : Shrinkage factor for covariance matrix regularization.
 %                        Default: 0.01.
@@ -84,6 +91,10 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 %                    component dimensions as FREQ.evecs.
 %      - FREQ.ts    : Retained component time series
 %                    [ncomps x nTime x nFrex x nParticipants].
+%      - FREQ.frex  : Analyzed frequencies, as a shared column vector or an
+%                    [nFrex x nParticipants] matrix.
+%      - FREQ.fwhm  : Filter widths in Hz
+%                    [nFrex x nParticipants].
 %      - FREQ.bad_segments : Shared excluded sample indices.
 %      - FREQ.bad_segments_by_participant : Participant-specific indices.
 %      - FREQ.gap_info : Gap-detection and reconstruction provenance.
@@ -271,51 +282,24 @@ else
         '[nFrex x nParticipants] matrix.']);
 end
 
-% Handle missing filter width (based on Rosso et al., 2025 - Advanced Science)
+% Compute automatic physical-frequency widths when none are supplied.
 if isempty(fwidth)
-    ref_frex = .1;
-    ref_fwhm = .01;
-    max_frex = 10;
-    nfrex_above = 100;
-    frex_all = linspace(ref_frex,max_frex,nfrex_above);
-    reference_widths = logspace(log10(ref_fwhm), ...
-        log10(ref_fwhm*nfrex_above),nfrex_above);
-    starting_width = zeros(1,nsubs);
-    for subi = 1:nsubs
-        [~,idx] = min(abs(frex_all-frex_by_participant(1,subi)));
-        starting_width(subi) = reference_widths(idx);
-    end
+    fwidth_all = FREQNESS_ComputeFilterWidths_Mocap( ...
+        frex_by_participant,filter);
 elseif isnumeric(fwidth) && isreal(fwidth) && isscalar(fwidth) && ...
         isfinite(fwidth) && fwidth > 0
-    starting_width = repmat(fwidth,1,nsubs);
+    fwidth_all = repmat(fwidth,nfrex,nsubs);
 elseif isnumeric(fwidth) && isreal(fwidth) && isvector(fwidth) && ...
         numel(fwidth) == nfrex && all(isfinite(fwidth(:))) && ...
         all(fwidth(:) > 0)
     fwidth_all = repmat(fwidth(:),1,nsubs);
-    starting_width = [];
 elseif isnumeric(fwidth) && isreal(fwidth) && ...
         isequal(size(fwidth),[nfrex nsubs]) && ...
         all(isfinite(fwidth(:))) && all(fwidth(:) > 0)
     fwidth_all = fwidth;
-    starting_width = [];
 else
     error(['fwidth must be empty, a positive scalar, a shared nFrex ' ...
         'vector, or an [nFrex x nParticipants] matrix.']);
-end
-
-if ~isempty(starting_width)
-    fwidth_all = zeros(nfrex,nsubs);
-    for subi = 1:nsubs
-        if strcmpi(filter,'logarithmic')
-            fwidth_all(:,subi) = logspace(log10(starting_width(subi)), ...
-                log10(starting_width(subi)*nfrex),nfrex);
-        elseif strcmpi(filter,'linear')
-            fwidth_all(:,subi) = linspace(starting_width(subi), ...
-                starting_width(subi)*nfrex,nfrex);
-        else
-            error('filter must be ''logarithmic'' or ''linear''.');
-        end
-    end
 end
 
 if ~isnumeric(fwidth_all) || ~isreal(fwidth_all) || ...
