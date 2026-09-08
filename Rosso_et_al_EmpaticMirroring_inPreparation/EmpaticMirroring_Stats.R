@@ -96,13 +96,22 @@ if (length(file_argument) == 1) {
 
 study_root <- dirname(script_file)
 default_input <- file.path(
-  study_root, "outputs", "06_Statistics_R", "OUT2R_AllComponents.csv"
+  study_root, "outputs", "05_Statistics_R", "OUT2R_AllComponents.csv"
 )
-default_output <- file.path(study_root, "outputs", "07_Statistics_Results")
+default_similarity_input <- file.path(
+  study_root, "outputs", "05_Statistics_R", "OUT2R_LandscapeSimilarity.csv"
+)
+default_output <- file.path(study_root, "outputs", "06_Statistics_Results")
 input_file <- argument_value("--input=", default_input)
+similarity_input_file <- argument_value(
+  "--similarity-input=", default_similarity_input
+)
 output_root <- argument_value("--output=", default_output)
 
 input_file <- normalizePath(input_file, mustWork = TRUE)
+similarity_input_file <- normalizePath(
+  similarity_input_file, mustWork = TRUE
+)
 if (
   dir.exists(output_root) &&
   length(list.files(output_root, all.files = TRUE, no.. = TRUE)) > 0
@@ -151,6 +160,12 @@ data <- read_csv(
   show_col_types = FALSE,
   progress = FALSE
 )
+similarity_data <- read_csv(
+  similarity_input_file,
+  col_types = cols(Participant = col_character()),
+  show_col_types = FALSE,
+  progress = FALSE
+)
 
 missing_columns <- setdiff(required_columns, names(data))
 if (length(missing_columns) > 0) {
@@ -158,6 +173,21 @@ if (length(missing_columns) > 0) {
 }
 if (nrow(data) == 0) {
   stop("The statistical export contains no rows.")
+}
+
+similarity_outcomes <- c(
+  "LandscapeSimilarityComponent", "LandscapeSimilarityEntropy"
+)
+similarity_required <- c(
+  "Participant", "Instruction", "Complexity", "Version", "Movement",
+  "Condition", "Component", "NRepetitions", similarity_outcomes
+)
+similarity_missing <- setdiff(similarity_required, names(similarity_data))
+if (length(similarity_missing) > 0 || nrow(similarity_data) == 0) {
+  stop(
+    "Landscape-similarity export is empty or missing columns: ",
+    paste(similarity_missing, collapse = ", ")
+  )
 }
 
 for (column in names(expected_levels)) {
@@ -222,6 +252,47 @@ data <- data %>%
     Version = factor(as.character(Version), levels = expected_levels$Version),
     Movement = factor(as.character(Movement), levels = expected_levels$Movement),
     Meter = factor(Meter, levels = expected_levels$Meter),
+    Component = factor(Component, levels = sort(unique(Component)))
+  )
+
+similarity_numeric <- c(
+  "Condition", "Component", "NRepetitions", similarity_outcomes
+)
+if (any(!vapply(
+  similarity_data[similarity_numeric], is.numeric, logical(1)
+))) {
+  stop("Landscape-similarity analysis columns must be numeric.")
+}
+if (any(!is.finite(as.matrix(similarity_data[similarity_numeric])))) {
+  stop("Landscape-similarity analysis columns contain non-finite values.")
+}
+if (any(abs(as.matrix(similarity_data[similarity_outcomes])) >= 1)) {
+  stop("Landscape similarities must lie strictly inside (-1, 1).")
+}
+similarity_expected_levels <- expected_levels[setdiff(
+  names(expected_levels), "Meter"
+)]
+for (column in names(similarity_expected_levels)) {
+  actual <- sort(unique(as.character(similarity_data[[column]])))
+  expected <- sort(similarity_expected_levels[[column]])
+  if (!identical(actual, expected)) {
+    stop(column, " levels differ in the landscape-similarity export.")
+  }
+}
+similarity_key <- c(
+  "Participant", "Instruction", "Complexity", "Version", "Movement",
+  "Component"
+)
+if (anyDuplicated(similarity_data[similarity_key])) {
+  stop("The landscape-similarity export contains duplicate factorial keys.")
+}
+similarity_data <- similarity_data %>%
+  mutate(
+    Participant = factor(Participant),
+    Instruction = factor(Instruction, levels = expected_levels$Instruction),
+    Complexity = factor(Complexity, levels = expected_levels$Complexity),
+    Version = factor(as.character(Version), levels = expected_levels$Version),
+    Movement = factor(as.character(Movement), levels = expected_levels$Movement),
     Component = factor(Component, levels = sort(unique(Component)))
   )
 
@@ -358,7 +429,9 @@ fit_model <- function(model_data, include_meter) {
 
 transform_outcome <- function(data, outcome) {
   transformed <- data
-  if (outcome == "Mirror") {
+  if (outcome %in% c(
+    "Mirror", "LandscapeSimilarityComponent", "LandscapeSimilarityEntropy"
+  )) {
     transformed$ModelOutcome <- atanh(transformed[[outcome]])
     transformation <- "Fisher z (atanh)"
   } else if (outcome %in% c("RR_Phase", "DET_Phase")) {
@@ -369,6 +442,37 @@ transform_outcome <- function(data, outcome) {
     transformation <- "none"
   }
   list(data = transformed, transformation = transformation)
+}
+
+save_similarity_plot <- function(raw_data, outcome, component, output_file) {
+  summary_stats <- raw_data %>%
+    group_by(Instruction, Complexity, Version, Movement) %>%
+    summarise(
+      Mean = mean(.data[[outcome]]),
+      SEM = sd(.data[[outcome]]) / sqrt(n()),
+      N = n(),
+      .groups = "drop"
+    )
+  plot <- ggplot(
+    summary_stats,
+    aes(
+      x = Complexity, y = Mean, color = Instruction,
+      group = Instruction
+    )
+  ) +
+    geom_line(linewidth = 0.8) +
+    geom_point(size = 2.4) +
+    geom_errorbar(aes(ymin = Mean - SEM, ymax = Mean + SEM), width = 0.12) +
+    facet_grid(Movement ~ Version, labeller = label_both) +
+    labs(
+      title = paste("Mean +/- SEM:", outcome),
+      subtitle = component,
+      x = "Complexity", y = "Pearson correlation",
+      color = "Instruction"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(plot.title = element_text(face = "bold", hjust = 0.5))
+  ggsave(output_file, plot, width = 10, height = 7, dpi = 240, bg = "white")
 }
 
 write_simple_effect_contrasts <- function(model, factors, output_file) {
@@ -558,6 +662,114 @@ for (component in components) {
 }
 
 
+# Network-landscape similarity analyses --------------------------------------
+
+similarity_anova_tables <- list()
+similarity_manifest <- data.frame()
+similarity_output_root <- file.path(output_root, "LandscapeSimilarity")
+dir.create(similarity_output_root, recursive = TRUE, showWarnings = FALSE)
+
+similarity_jobs <- list()
+for (component in components) {
+  similarity_jobs[[paste0("Component_", component)]] <- list(
+    data = similarity_data %>% filter(Component == component),
+    outcome = "LandscapeSimilarityComponent",
+    component = component,
+    label = paste("Component", component)
+  )
+}
+similarity_jobs[["Entropy"]] <- list(
+  data = similarity_data %>%
+    filter(Component == levels(similarity_data$Component)[1]),
+  outcome = "LandscapeSimilarityEntropy",
+  component = NA,
+  label = "H2 entropy landscape"
+)
+if (smoke_test) {
+  similarity_jobs <- similarity_jobs[1]
+}
+
+for (job_name in names(similarity_jobs)) {
+  job <- similarity_jobs[[job_name]]
+  outcome_output <- file.path(similarity_output_root, job_name)
+  dir.create(outcome_output, recursive = TRUE, showWarnings = FALSE)
+  transformed <- transform_outcome(job$data, job$outcome)
+  fit <- fit_model(transformed$data, include_meter = FALSE)
+  model <- fit$model
+  anova_table <- anova_to_data_frame(anova(model, type = 3))
+  p_column <- p_value_column(anova_table)
+  anova_table$PValueRaw <- anova_table[[p_column]]
+  anova_table$Component <- job$component
+  anova_table$Outcome <- job$outcome
+  anova_table$Transformation <- transformed$transformation
+  similarity_anova_tables[[job_name]] <- anova_table
+
+  write_text(
+    summary(model),
+    output_file = file.path(outcome_output, "Factorial_Model_Summary.txt")
+  )
+  writeLines(
+    deparse(fit$formula),
+    file.path(outcome_output, "Factorial_Model_Formula.txt")
+  )
+  write_csv(
+    anova_table,
+    file.path(outcome_output, "Factorial_Type_III_ANOVA.csv")
+  )
+  write_csv(
+    model_diagnostics(model, transformed$data),
+    file.path(outcome_output, "Model_Fit_Diagnostics.csv")
+  )
+  write_csv(
+    safe_shapiro(residuals(model)),
+    file.path(outcome_output, "Residual_Shapiro_Wilk.csv")
+  )
+  write_simple_effect_contrasts(
+    model, fit$fixed_factors,
+    file.path(outcome_output, "Simple_Effect_Contrasts_Holm.csv")
+  )
+  if (make_plots) {
+    save_residual_diagnostics(
+      model, paste("Landscape similarity", job$label),
+      file.path(outcome_output, "Residual_Diagnostics.png")
+    )
+    save_similarity_plot(
+      job$data, job$outcome, job$label,
+      file.path(outcome_output, "Factorial_Descriptive_Raw_Scale.png")
+    )
+  }
+
+  similarity_manifest <- bind_rows(
+    similarity_manifest,
+    data.frame(
+      Component = job$component,
+      Outcome = job$outcome,
+      TransformationForModels = transformed$transformation,
+      PlotScale = "raw",
+      NRows = nrow(transformed$data),
+      NParticipants = n_distinct(transformed$data$Participant),
+      FullModelSingular = isSingular(model, tol = 1e-4),
+      OutputFolder = outcome_output
+    )
+  )
+}
+
+similarity_anova_all <- bind_rows(similarity_anova_tables)
+similarity_anova_all$PValueBHAcrossSimilarityModels <- p.adjust(
+  similarity_anova_all$PValueRaw, method = "BH"
+)
+similarity_anova_all$SignificantBHAcrossSimilarityModels <-
+  similarity_anova_all$PValueBHAcrossSimilarityModels < 0.05
+write_csv(
+  similarity_anova_all,
+  file.path(output_root, "All_LandscapeSimilarity_ANOVAs_BH.csv")
+)
+write_csv(
+  similarity_manifest,
+  file.path(output_root, "LandscapeSimilarity_Analysis_Manifest.csv")
+)
+
+
 # Across-outcome multiplicity and reproducibility -----------------------------
 
 full_anova_all <- bind_rows(full_anova_tables)
@@ -571,6 +783,7 @@ write_csv(analysis_manifest, file.path(output_root, "Analysis_Manifest.csv"))
 
 run_configuration <- c(
   paste("Input:", input_file),
+  paste("Landscape similarity input:", similarity_input_file),
   paste("Input rows:", nrow(data)),
   paste("Participants:", nlevels(data$Participant)),
   paste("Components:", paste(components, collapse = ", ")),
@@ -588,6 +801,7 @@ run_configuration <- c(
     "(1 | Participant)"
   ),
   "Mirror: Fisher-z transformed for modelling",
+  "Landscape similarities: Fisher-z transformed for modelling",
   "RR_Phase and DET_Phase: natural-log transformed for modelling",
   "All descriptive summaries and plots: raw scale",
   "Meter-specific Type-III tests: Bonferroni corrected across four meters",

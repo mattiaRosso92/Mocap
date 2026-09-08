@@ -113,6 +113,47 @@ verifyError(testCase,@() FREQNESS_InterpolateGaps_Mocap( ...
 end
 
 
+function testNonrequiredBoundaryGapsMaySupplyContext(testCase)
+
+data = repmat(1:40,6,1);
+data(1:3,38:40) = NaN;
+[filled,badSegments,gapInfo] = FREQNESS_InterpolateGaps_Mocap( ...
+    data,100,'required_samples',1:30);
+
+verifyTrue(testCase,all(isfinite(filled(:,1:30)),'all'));
+verifyTrue(testCase,any(isnan(filled(:,38:40)),'all'));
+verifyEqual(testCase,badSegments,38:40);
+verifyEqual(testCase,gapInfo.required_samples,1:30);
+verifyTrue(testCase,all( ...
+    gapInfo.unresolved_marker_sample_mask(1,38:40)));
+
+end
+
+
+function testOptionalNearestBoundaryFillRetainsBadSegments(testCase)
+
+original = repmat(1:40,6,1);
+gappy = original;
+gappy(1:3,1:3) = NaN;
+gappy(4:6,29:40) = NaN;
+
+[filled,badSegments,gapInfo] = callWithWarningDisabled( ...
+    gappy,100,'maximum_reconstructed_gap',0.2, ...
+    'required_samples',1:30,'boundary_method','nearest');
+
+verifyTrue(testCase,all(isfinite(filled(:,1:30)),'all'));
+verifyEqual(testCase,filled(1:3,1:3),repmat(original(1:3,4),1,3));
+verifyEqual(testCase,filled(4:6,29:30),repmat(original(4:6,28),1,2));
+verifyEqual(testCase,badSegments,[1:3 29:40]);
+verifyEqual(testCase,gapInfo.boundary_method,"nearest");
+verifyFalse(testCase,any( ...
+    gapInfo.unresolved_marker_sample_mask(:,1:30),'all'));
+verifyTrue(testCase,any( ...
+    gapInfo.unresolved_marker_sample_mask(:,31:40),'all'));
+
+end
+
+
 function testInputValidation(testCase)
 
 verifyFailureMessage(testCase,@() FREQNESS_InterpolateGaps_Mocap( ...
@@ -125,7 +166,13 @@ verifyFailureMessage(testCase,@() FREQNESS_InterpolateGaps_Mocap( ...
 verifyFailureMessage(testCase,@() FREQNESS_InterpolateGaps_Mocap( ...
     randn(6,20),100,'maximum_reconstructed_gap',0.01), ...
     ['maximum_reconstructed_gap must be empty or greater than or equal ' ...
-    'to maximum_interpolated_gap.']);
+        'to maximum_interpolated_gap.']);
+verifyFailureMessage(testCase,@() FREQNESS_InterpolateGaps_Mocap( ...
+    randn(6,20),100,'required_samples',[0 3]), ...
+    'required_samples must contain valid 1-based sample indices.');
+verifyError(testCase,@() FREQNESS_InterpolateGaps_Mocap( ...
+    randn(6,20),100,'boundary_method','spline'), ...
+    'MATLAB:FREQNESS_InterpolateGaps_Mocap:unrecognizedStringChoice');
 
 end
 
