@@ -58,6 +58,18 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 %                        to be excluded from the analysis.
 %                        These will be removed from covariance computations.
 %
+%  - 'interpolate_gaps': Detect and reconstruct NaN gaps before filtering.
+%                        Reconstructed samples remain excluded through
+%                        bad_segments. Default: true.
+%
+%  - 'maximum_interpolated_gap' : Maximum gap duration in seconds for
+%                                  automatic linear interpolation.
+%                                  Default: 0.05.
+%
+%  - 'maximum_reconstructed_gap': Maximum gap duration in seconds for
+%                                  optional cubic-spline reconstruction.
+%                                  Default: [] (disabled).
+%
 % ------------------------------------------------------------------------
 %  OUTPUT ARGUMENTS:
 % ------------------------------------------------------------------------
@@ -72,7 +84,10 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 %                    component dimensions as FREQ.evecs.
 %      - FREQ.ts    : Retained component time series
 %                    [ncomps x nTime x nFrex x nParticipants].
-%                   Additional fields support second-order functions.
+%      - FREQ.bad_segments : Shared excluded sample indices.
+%      - FREQ.bad_segments_by_participant : Participant-specific indices.
+%      - FREQ.gap_info : Gap-detection and reconstruction provenance.
+%                        Additional fields support second-order functions.
 %
 % ------------------------------------------------------------------------
 %  AUTHORS:
@@ -100,10 +115,11 @@ if nargin < 3
 end
 
 if ~isnumeric(data) || ~isreal(data) || isempty(data) || ...
-        ndims(data) > 3 || any(~isfinite(data(:)))
-    error(['data must be a non-empty, real, finite numeric array in ' ...
+        ndims(data) > 3 || any(isinf(data(:)))
+    error(['data must be a non-empty real numeric array without Inf values in ' ...
         '[marker coordinates x time] or ' ...
-        '[marker coordinates x time x participants] format.']);
+        '[marker coordinates x time x participants] format. NaN gaps can ' ...
+        'be reconstructed automatically.']);
 end
 
 if ~isnumeric(srate) || ~isreal(srate) || ~isscalar(srate) || ...
@@ -112,7 +128,7 @@ if ~isnumeric(srate) || ~isreal(srate) || ~isscalar(srate) || ...
 end
 
 if ~isnumeric(frex) || ~isreal(frex) || isempty(frex) || ...
-        ndims(frex) > 2 || any(~isfinite(frex(:))) || any(frex(:) <= 0)
+        ~ismatrix(frex) || any(~isfinite(frex(:))) || any(frex(:) <= 0)
     error('frex must contain positive finite frequencies.');
 end
 
@@ -124,7 +140,9 @@ end
 
 % Define default values
 opts = struct('duration', [], 'fwidth', [], 'filter', 'logarithmic', ...
-    'regularisation', 0.01, 'ncomps', 30, 'bad_segments',[]);
+    'regularisation', 0.01, 'ncomps', 30, 'bad_segments',[], ...
+    'interpolate_gaps',true,'maximum_interpolated_gap',0.05, ...
+    'maximum_reconstructed_gap',[]);
 
 % Parse name-value pair arguments
 opts = parse_name_value_pairs(opts, varargin{:});
@@ -141,6 +159,7 @@ filter         = opts.filter;
 regularisation = opts.regularisation;
 ncomps         = opts.ncomps;
 idx2remove     = opts.bad_segments; % in the current version, these apply to all subjects in the input
+interpolate_gaps = opts.interpolate_gaps;
 
 % Validate optional inputs
 if ~isempty(duration) && (~isnumeric(duration) || ~isreal(duration) || ...
@@ -169,6 +188,10 @@ if ncomps > size(data,1)
     error('ncomps cannot exceed the number of marker coordinates.');
 end
 
+if ~islogical(interpolate_gaps) || ~isscalar(interpolate_gaps)
+    error('interpolate_gaps must be one logical value (true or false).');
+end
+
 % Compute necessary parameters
 pnts2keep = duration * srate;
 
@@ -193,11 +216,37 @@ if ~isempty(idx2remove) && (~isnumeric(idx2remove) || ...
     error('bad_segments must contain finite integer sample indices.');
 end
 
-idx2remove = unique(idx2remove(:)','stable');
+supplied_bad_segments = unique(idx2remove(:)');
 
 % Check that the range of the bad segments falls within the requested duration
-if any(idx2remove < 1) || any(idx2remove > pnts2keep)
+if any(supplied_bad_segments < 1) || any(supplied_bad_segments > pnts2keep)
     error('One or more indices in bad_segments fall outside the analyzed time range.');
+end
+
+% Reconstruct NaN gaps once within the analyzed interval. The reconstructed
+% values keep filtering continuous, while all detected samples remain in the
+% shared exclusion mask used by both covariance matrices.
+analysis_data = data(:,1:pnts2keep,:);
+if ~interpolate_gaps && any(isnan(analysis_data),'all')
+    error(['data contains NaN gaps while interpolate_gaps is false. Enable ' ...
+        'automatic interpolation or preprocess the gaps before estimation.']);
+end
+[analysis_data,detected_bad_segments,gap_info] = ...
+    FREQNESS_InterpolateGaps_Mocap(analysis_data,srate, ...
+    'maximum_interpolated_gap',opts.maximum_interpolated_gap, ...
+    'maximum_reconstructed_gap',opts.maximum_reconstructed_gap);
+idx2remove = unique([supplied_bad_segments detected_bad_segments]);
+nsubs = size(analysis_data,3);
+gap_info.detected_bad_segments = detected_bad_segments;
+gap_info.supplied_bad_segments = supplied_bad_segments;
+gap_info.has_detected_gaps = gap_info.has_gaps;
+gap_info.detected_affected_timepoint_count = gap_info.affected_timepoint_count;
+gap_info.bad_segments = idx2remove;
+gap_info.has_gaps = ~isempty(idx2remove);
+gap_info.affected_timepoint_count = numel(idx2remove);
+for subi = 1:nsubs
+    gap_info.bad_segments_by_participant{subi} = unique( ...
+        [gap_info.bad_segments_by_participant{subi} supplied_bad_segments]);
 end
 
 % Define good indexes to keep for computing the covariance matrices
@@ -205,9 +254,6 @@ idx2cov = setdiff(1:pnts2keep,idx2remove);
 if numel(idx2cov) < 2
     error('Fewer than two samples remain for covariance estimation.');
 end
-
-% Check input size to verify if more than one participant is being analyzed
-nsubs = size(data,3);
 
 % Normalize shared or participant-specific frequency input
 if isvector(frex)
@@ -294,7 +340,7 @@ for subi = 1:nsubs
     disp(['FREQNESS Network Estimation: participant #' num2str(subi)]);
 
     % Assign broadband marker data
-    broadData = data(:, 1:pnts2keep, subi);
+    broadData = analysis_data(:,:,subi);
 
     % Remove bad segments, if any bad segments is provided as input
     if ~isempty(idx2remove)
@@ -375,6 +421,9 @@ FREQ.fwhm = fwidth_all;                  % corresponding filter widths
 FREQ.srate = srate;                      % sampling rate for secondary functions
 FREQ.duration = pnts2keep/srate;        % analyzed duration in seconds
 FREQ.bad_segments = idx2remove;         % excluded sample indices
+FREQ.bad_segments_by_participant = ...
+    gap_info.bad_segments_by_participant; % participant-specific excluded samples
+FREQ.gap_info = gap_info;               % gap reconstruction and QC provenance
 FREQ.regularisation = regularisation;   % covariance shrinkage factor
 
 

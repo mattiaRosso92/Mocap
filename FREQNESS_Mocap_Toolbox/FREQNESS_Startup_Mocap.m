@@ -11,15 +11,17 @@ function [allData, dataLabels, path_home] = FREQNESS_Startup_Mocap()
 %  A dataset can represent one participant, one dyad, or a larger group.
 %  Each dataset folder must use one of these two layouts:
 %
-%  1) One .mat file containing one real finite numeric array in
+%  1) One .mat file containing one real numeric array in
 %     [XYZ marker coordinates x time x participants] format.
 %
-%  2) One .mat file per participant, each containing one real finite
+%  2) One .mat file per participant, each containing one real
 %     numeric [XYZ marker coordinates x time] matrix. Participant files are
 %     sorted alphabetically and concatenated along the third dimension.
 %
 %  In both layouts, rows must follow the repeated order
 %  [X_marker1; Y_marker1; Z_marker1; X_marker2; ...].
+%  NaN values denote gaps and are handled during network estimation; Inf
+%  values are invalid.
 %
 % ------------------------------------------------------------------------
 %  OUTPUT ARGUMENTS:
@@ -62,7 +64,8 @@ fprintf('Base directory: %s\n\n', path_home);
 %% Report external dependencies
 
 required_external = {'filterFGx'};
-required_internal = {'FREQNESS_AnalyticSignal'};
+required_internal = {'FREQNESS_AnalyticSignal', ...
+    'FREQNESS_InterpolateGaps_Mocap'};
 optional_external = {'RPparam','jrqa','dl','tt','entropy'};
 
 for funi = 1:numel(required_external)
@@ -188,13 +191,15 @@ function validate_xyz_data(data,file_name,allow_group_array)
 valid_dimensions = ismatrix(data) || (allow_group_array && ndims(data) == 3);
 
 if ~isnumeric(data) || ~isreal(data) || isempty(data) || ...
-        ~valid_dimensions || any(~isfinite(data(:)))
+        ~valid_dimensions || any(isinf(data(:)))
     if allow_group_array
-        expected = ['a non-empty real finite numeric array in ' ...
-            '[XYZ marker coordinates x time x participants] format'];
+        expected = ['a non-empty real numeric array without Inf values in ' ...
+            '[XYZ marker coordinates x time x participants] format; NaN ' ...
+            'values may identify gaps'];
     else
-        expected = ['a non-empty real finite numeric matrix in ' ...
-            '[XYZ marker coordinates x time] format'];
+        expected = ['a non-empty real numeric matrix without Inf values in ' ...
+            '[XYZ marker coordinates x time] format; NaN values may ' ...
+            'identify gaps'];
     end
     error('File %s must contain %s.',file_name,expected);
 end

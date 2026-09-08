@@ -228,11 +228,37 @@ if size(FREQ.pats,3) ~= numel(frex)
     error('The frequency dimension of FREQ.pats does not match FREQ.frex.');
 end
 
+if ~isnumeric(Patterns.srate) || ~isscalar(Patterns.srate) || ...
+        ~isfinite(Patterns.srate) || Patterns.srate <= 0
+    error('Patterns.srate must be one positive finite scalar.');
+end
+
 markData = Patterns.markerData;
 if ~isnumeric(markData) || ~isreal(markData) || ndims(markData) > 3 || ...
-        any(~isfinite(markData(:)))
-    error(['Patterns.markerData must be a real finite numeric array in ' ...
-        '[nChannels x nTime x (nParticipants)] format.']);
+        any(isinf(markData(:)))
+    error(['Patterns.markerData must be a real numeric array without Inf ' ...
+        'values in [nChannels x nTime x (nParticipants)] format.']);
+end
+if isfield(FREQ,'ts') && ~isempty(FREQ.ts)
+    markData = markData(:,1:min(size(markData,2),size(FREQ.ts,2)),:);
+end
+if any(isnan(markData),'all')
+    maximum_interpolated_gap = 0.05;
+    maximum_reconstructed_gap = [];
+    if isfield(FREQ,'gap_info') && isstruct(FREQ.gap_info)
+        if isfield(FREQ.gap_info,'maximum_interpolated_gap_seconds')
+            maximum_interpolated_gap = ...
+                FREQ.gap_info.maximum_interpolated_gap_seconds;
+        end
+        if isfield(FREQ.gap_info,'maximum_reconstructed_gap_seconds')
+            maximum_reconstructed_gap = ...
+                FREQ.gap_info.maximum_reconstructed_gap_seconds;
+        end
+    end
+    markData = FREQNESS_InterpolateGaps_Mocap( ...
+        markData,Patterns.srate, ...
+        'maximum_interpolated_gap',maximum_interpolated_gap, ...
+        'maximum_reconstructed_gap',maximum_reconstructed_gap);
 end
 
 nchannels = size(markData,1);
@@ -259,10 +285,6 @@ if size(markData,3) ~= nsubs_patterns
     error('FREQ.pats and Patterns.markerData contain different participant counts.');
 end
 
-if ~isnumeric(Patterns.srate) || ~isscalar(Patterns.srate) || ...
-        ~isfinite(Patterns.srate) || Patterns.srate <= 0
-    error('Patterns.srate must be one positive finite scalar.');
-end
 if ~isnumeric(Patterns.start) || ~isscalar(Patterns.start) || ...
         ~isfinite(Patterns.start) || Patterns.start < 0 || Patterns.start > 1
     error('Patterns.start must be one finite scalar in [0,1].');

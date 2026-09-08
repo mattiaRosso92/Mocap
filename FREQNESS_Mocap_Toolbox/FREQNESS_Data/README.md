@@ -14,4 +14,6 @@ dataset folder may contain either:
 
 Participant files are sorted alphabetically and concatenated along the third
 dimension. Every `.mat` file must contain exactly one data array, and marker
-rows must repeat in `X, Y, Z` order.
+rows must repeat in `X, Y, Z` order. Missing coordinates may be encoded as
+`NaN`; network estimation detects and reconstructs supported gaps while
+retaining their sample indices for exclusion. Infinite values are invalid.
