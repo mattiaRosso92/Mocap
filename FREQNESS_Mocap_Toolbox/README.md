@@ -10,6 +10,8 @@ belong in the study directories at the repository root.
   `FREQNESS_Data`.
 - `FREQNESS_MainPipeline_Mocap.m`: general block-based MATLAB workflow for the
   available participant-, visualization-, and coordination-level functions.
+- `FREQNESS_InterpolateGaps_Mocap`: standalone NaN-gap reconstruction and QC
+  with output directly compatible with the `bad_segments` analysis option.
 - `FREQNESS_Functions`: MATLAB implementations of the core, second-order, and
   third-order analyses.
 - `FREQNESS_ExampleScripts`: dataset-independent examples demonstrating the
@@ -50,6 +52,27 @@ effective dimensionality from the complete eigenspectrum and visualizes the
 effective number of frequency-specific body networks. Its visualization uses
 the same log2 frequency axis, shaded group SEM, and component palette as the
 network landscape.
+
+## Gap handling
+
+`FREQNESS_NetworkEstimation_Mocap` automatically detects NaN gaps within the
+analyzed interval and calls `FREQNESS_InterpolateGaps_Mocap`. Internal gaps up
+to 50 ms are linearly interpolated by default. Longer cubic-spline
+reconstruction is available through `maximum_reconstructed_gap` but must be
+enabled explicitly after dataset-specific validation. Boundary and unsupported
+gaps stop the analysis. A consolidated warning reports successful
+reconstruction.
+
+Reconstructed values are used only to provide continuous input for filtering.
+Every affected timepoint remains in the shared `FREQ.bad_segments` vector and
+is excluded from broadband and narrowband covariance matrices. Participant-
+specific indices and reconstruction masks are retained in
+`FREQ.bad_segments_by_participant` and `FREQ.gap_info`. Phase-space RQA honors
+the shared mask. The JRQA-based `FREQNESS_TimeCoord_Mocap` explicitly rejects
+gappy inputs because that implementation cannot safely exclude samples. When
+raw `Patterns.markerData` containing NaNs is supplied for visualization, the
+visualizer calls the same interpolation function using the reconstruction
+limits retained in `FREQ.gap_info`.
 
 `FREQNESS_Visualizer_Mocap` follows the MEEG visualizer convention of showing
 the grand-average network landscape by default and accepting `plot_all=true`

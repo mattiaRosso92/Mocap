@@ -22,6 +22,8 @@ function FREQjrqa = FREQNESS_TimeCoord_Mocap(FREQ,JRQA,target_frex,varargin)
 %                       [nComponents x nTimePoints x nFrex x 2].
 %          - FREQ.frex : Shared frequency vector or participant-specific
 %                       [nFrex x 2] frequency matrix.
+%          - FREQ.bad_segments : Must be empty. This JRQA implementation
+%                                does not support excluded time samples.
 %
 %  - JRQA : Structure containing the embedding dimension JRQA.m and delay
 %           JRQA.tau.
@@ -75,6 +77,16 @@ meter = opts.metric_levels;
 if ~isstruct(FREQ) || ~isfield(FREQ,'ts') || isempty(FREQ.ts) || ...
         ~isfield(FREQ,'frex') || isempty(FREQ.frex)
     error('FREQ must contain non-empty FREQ.ts and FREQ.frex fields.');
+end
+
+if ~isnumeric(FREQ.ts) || ~isreal(FREQ.ts) || any(~isfinite(FREQ.ts(:)))
+    error('FREQ.ts must be a real finite numeric array.');
+end
+
+if isfield(FREQ,'bad_segments') && ~isempty(FREQ.bad_segments)
+    error('FREQNESS:TimeCoord:GapsUnsupported', ...
+        ['FREQNESS_TimeCoord_Mocap does not support gappy inputs. Use ' ...
+        'FREQNESS_PhaseSpaceRQA_Mocap or provide gap-free data.']);
 end
 
 if ndims(FREQ.ts) < 4 || size(FREQ.ts,4) ~= 2
