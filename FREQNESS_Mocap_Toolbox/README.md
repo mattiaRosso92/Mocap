@@ -63,6 +63,20 @@ default logarithmic mode varies Q smoothly from 7 at the lowest frequency to
 mode uses constant Q = 5. Explicit scalar, shared vector, and participant-
 specific matrix widths bypass the automatic schedule.
 
+Historical results can be reproduced without restoring the former automatic
+default. Generate the old bin-count-dependent schedule explicitly and pass it
+through `fwidth`:
+
+```matlab
+legacy_fwidth = FREQNESS_ComputeLegacyFilterWidths_Mocap( ...
+    frex(:),'logarithmic');
+FREQ = FREQNESS_NetworkEstimation_Mocap(data,frex,srate, ...
+    'fwidth',legacy_fwidth);
+```
+
+The legacy helper exists only for reproducibility. New analyses should leave
+`fwidth=[]` and use the physical schedules.
+
 ## Gap handling
 
 `FREQNESS_NetworkEstimation_Mocap` automatically detects NaN gaps within the

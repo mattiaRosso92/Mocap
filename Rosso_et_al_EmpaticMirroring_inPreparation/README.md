@@ -23,6 +23,13 @@ numbered blocks run in order and compatible outputs are reused. Set the
 environment variable `EMPATIC_MIRRORING_OVERWRITE=1` only for a deliberate
 full rebuild.
 
+`filter_width_calibration='physical'` is the default for new analyses. Setting
+it to `'legacy'` reconstructs the former bin-count-dependent logarithmic or
+linear schedule and passes the resulting 31-by-2 width matrix explicitly to
+the toolbox. Physical and legacy runs use separate output subdirectories, and
+saved core outputs are reused only when their realized `FREQ.fwhm` and
+calibration provenance match the current settings.
+
 Setup, data QC, and artificial-dyad creation are unnumbered preparation
 sections. The numbered analysis blocks are:
 
@@ -97,27 +104,33 @@ second time.
 
 ## Output layout
 
-Generated data remain below the ignored `outputs/` tree:
+Generated data remain below calibration-specific folders in the ignored
+`outputs/` tree:
 
 ```text
 outputs/
-|-- qc/
-|-- preprocessed_models/
-|-- participants/<ID>/
-|-- 02_Landscape/
-|-- 03_Interaction/
-|   |-- 01_PhaseSpaceRQA/
-|   `-- 02_SpatialAndLandscape/
-|-- 04_Group/
-|-- 05_Statistics_R/
-|-- 06_Statistics_Results/
-`-- 09_CleanupValidation/
+`-- <physical|legacy>_<logarithmic|linear>/
+    |-- qc/
+    |-- preprocessed_models/
+    |-- participants/<ID>/
+    |-- 02_Landscape/
+    |-- 03_Interaction/
+    |   |-- 01_PhaseSpaceRQA/
+    |   `-- 02_SpatialAndLandscape/
+    |-- 04_Group/
+    |-- 05_Statistics_R/
+    |-- 06_Statistics_Results/
+    `-- 09_CleanupValidation/
 ```
 
 Artificial dyads and core `FREQ` outputs are stored beside one another in each
 participant folder. Dense trial results remain per recording; compact group
 files contain only the summaries needed downstream. Raw `.mat`, `.qtm`, and
 `.avi` files and all generated outputs are ignored by Git.
+
+Unversioned files produced by the historical pipeline remain directly below
+`outputs/`. They are retained as reference results but are never inherited by
+new calibration-aware runs.
 
 The main exports are:
 

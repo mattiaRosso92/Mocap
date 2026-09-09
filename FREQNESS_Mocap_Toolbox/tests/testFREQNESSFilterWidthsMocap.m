@@ -128,6 +128,64 @@ verifyEqual(testCase,FREQ_participant.fwhm,participant_widths,'AbsTol',0);
 end
 
 
+function testLegacyLogarithmicScheduleMatchesFormerDefault(testCase)
+
+frex = (0.1:0.1:10)';
+expected = logspace(log10(0.01),log10(1),100)';
+
+actual = FREQNESS_ComputeLegacyFilterWidths_Mocap( ...
+    frex,'logarithmic');
+
+verifyEqual(testCase,actual,expected,'AbsTol',0);
+
+end
+
+
+function testLegacyLinearScheduleMatchesFormerOption(testCase)
+
+frex = (0.1:0.1:10)';
+expected = (0.01:0.01:1)';
+
+actual = FREQNESS_ComputeLegacyFilterWidths_Mocap(frex,'linear');
+
+verifyEqual(testCase,actual,expected,'AbsTol',1e-15);
+
+end
+
+
+function testLegacyParticipantColumnsRemainIndependent(testCase)
+
+frex = [0.4 0.3; 0.5 0.4; 0.6 0.5];
+first_widths = 0.01 .* 100.^([3 2]./99);
+expected = zeros(size(frex));
+for subi = 1:size(frex,2)
+    expected(:,subi) = logspace(log10(first_widths(subi)), ...
+        log10(first_widths(subi)*size(frex,1)),size(frex,1))';
+end
+
+actual = FREQNESS_ComputeLegacyFilterWidths_Mocap( ...
+    frex,'logarithmic');
+
+verifyEqual(testCase,actual,expected,'AbsTol',1e-15);
+
+end
+
+
+function testLegacyWidthsRemainExplicitEstimatorInputs(testCase)
+
+data = deterministic_data();
+frex = [2 2.5; 4 5; 6 7.5];
+legacy_widths = FREQNESS_ComputeLegacyFilterWidths_Mocap( ...
+    frex,'logarithmic');
+
+FREQ = FREQNESS_NetworkEstimation_Mocap( ...
+    data,frex,64,'fwidth',legacy_widths,'ncomps',1);
+
+verifyEqual(testCase,FREQ.fwhm,legacy_widths,'AbsTol',0);
+
+end
+
+
 function data = deterministic_data
 
 srate = 64;
