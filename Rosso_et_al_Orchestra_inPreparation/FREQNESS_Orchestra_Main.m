@@ -10,13 +10,23 @@ vis_flag = 1;
 % Choose if you want to enable saving of FREQNESS output
 save_flag = 0;
 
+% Preserve the study's historical filtering by default. Select 'physical'
+% to use the toolbox's frequency-calibrated widths for a new analysis.
+filter_width_calibration = validatestring( ...
+    'legacy',{'physical','legacy'});
+filter_type = validatestring('logarithmic',{'logarithmic','linear'});
+filter_output_tag = [filter_width_calibration '_' filter_type];
+
 % Define paths
 path_home = '/Users/au658766/Documents/MIB/Projects/NESS_withLBPD/2025_FreqNESS_Orchestra';
-path_toolbox = '/Users/au658766/Documents/MIB/Projects/NESS_withLBPD/2025_FreqNESS_Mocap/';
+script_file = mfilename('fullpath');
+path_study = fileparts(script_file);
+path_repo = fileparts(path_study);
+path_toolbox = fullfile(path_repo,'FREQNESS_Mocap_Toolbox');
 
-% NOTE: this will be replaced by a Startup function
-addpath(path_home)
 addpath(path_toolbox)
+addpath(fullfile(path_toolbox,'FREQNESS_Functions'))
+addpath(fullfile(path_toolbox,'FREQNESS_ExternalFunctions'))
 
 
 %% Prepare data
@@ -129,13 +139,33 @@ markData(:,end/2:end) = [];
 
     %% Run network decomposition on the dyad
 
+    if strcmp(filter_width_calibration,'legacy')
+        filter_width = FREQNESS_ComputeLegacyFilterWidths_Mocap( ...
+            frex(:),filter_type);
+        expected_filter_width = filter_width;
+    else
+        filter_width = [];
+        expected_filter_width = FREQNESS_ComputeFilterWidths_Mocap( ...
+            frex(:),filter_type);
+    end
     GED = []; % refresh for loop iterations
-    GED = FREQNESS_NetworkEstimation_Mocap(markData, frex, srate);
+    GED = FREQNESS_NetworkEstimation_Mocap(markData, frex, srate, ...
+        'fwidth',filter_width,'filter',filter_type);
+    assert(isequal(GED.fwhm,expected_filter_width), ...
+        'Core output did not use the requested filter-width calibration.');
+    GED.filter_width_calibration = string(filter_width_calibration);
+    GED.filter_type = string(filter_type);
+    analysis_info = struct( ...
+        'filterWidthCalibration',string(filter_width_calibration), ...
+        'filter',string(filter_type),'fwidth',GED.fwhm);
 
     % Save output
     if save_flag == 1
-        mkdir([path_home 'GED_output']);
-        save([path_home 'GED_output/GED_dyad_' num2str(dyadi) '_cond_' num2str(condi) '_trial_' num2str(triali)]);
+        output_path = fullfile(path_home,'GED_output',filter_output_tag);
+        if ~isfolder(output_path); mkdir(output_path); end
+        output_file = fullfile(output_path,sprintf( ...
+            'GED_cond_%d_trial_%d.mat',condi,triali));
+        save(output_file,'GED','analysis_info','frex','srate','-v7.3')
     end
 
 
@@ -173,8 +203,6 @@ markData(:,end/2:end) = [];
 
 
 end
-
-
 
 
 
