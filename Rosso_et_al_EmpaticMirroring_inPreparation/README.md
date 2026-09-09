@@ -23,12 +23,13 @@ numbered blocks run in order and compatible outputs are reused. Set the
 environment variable `EMPATIC_MIRRORING_OVERWRITE=1` only for a deliberate
 full rebuild.
 
-`filter_width_calibration='physical'` is the default for new analyses. Setting
-it to `'legacy'` reconstructs the former bin-count-dependent logarithmic or
-linear schedule and passes the resulting 31-by-2 width matrix explicitly to
-the toolbox. Physical and legacy runs use separate output subdirectories, and
-saved core outputs are reused only when their realized `FREQ.fwhm` and
-calibration provenance match the current settings.
+`filter_width_calibration='legacy'` is the study default so reruns preserve the
+historical bin-count-dependent logarithmic schedule. It passes the resulting
+31-by-2 width matrix explicitly to the toolbox. Set the calibration to
+`'physical'` for a new analysis using frequency-calibrated widths. Physical and
+legacy runs use separate output subdirectories, and saved core outputs are
+reused only when their realized `FREQ.fwhm` and calibration provenance match
+the current settings.
 
 Setup, data QC, and artificial-dyad creation are unnumbered preparation
 sections. The numbered analysis blocks are:

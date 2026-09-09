@@ -59,10 +59,10 @@ path_repo = fileparts(data_path);
 
 CFG = [];
 CFG.common.data_path = data_path;
-% New GED analyses use physical widths. Select 'legacy' only to reproduce
-% the former bin-count-dependent filtering with explicit width matrices.
+% Preserve the study's historical filtering by default. Select 'physical'
+% to use the toolbox's frequency-calibrated widths for a new GED analysis.
 CFG.common.filter_width_calibration = validatestring( ...
-    'physical',{'physical','legacy'});
+    'legacy',{'physical','legacy'});
 CFG.common.filter_type = validatestring( ...
     'logarithmic',{'logarithmic','linear'});
 CFG.common.filter_output_tag = [CFG.common.filter_width_calibration ...

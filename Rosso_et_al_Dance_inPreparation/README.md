@@ -13,11 +13,12 @@ downsampling settings for comparison.
 
 ## Filter-width calibration
 
-New GED analyses use `CFG.common.filter_width_calibration='physical'` and the
-toolbox's physical logarithmic Q schedule by default. Select `'legacy'` only
-for historical replication. The pipeline then computes the former explicit
-32-by-2 FWHM matrix after the two participant-specific beat grids have been
-constructed and passes that matrix to `FREQNESS_NetworkEstimation_Mocap`.
+GED analyses use `CFG.common.filter_width_calibration='legacy'` by default so
+study reruns preserve the historical filtering. The pipeline computes the
+former explicit 32-by-2 FWHM matrix after the two participant-specific beat
+grids have been constructed and passes it to
+`FREQNESS_NetworkEstimation_Mocap`. Select `'physical'` for a new analysis
+using the toolbox's frequency-calibrated widths.
 
 Every calibration and filter combination has a separate results subdirectory:
 

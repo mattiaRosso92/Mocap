@@ -10,10 +10,10 @@ vis_flag = 1;
 % Choose if you want to enable saving of FREQNESS output
 save_flag = 0;
 
-% New analyses use physical widths. Select 'legacy' only to reproduce the
-% former bin-count-dependent filtering with an explicit width vector.
+% Preserve the study's historical filtering by default. Select 'physical'
+% to use the toolbox's frequency-calibrated widths for a new analysis.
 filter_width_calibration = validatestring( ...
-    'physical',{'physical','legacy'});
+    'legacy',{'physical','legacy'});
 filter_type = validatestring('logarithmic',{'logarithmic','linear'});
 filter_output_tag = [filter_width_calibration '_' filter_type];
 
@@ -203,7 +203,6 @@ markData(:,end/2:end) = [];
 
 
 end
-
 
 
 

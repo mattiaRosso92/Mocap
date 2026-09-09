@@ -20,10 +20,10 @@ path_study = fileparts(script_file);
 path_repo = fileparts(path_study);
 path_data = fullfile(path_study,'EmpaticMirrorring_Data');
 path_toolbox = fullfile(path_repo,'FREQNESS_Mocap_Toolbox');
-% New analyses use physical widths. Select 'legacy' only to reproduce the
-% former bin-count-dependent filtering with explicit widths.
+% Preserve the study's historical filtering by default. Select 'physical'
+% to use the toolbox's frequency-calibrated widths for a new analysis.
 filter_width_calibration = validatestring( ...
-    'physical',{'physical','legacy'});
+    'legacy',{'physical','legacy'});
 filter_type = validatestring('logarithmic',{'logarithmic','linear'});
 filter_output_tag = [filter_width_calibration '_' filter_type];
 path_output = fullfile(path_study,'outputs',filter_output_tag);
