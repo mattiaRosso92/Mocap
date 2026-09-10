@@ -22,6 +22,7 @@ FREQNESS_Output/
 
 # Local validation datasets
 Dance_Data/
+Rosso_et_al_PlayersExpertise_inPreparation/Example_data/
 
 # Motion-capture data exports
 *.mat
