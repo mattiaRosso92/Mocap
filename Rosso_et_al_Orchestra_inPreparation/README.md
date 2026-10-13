@@ -55,6 +55,8 @@ handover names and the generated `FREQNESS_Output` directory are gitignored.
   manifest. Missing segment CSVs are recorded as `missing_source` and skipped;
   they are not reconstructed from full recordings. Original manifest fields,
   including audio/EAF timing and availability annotations, are saved intact.
+  Score-section labels are imported explicitly as text, preserving mixed
+  labels such as `Start`, `5`, and `10` without numeric coercion.
 
 This first pipeline estimates the whole available ensemble. Instrument-group
 estimation, aggregation across recordings, temporal windows, and statistical

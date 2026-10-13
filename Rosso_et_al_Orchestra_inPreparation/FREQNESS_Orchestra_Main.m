@@ -277,8 +277,14 @@ if CFG.block2.run_flag
         [~,this_piece] = fileparts(piece_folder);
         this_piece = lower(string(this_piece));
         this_recording = string(this_recording);
-        manifest = readtable(manifest_file,'TextType','string', ...
-            'VariableNamingRule','preserve');
+        % Score labels can mix words (Start) and numbers; numeric inference
+        % would silently turn the words into missing values.
+        manifest_options = detectImportOptions(manifest_file,'VariableNamingRule','preserve');
+        mask_text = ismember(manifest_options.VariableTypes,{'char','string'}) | ...
+            strcmp(manifest_options.VariableNames,'label');
+        manifest_options = setvartype(manifest_options, ...
+            manifest_options.VariableNames(mask_text),'string');
+        manifest = readtable(manifest_file,manifest_options);
         required_fields = {'index','label','start_row_index', ...
             'end_row_index_exclusive','frames','file'};
         assert(all(ismember(required_fields,manifest.Properties.VariableNames)), ...

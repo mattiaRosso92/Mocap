@@ -93,6 +93,24 @@ verifyEqual(testCase,nnz(state.SEG.Status == "saved"),2);
 verifyEqual(testCase,nnz(state.SEG.Status == "missing_source"),1);
 end
 
+function testMixedTextAndNumericSectionLabels(testCase)
+fixture = make_fixture();
+cleanup = onCleanup(@() rmdir(fixture.root,'s'));
+files = dir(fullfile(fixture.data_path,'segment-piece-data-fixed-despiked', ...
+    '*','*','segments_manifest.csv'));
+manifest_file = fullfile(files(1).folder,files(1).name);
+manifest = readtable(manifest_file,'TextType','string');
+manifest = manifest(ones(14,1),:);
+manifest.index = (1:14)';
+manifest.label = ["Start"; string((2:14)')];
+manifest.file = ["01_A.csv"; compose('%02d_MISSING.csv',(2:14)')];
+writetable(manifest,manifest_file);
+state = execute_pipeline(testCase,fixture,[false true false]);
+verifyEqual(testCase,state.SEG.SegmentLabel(1:14),manifest.label);
+saved = load(state.SEG.CoreFile(1),'analysis_info');
+verifyEqual(testCase,saved.analysis_info.segment.label,"Start");
+end
+
 function testVisualizationRunsFromSavedCoresWithoutInputs(testCase)
 fixture = make_fixture();
 cleanup = onCleanup(@() rmdir(fixture.root,'s'));
