@@ -37,8 +37,8 @@ handover names and the generated `FREQNESS_Output` directory are gitignored.
   frequency-calibrated widths. Both choices are saved and routed separately.
 - **Regularisation: 0.01.** Four components retain spatial patterns,
   eigenvectors, and time series. The complete normalized eigenspectrum is
-  retained independently of that component count; landscapes default to 20
-  components. The longest supplied recording needs approximately 103 MiB for
+  retained independently of that component count. Component landscapes show
+  only the leading component; H2 uses the complete eigenspectrum. The longest supplied recording needs approximately 103 MiB for
   its four-component time series alone. Observations run sequentially.
 - CSVs contain `frame,1x,1y,2x,2y,...`, with numeric track IDs and consecutive
   frame indices. All values must be finite. Inputs are adapted to
@@ -74,7 +74,7 @@ Outputs are stored under:
 FREQNESS_Output/<legacy|physical>_<filter>/<rate_grid_settings_signature>/
   01_Core_FullPiece/<piece>/GED_<recording>.mat
   02_Core_SegmentPiece/<piece>/<recording>/GED_<section>.mat
-  03_Visualization/<full_piece|segment_piece>/...
+  03_Visualization/leading_H2_empirical_peak/<full_piece|segment_piece>/...
 ```
 
 The settings signature distinguishes exact frequency vectors, rates, retained
@@ -100,20 +100,61 @@ describes this invocation; previously saved cores remain on disk.
 
 ## Visualization
 
-Block 3 has independent stage, recording, and section selectors. It consumes
-the frequencies, sampling rate, labels, and layout saved with each core.
-The default pattern is component 1 at 2 Hz. Requested frequencies are mapped
-to actual analyzed frequencies with a warning for substitution; both are
-recorded in `visualization_info.mat` alongside the figure paths.
+Block 3 has independent stage, recording, and musical-segment selectors,
+plus the shared piece selector. It reads saved eigenvalues and patterns
+without loading unused time series or requiring source CSVs.
 
-The current toolbox visualizer is called with animation and skeletal links
-disabled. The pipeline then sets spatial axes to an overhead view with image
-Y increasing downward, arranges X/Y/Z panels side by side, and sizes labelled
-matrices for the track count. This changes only presentation, not the coordinates
-or signed activation values. Z is labelled as an unmeasured placeholder. Figures are
-saved as 200-dpi PNGs and closed by default. For interactive inspection, set
-`figure_visibility='on'` and `close_figures_flag=false`. Figure replacements
-also require the visualization `overwrite_flag`.
+- **Leading-component landscapes:** one curve per full recording, overlaid
+  within each piece; one curve per available musical segment, overlaid within
+  each recording. Only component 1 is shown, as a percentage of the complete
+  eigenvalue sum. Native frequency bins are connected without smoothing.
+- **H2 landscapes:** separate figures with exactly the same curves/colors.
+  `FREQNESS_EffectDim_Mocap(FREQ,'figure',false)` computes quadratic Rényi
+  entropy from **all** saved eigenvalues: `H2 = -log(sum(p.^2))`, where
+  `p = lambda/sum(lambda)` across coordinate channels, in natural-log units
+  (nats). ED is also retained. Lower H2 means a more concentrated spectrum;
+  raw H2 depends on channel count, which varies across some recordings.
+- **Temporal colors:** red to light blue across numeric day/rehearsal order,
+  with concerts last and purple (Concert 2 dashed). Musical segments follow
+  their manifest indices, with red first and light blue last. Missing
+  segments are omitted, without substituting an estimate or renumbering.
+- **Empirical-peak patterns:** both overhead views and labelled activation
+  matrices show component 1 at its highest stored value on the analyzed
+  frequency grid, independently for every observation. Exact ties select the
+  first (lowest-frequency) bin. Frequency-boundary maxima and ties are flagged
+  in the titles/catalog; these need not represent distinct interior peaks.
+  No peak fitting, smoothing, or frequency substitution is performed.
+
+The unchanged toolbox visualizer supplies signed patterns. The pipeline sets
+an overhead image-coordinate view, arranges X/Y/Z panels side by side, and
+sizes matrices for the track count. Z is an unmeasured placeholder. Pattern
+normalization remains the toolbox convention; selected peak frequencies can
+differ across recordings and segments. Frequency units still depend on the
+unconfirmed sampling-rate assumption.
+
+Figures are saved as 200-dpi PNGs and closed by default. For interactive
+inspection, set `figure_visibility='on'` and `close_figures_flag=false`.
+The `leading_H2_empirical_peak` output route preserves earlier 20-component/
+2-Hz figures. Replacing figures within a route requires `overwrite_flag`.
+Per-observation `visualization_info.mat` records source provenance, empirical
+peak index/frequency/value, boundary/tie flags, and plotting settings.
+Each overlay's `landscape_data.mat` retains the plotted spectra, H2/ED,
+chronological labels, colors, and source metadata. Each stage exports a
+`figure_catalog.json` containing the plotted values and original PNG paths.
+
+Build the app/offline gallery directly from these MATLAB catalogs:
+
+```sh
+python3 build_orchestra_report.py \
+  --visualization-path "FREQNESS_Output/<calibration_filter>/<settings>/03_Visualization/leading_H2_empirical_peak" \
+  --output-path "FREQNESS_Output/report"
+```
+
+Open `FREQNESS_Output/report/index.html`, or serve its parent directory on
+localhost for the in-app browser. The Python script uses only the standard
+library; it arranges the original MATLAB figures and performs no analysis.
+The gallery separates full pieces and musical segments, with buttons for
+component 1, H2, matrices, and overhead patterns.
 
 ## Validation
 
@@ -129,5 +170,7 @@ assertSuccess(results)
 The tests execute the actual script against temporary deterministic CSVs,
 compare estimates with direct calls to the unchanged toolbox, check complete
 frame/track retention and normalization, exercise missing/invalid inputs and
-cache reuse, and generate figures independently of the input data. They do
+cache reuse, verify H2 against its defining equation, check numeric session
+ordering and boundary/tied peak selection, and generate figures independently
+of the input data. They do
 not execute the full private dataset.

@@ -52,9 +52,11 @@ CFG.block3.run_flag = false;
 CFG.block3.stages = ["full_piece" "segment_piece"];
 CFG.block3.recordings = strings(0,1);
 CFG.block3.segment_labels = strings(0,1);
-CFG.block3.landscape_ncomps = 20;
-CFG.block3.pattern_frex = 2;
-CFG.block3.pattern_comp = 1;
+% Component 1 only; H2 always uses the complete saved eigenspectrum.
+% Patterns use the maximum observed component-1 bin (first bin for ties).
+CFG.block3.color_first = [.85 .12 .15]; % First rehearsal / musical segment.
+CFG.block3.color_last = [.35 .75 .94];  % Last rehearsal / musical segment.
+CFG.block3.color_concert = [.50 .22 .70]; % Concerts follow all rehearsals.
 CFG.block3.plot_matrix_flag = true;
 CFG.block3.save_flag = true;
 CFG.block3.overwrite_flag = false;
@@ -102,7 +104,8 @@ CFG.common.results_path = fullfile(CFG.common.output_path, ...
     filter_output_tag,analysis_tag);
 CFG.block1.output_path = fullfile(CFG.common.results_path,'01_Core_FullPiece');
 CFG.block2.output_path = fullfile(CFG.common.results_path,'02_Core_SegmentPiece');
-CFG.block3.output_path = fullfile(CFG.common.results_path,'03_Visualization');
+CFG.block3.output_path = fullfile(CFG.common.results_path, ...
+    '03_Visualization','leading_H2_empirical_peak');
 
 % Keep the estimator source with each core for version provenance. This
 % reads the currently installed toolbox; no toolbox function is modified.
@@ -442,19 +445,22 @@ if CFG.block2.run_flag
 end
 
 
-%% BLOCK 3 - VISUALIZE SAVED LANDSCAPES AND ACTIVATION PATTERNS
+%% BLOCK 3 - CHRONOLOGICAL LANDSCAPES AND EMPIRICAL-PEAK PATTERNS
 
 if CFG.block3.run_flag
     assert(all(ismember(string(CFG.block3.stages),["full_piece" "segment_piece"])), ...
         'CFG.block3.stages must contain full_piece and/or segment_piece.');
-    validateattributes(CFG.block3.pattern_frex,{'numeric'}, ...
-        {'real','finite','vector','positive','nonempty'});
-    validateattributes(CFG.block3.pattern_comp,{'numeric'},{'scalar','integer','positive'});
-    validateattributes(CFG.block3.landscape_ncomps,{'numeric'},{'scalar','integer','positive'});
     assert(CFG.block3.save_flag || ~CFG.block3.close_figures_flag, ...
         'Unsaved figures must remain open: disable close_figures_flag.');
     original_visibility = get(groot,'DefaultFigureVisible');
     set(groot,'DefaultFigureVisible',CFG.block3.figure_visibility)
+    visual_settings = struct('presentation_version',2, ...
+        'component',1,'peak_method',"maximum_analyzed_bin_first_tie", ...
+        'entropy_method',"complete_eigenspectrum_H2_natural_log", ...
+        'color_first',CFG.block3.color_first,'color_last',CFG.block3.color_last, ...
+        'color_concert',CFG.block3.color_concert,'plot_matrix',CFG.block3.plot_matrix_flag, ...
+        'visualizer_source',fileread(which('FREQNESS_Visualizer_Mocap')), ...
+        'entropy_source',fileread(which('FREQNESS_EffectDim_Mocap')));
     try
         for stagei = 1:numel(CFG.block3.stages)
             this_stage = string(CFG.block3.stages(stagei));
@@ -464,138 +470,284 @@ if CFG.block3.run_flag
                 path_core = CFG.block2.output_path;
             end
             files = dir(fullfile(path_core,'**','GED_*.mat'));
-            if isempty(files)
-                warning('Orchestra:NoCoreOutputs','No saved cores found in %s.',path_core);
-            end
             core_files = sort(string(fullfile({files.folder},{files.name})))';
+            % Small spectra/provenance only: never retain sample-resolved arrays.
+            observations = cell(numel(core_files),1);
+            selected_count = 0;
             for filei = 1:numel(core_files)
                 saved_core = load(core_files(filei),'analysis_info','marker_position','marklabels');
                 info = saved_core.analysis_info;
-                if ~isempty(CFG.block3.recordings) && ...
-                        ~ismember(info.recording,string(CFG.block3.recordings))
+                if ~ismember(info.piece,lower(string(CFG.common.pieces))) || ...
+                        (~isempty(CFG.block3.recordings) && ...
+                        ~ismember(info.recording,string(CFG.block3.recordings)))
                     continue
                 end
-                if this_stage == "segment_piece" && ...
-                        ~isempty(CFG.block3.segment_labels) && ...
+                if this_stage == "segment_piece" && ~isempty(CFG.block3.segment_labels) && ...
                         ~ismember(string(info.segment.label),string(CFG.block3.segment_labels))
                     continue
                 end
-                assert(CFG.block3.pattern_comp <= info.ncomps, ...
-                    'Requested component was not retained in %s.',core_files(filei));
-                requested_frex = CFG.block3.pattern_frex(:)';
-                idx_frex = zeros(size(requested_frex));
-                for frexi = 1:numel(requested_frex)
-                    [frequency_error,idx_frex(frexi)] = min(abs(info.frex-requested_frex(frexi)));
-                    if frequency_error > 1e-10*max(1,abs(requested_frex(frexi)))
-                        warning('Orchestra:NearestFrequency', ...
-                            '%s: requested %.6g Hz; visualizing %.6g Hz.', ...
-                            core_files(filei),requested_frex(frexi),info.frex(idx_frex(frexi)));
-                    end
+                % These cores are v7.3. Read just eigenvalues and, when needed,
+                % patterns; loading GED would also load large unused time series.
+                FREQ = struct('frex',info.frex(:)', ...
+                    'evals',h5read(core_files(filei),'/GED/evals'));
+                assert(isequal(size(FREQ.evals),[3*numel(info.track_ids) numel(FREQ.frex)]) && ...
+                    all(isfinite(FREQ.evals),'all') && all(FREQ.evals >= 0,'all'), ...
+                    'Orchestra:InvalidEigenspectrum','Invalid complete eigenspectrum: %s.',core_files(filei));
+                assert(max(abs(sum(FREQ.evals,1)-100)) < 1e-8 && ...
+                    all(diff(FREQ.evals,1,1) <= 1e-10,'all'), ...
+                    'Orchestra:InvalidEigenspectrum','Expected sorted, percent-normalized eigenvalues.');
+                [H2,ED] = FREQNESS_EffectDim_Mocap(FREQ,'figure',false);
+                % H2 = -ln(sum(p.^2)), p = lambda/sum(lambda), over ALL
+                % coordinate eigenvalues at each frequency. Units: nats.
+                % Leading component remains percent of the same complete sum.
+                [peak_value,idx_peak] = max(FREQ.evals(1,:));
+                peak_frequency = FREQ.frex(idx_peak);
+                boundary_peak = idx_peak == 1 || idx_peak == numel(FREQ.frex);
+                peak_tie_count = nnz(FREQ.evals(1,:) == peak_value);
+                peak_note = "empirical grid maximum";
+                if boundary_peak; peak_note = peak_note+"; frequency boundary"; end
+                if peak_tie_count > 1; peak_note = peak_note+"; first tied bin"; end
+
+                % Numeric Day/Rehearsal order; all concerts follow rehearsals.
+                recording_tokens = regexp(char(info.recording),'D(\d+)-full-R(\d+)','tokens','once');
+                concert_tokens = regexp(char(info.recording),'fullconcert-(\d+)','tokens','once');
+                concert_flag = ~isempty(concert_tokens);
+                if concert_flag
+                    day = 0;
+                    repetition = str2double(concert_tokens{1});
+                    recording_label = "Concert "+repetition;
+                else
+                    assert(~isempty(recording_tokens),'Orchestra:UnknownRecordingOrder', ...
+                        'Expected D<day>-full-R<rehearsal> or fullconcert-<number>: %s.',info.recording);
+                    day = str2double(recording_tokens{1});
+                    repetition = str2double(recording_tokens{2});
+                    recording_label = "D"+day+" / R"+repetition;
                 end
-                actual_frex = info.frex(idx_frex);
-                visual_info = struct('source',info,'requested_frex',requested_frex, ...
-                    'actual_frex',actual_frex,'component',CFG.block3.pattern_comp, ...
-                    'landscape_ncomps',CFG.block3.landscape_ncomps, ...
-                    'plot_matrix',CFG.block3.plot_matrix_flag,'presentation_version',1);
+                segment_index = 0;
+                segment_label = "";
+                if this_stage == "segment_piece"
+                    segment_index = info.segment.index;
+                    segment_label = string(info.segment.label);
+                end
+                observation_label = info.piece+" | "+recording_label;
+                if this_stage == "segment_piece"
+                    observation_label = observation_label+" | segment "+segment_index+": "+segment_label;
+                end
+                source_stat = dir(core_files(filei));
+                visual_info = struct('source',info,'source_bytes',source_stat.bytes, ...
+                    'source_modified',source_stat.datenum,'settings',visual_settings, ...
+                    'idx_peak',idx_peak,'actual_frex',peak_frequency,'peak_value',peak_value, ...
+                    'boundary_peak',boundary_peak,'peak_tie_count',peak_tie_count);
                 relative_core = erase(core_files(filei),string(path_core)+filesep);
                 [relative_folder,core_name] = fileparts(relative_core);
-                path_figure = fullfile(CFG.block3.output_path,this_stage, ...
-                    relative_folder,core_name);
+                path_figure = fullfile(CFG.block3.output_path,this_stage,relative_folder,core_name);
                 visual_file = fullfile(path_figure,'visualization_info.mat');
-                if CFG.block3.save_flag && ~CFG.block3.overwrite_flag && ...
-                        ~isfile(visual_file) && ~isempty(dir(fullfile(path_figure,'*.png')))
-                    error('Orchestra:UnidentifiedFigures', ...
-                        'Figures exist without provenance in %s. Inspect before overwriting.',path_figure);
+                figure_files = strings(1+CFG.block3.plot_matrix_flag,1);
+                if CFG.block3.plot_matrix_flag
+                    figure_files(1) = fullfile(path_figure, ...
+                        sprintf('pattern_matrix_peak_f%.6gHz_comp1.png',peak_frequency));
                 end
+                figure_files(end) = fullfile(path_figure, ...
+                    sprintf('activation_peak_f%.6gHz_comp1.png',peak_frequency));
+                reuse_figures = false;
                 if CFG.block3.save_flag && isfile(visual_file) && ~CFG.block3.overwrite_flag
                     saved_visual = load(visual_file,'visual_info','figure_files');
                     assert(isequaln(saved_visual.visual_info,visual_info), ...
-                        'Existing visualization settings differ: %s. Set overwrite_flag to replace.',visual_file);
-                    if all(isfile(saved_visual.figure_files))
-                        continue
+                        'Orchestra:IncompatibleVisualization', ...
+                        'Visualization settings differ: %s. Inspect before setting overwrite_flag.',visual_file);
+                    reuse_figures = isequal(saved_visual.figure_files,figure_files) && all(isfile(figure_files));
+                elseif CFG.block3.save_flag && ~CFG.block3.overwrite_flag && any(isfile(figure_files))
+                    error('Orchestra:UnidentifiedFigures','Figures lack provenance: %s.',path_figure);
+                end
+                if ~reuse_figures
+                    FREQ.pats = h5read(core_files(filei),'/GED/pats');
+                    Patterns = struct('frex',peak_frequency,'comp',1, ...
+                        'labels',{saved_core.marklabels},'markerData',saved_core.marker_position, ...
+                        'srate',info.srate,'start',.25,'animate',false, ...
+                        'plot_bones',false,'plot_matrix',CFG.block3.plot_matrix_flag);
+                    % Empty Landscape suppresses per-observation multicomponent
+                    % figures. Chronological component-1/H2 overlays follow below.
+                    figures = FREQNESS_Visualizer_Mocap(FREQ,[],Patterns);
+                    dimension_titles = {'X activation','Y activation','Z (not measured; zero placeholder)'};
+                    for figurei = 1:numel(figures.patterns)
+                        set(figures.patterns(figurei),'Units','pixels','Position',[50 90 1460 640])
+                        axes_handles = findall(figures.patterns(figurei),'Type','axes');
+                        axes_positions = vertcat(axes_handles.Position);
+                        [~,idx_axes] = sort(axes_positions(:,1));
+                        axes_handles = axes_handles(idx_axes);
+                        for axi = 1:numel(axes_handles)
+                            view(axes_handles(axi),2)
+                            set(axes_handles(axi),'YDir','reverse','YAxisLocation','left', ...
+                                'Projection','orthographic','CameraViewAngleMode','auto', ...
+                                'PlotBoxAspectRatioMode','auto', ...
+                                'Position',[.055+.29*(axi-1) .18 .235 .65])
+                            xlabel(axes_handles(axi),'X (image coordinates)')
+                            ylabel(axes_handles(axi),'Y (image coordinates)')
+                            title(axes_handles(axi),dimension_titles{axi},'FontSize',11)
+                        end
+                        sgtitle(figures.patterns(figurei),{char(observation_label); ...
+                            sprintf('Component 1 | %.3g Hz | %s',peak_frequency,peak_note)},'FontSize',14)
                     end
+                    for figurei = 1:numel(figures.pattern_matrix)
+                        set(figures.pattern_matrix(figurei),'Units','pixels', ...
+                            'Position',[80 80 1100 max(500,150+15*numel(saved_core.marklabels))])
+                        axes_handles = findall(figures.pattern_matrix(figurei),'Type','axes');
+                        for axi = 1:numel(axes_handles)
+                            title(axes_handles(axi),dimension_titles{axes_handles(axi).Layout.Tile},'FontSize',11)
+                        end
+                        title(axes_handles(1).Parent,{char(observation_label); ...
+                            sprintf('Component 1 | %.3g Hz | %s',peak_frequency,peak_note)},'FontSize',14)
+                    end
+                    handles = [figures.pattern_matrix(:); figures.patterns(:)];
+                    if CFG.block3.save_flag && ~isfolder(path_figure); mkdir(path_figure); end
+                    for figurei = 1:numel(handles)
+                        set(handles(figurei),'Name',char(observation_label))
+                        set(findall(handles(figurei),'-property','Interpreter'),'Interpreter','none')
+                        set(findall(handles(figurei),'-property','TickLabelInterpreter'),'TickLabelInterpreter','none')
+                        if CFG.block3.save_flag
+                            exportgraphics(handles(figurei),figure_files(figurei),'Resolution',200)
+                        end
+                        if CFG.block3.close_figures_flag; close(handles(figurei)); end
+                    end
+                    if CFG.block3.save_flag; save(visual_file,'visual_info','figure_files'); end
                 end
-                loaded = load(core_files(filei),'GED');
-                GED = loaded.GED;
-                Landscape = [];
-                Landscape.frex = GED.frex;
-                Landscape.ncomps = min(CFG.block3.landscape_ncomps,size(GED.evals,1));
-                Landscape.title = sprintf('%s | %s',this_stage,core_name);
-                if ~info.srate_confirmed
-                    Landscape.xlabel = sprintf('Frequency (Hz; assumed sampling rate %g Hz)',info.srate);
-                end
-                Patterns = [];
-                Patterns.frex = unique(actual_frex,'stable');
-                Patterns.comp = CFG.block3.pattern_comp;
-                Patterns.labels = saved_core.marklabels;
-                Patterns.markerData = saved_core.marker_position;
-                Patterns.srate = info.srate;
-                Patterns.start = .25;
-                Patterns.animate = false; % Static patterns, no interactive prompt.
-                Patterns.plot_bones = false; % Ensemble tracks are not a skeleton.
-                Patterns.plot_matrix = CFG.block3.plot_matrix_flag;
-                figures = FREQNESS_Visualizer_Mocap(GED,Landscape,Patterns);
+                selected_count = selected_count+1;
+                observations{selected_count} = struct('stage',this_stage,'piece',info.piece, ...
+                    'recording',info.recording,'recording_label',recording_label, ...
+                    'concert_flag',concert_flag,'day',day,'repetition',repetition, ...
+                    'segment_index',segment_index,'segment_label',segment_label, ...
+                    'ntracks',numel(info.track_ids),'npnts',info.npnts, ...
+                    'srate',info.srate,'srate_confirmed',info.srate_confirmed, ...
+                    'frex',FREQ.frex,'component1',FREQ.evals(1,:), ...
+                    'H2',H2(:)','ED',ED(:)','idx_peak',idx_peak,'peak_frequency',peak_frequency, ...
+                    'peak_value',peak_value,'boundary_peak',boundary_peak, ...
+                    'peak_tie_count',peak_tie_count,'core_file',core_files(filei), ...
+                    'source_bytes',source_stat.bytes,'source_modified',source_stat.datenum, ...
+                    'figure_files',figure_files);
+                fprintf('%s: %s | peak %.3g Hz%s\n',this_stage,observation_label, ...
+                    peak_frequency,repmat(' [boundary]',1,boundary_peak));
+                clear FREQ saved_core
+            end
+            if selected_count == 0
+                warning('Orchestra:NoCoreOutputs','No selected saved cores in %s.',path_core);
+                continue
+            end
+            observations = vertcat(observations{1:selected_count});
+            order = table(string({observations.piece})',[observations.concert_flag]', ...
+                [observations.day]',[observations.repetition]',[observations.segment_index]');
+            [~,idx_order] = sortrows(order,1:5);
+            observations = observations(idx_order);
 
-                % Display coordinates as in the overhead images. This only
-                % changes the viewing axes; saved data and signed patterns stay intact.
-                dimension_titles = {'X activation','Y activation', ...
-                    'Z (not measured; zero placeholder)'};
-                for figurei = 1:numel(figures.patterns)
-                    set(figures.patterns(figurei),'Units','pixels','Position',[50 90 1460 640])
-                    axes_handles = findall(figures.patterns(figurei),'Type','axes');
-                    axes_positions = vertcat(axes_handles.Position);
-                    [~,idx_axes] = sort(axes_positions(:,1)); % Original X/Y/Z order.
-                    axes_handles = axes_handles(idx_axes);
-                    for axi = 1:numel(axes_handles)
-                        view(axes_handles(axi),2)
-                        set(axes_handles(axi),'YDir','reverse','YAxisLocation','left', ...
-                            'Projection','orthographic','CameraViewAngleMode','auto', ...
-                            'PlotBoxAspectRatioMode','auto', ...
-                            'Position',[.055+.29*(axi-1) .18 .235 .65])
-                        xlabel(axes_handles(axi),'X (image coordinates)')
-                        ylabel(axes_handles(axi),'Y (image coordinates)')
-                        title(axes_handles(axi),dimension_titles{axi},'FontSize',11)
+            % One overlay per piece for full recordings; one per recording
+            % for musical segments. These are individual curves, never means.
+            if this_stage == "full_piece"
+                group_keys = string({observations.piece});
+            else
+                group_keys = string({observations.piece})+"/"+string({observations.recording});
+            end
+            groups = unique(group_keys,'stable');
+            overlays = cell(numel(groups),1);
+            for groupi = 1:numel(groups)
+                idx_group = find(group_keys == groups(groupi));
+                this_observations = observations(idx_group);
+                ncurves = numel(idx_group);
+                colors = zeros(ncurves,3);
+                labels = strings(ncurves,1);
+                styles = repmat("-",ncurves,1);
+                if this_stage == "full_piece"
+                    idx_rehearsal = find(~[this_observations.concert_flag]);
+                    progression = linspace(0,1,max(2,numel(idx_rehearsal)))';
+                    if isscalar(idx_rehearsal); progression = 0; end
+                    colors(idx_rehearsal,:) = (1-progression(1:numel(idx_rehearsal)))*CFG.block3.color_first + ...
+                        progression(1:numel(idx_rehearsal))*CFG.block3.color_last;
+                    idx_concert = find([this_observations.concert_flag]);
+                    colors(idx_concert,:) = repmat(CFG.block3.color_concert,numel(idx_concert),1);
+                    if numel(idx_concert) > 1; styles(idx_concert(2:2:end)) = "--"; end
+                    labels(:) = string({this_observations.recording_label});
+                    group_title = this_observations(1).piece+" | full recordings in temporal order";
+                    relative_folder = this_observations(1).piece;
+                else
+                    % Preserve the manifest order, including a gap for a missing
+                    % first segment; do not re-label the next segment as first.
+                    progression = ([this_observations.segment_index]'-1)/ ...
+                        max(1,max([this_observations.segment_index])-1);
+                    colors = (1-progression)*CFG.block3.color_first + progression*CFG.block3.color_last;
+                    labels(:) = compose('%02d | %s',[this_observations.segment_index]', ...
+                        string({this_observations.segment_label})');
+                    group_title = this_observations(1).piece+" | "+ ...
+                        this_observations(1).recording_label+" | musical segments in score order";
+                    relative_folder = fullfile(this_observations(1).piece,this_observations(1).recording);
+                end
+                assert(all(arrayfun(@(x) isequal(x.frex,this_observations(1).frex) && ...
+                    x.srate == this_observations(1).srate && ...
+                    x.srate_confirmed == this_observations(1).srate_confirmed,this_observations)), ...
+                    'Overlaid observations must share frequency grid and sampling assumptions.');
+                path_overlay = fullfile(CFG.block3.output_path,this_stage,relative_folder,'overlays');
+                overlay_files = fullfile(path_overlay,["landscape_component1.png";"landscape_H2.png"]);
+                overlay_file = fullfile(path_overlay,'landscape_data.mat');
+                overlay_info = struct('settings',visual_settings,'observations',this_observations, ...
+                    'colors',colors,'labels',labels,'styles',styles,'font_sizes',[24 24 28]);
+                reuse_overlay = false;
+                if CFG.block3.save_flag && isfile(overlay_file) && ~CFG.block3.overwrite_flag
+                    saved_overlay = load(overlay_file,'overlay_info');
+                    assert(isequaln(saved_overlay.overlay_info,overlay_info), ...
+                        'Orchestra:IncompatibleVisualization', ...
+                        'Overlay selection/settings differ: %s. Inspect before setting overwrite_flag.',overlay_file);
+                    reuse_overlay = all(isfile(overlay_files));
+                elseif CFG.block3.save_flag && ~CFG.block3.overwrite_flag && any(isfile(overlay_files))
+                    error('Orchestra:UnidentifiedFigures','Overlay lacks provenance: %s.',path_overlay);
+                end
+                if ~reuse_overlay
+                    if CFG.block3.save_flag && ~isfolder(path_overlay); mkdir(path_overlay); end
+                    for measurei = 1:2
+                        this_figure = figure('Color','w','Position',[50 50 1250 700]);
+                        ax = axes('Parent',this_figure); hold(ax,'on')
+                        for curvei = 1:ncurves
+                            if measurei == 1
+                                this_values = this_observations(curvei).component1;
+                            else
+                                this_values = this_observations(curvei).H2;
+                            end
+                            plot(ax,this_observations(curvei).frex,this_values,'Color',colors(curvei,:), ...
+                                'LineStyle',styles(curvei),'LineWidth',1.8,'DisplayName',labels(curvei));
+                        end
+                        % Plot native analyzed bins without smoothing/interpolation.
+                        xlim(ax,[this_observations(1).frex(1) this_observations(1).frex(end)])
+                        if measurei == 1
+                            ylabel(ax,'Component 1 (% of complete eigenvalue sum)')
+                            ylim(ax,[0 100]); measure_title = "Leading-component landscape";
+                        else
+                            ylabel(ax,'H2 entropy (nats; complete eigenspectrum)')
+                            ylim(ax,[0 log(3*max([observations.ntracks]))]); measure_title = "H2 entropy landscape";
+                        end
+                        if this_observations(1).srate_confirmed
+                            xlabel(ax,'Frequency (Hz)')
+                        else
+                            xlabel(ax,sprintf('Nominal frequency (Hz; assumed sampling rate %g Hz)',this_observations(1).srate))
+                        end
+                        title(ax,{char(group_title);char(measure_title)},'Interpreter','none','FontSize',28)
+                        legend(ax,'Location','eastoutside','Interpreter','none','FontSize',24)
+                        set(ax,'FontSize',24,'Box','off','TickDir','out'); grid(ax,'on')
+                        if CFG.block3.save_flag
+                            exportgraphics(this_figure,overlay_files(measurei),'Resolution',200)
+                        end
+                        if CFG.block3.close_figures_flag; close(this_figure); end
                     end
+                    if CFG.block3.save_flag; save(overlay_file,'overlay_info','overlay_files'); end
                 end
-                % Allow a readable row for every track, independent of ensemble size.
-                for figurei = 1:numel(figures.pattern_matrix)
-                    set(figures.pattern_matrix(figurei),'Units','pixels', ...
-                        'Position',[80 80 1100 max(500,150+15*numel(saved_core.marklabels))])
-                    axes_handles = findall(figures.pattern_matrix(figurei),'Type','axes');
-                    for axi = 1:numel(axes_handles)
-                        title(axes_handles(axi), ...
-                            dimension_titles{axes_handles(axi).Layout.Tile},'FontSize',11)
-                    end
-                end
-                handles = [figures.landscape(:); figures.pattern_matrix(:); figures.patterns(:)];
-                figure_names = strings(numel(handles),1);
-                figure_names(1) = "landscape.png";
-                nfrex = numel(Patterns.frex);
-                if Patterns.plot_matrix
-                    figure_names(2:1+nfrex) = compose("pattern_matrix_f%.6gHz_comp%d.png", ...
-                        Patterns.frex(:),repmat(Patterns.comp,nfrex,1));
-                end
-                figure_names(end-nfrex+1:end) = compose("activation_f%.6gHz_comp%d.png", ...
-                    Patterns.frex(:),repmat(Patterns.comp,nfrex,1));
-                figure_files = strings(numel(handles),1);
-                if CFG.block3.save_flag && ~isfolder(path_figure); mkdir(path_figure); end
-                for figurei = 1:numel(handles)
-                    set(handles(figurei),'Name',char(this_stage+" | "+info.recording))
-                    % File stems and track IDs contain literal underscores.
-                    set(findall(handles(figurei),'-property','Interpreter'),'Interpreter','none')
-                    set(findall(handles(figurei),'-property','TickLabelInterpreter'), ...
-                        'TickLabelInterpreter','none')
-                    figure_files(figurei) = fullfile(path_figure,figure_names(figurei));
-                    if CFG.block3.save_flag && ...
-                            (~isfile(figure_files(figurei)) || CFG.block3.overwrite_flag)
-                        exportgraphics(handles(figurei),figure_files(figurei),'Resolution',200)
-                    end
-                    if CFG.block3.close_figures_flag; close(handles(figurei)); end
-                end
-                if CFG.block3.save_flag
-                    save(visual_file,'visual_info','figure_files')
-                end
-                clear GED loaded saved_core
+                overlays{groupi} = struct('stage',this_stage,'piece',this_observations(1).piece, ...
+                    'recording',"",'title',group_title,'ncurves',ncurves,'labels',labels, ...
+                    'colors',colors,'figure_files',overlay_files);
+                if this_stage == "segment_piece"; overlays{groupi}.recording = this_observations(1).recording; end
+            end
+            if CFG.block3.save_flag
+                catalog = struct('stage',this_stage,'settings',visual_settings, ...
+                    'observations',observations,'overlays',vertcat(overlays{:}));
+                catalog_file = fullfile(CFG.block3.output_path,this_stage,'figure_catalog.json');
+                file_id = fopen(catalog_file,'w');
+                assert(file_id >= 0,'Cannot write %s.',catalog_file);
+                fprintf(file_id,'%s',jsonencode(catalog));
+                fclose(file_id);
             end
         end
     catch exception
