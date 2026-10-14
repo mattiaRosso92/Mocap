@@ -37,3 +37,14 @@ Saved GED structures retain the selected calibration, filter type, and
 realized `fwhm`. Existing core outputs without matching provenance are rejected
 rather than mixed into a new analysis. The PCA branch does not use these
 Gaussian filter widths.
+
+## Statistical outputs
+
+BLOCK 6 retains the established JRQA and spatial-similarity workbooks in
+`06_Statistics_R` and exports participant-dimensional phase-space RR and DET
+to `06_Statistics_R/PhaseSpaceRQA`. `FREQNESS_Mocap_Stats.R` applies the same
+trial averaging, natural-log transformation, mixed-effects models, polynomial
+comparisons, diagnostics, and four-level Bonferroni correction to both temporal
+methods. Phase-space results are kept separately in
+`FREQNESS_Mocap_Stats_Results/PhaseSpaceRQA` so existing JRQA results are not
+overwritten.

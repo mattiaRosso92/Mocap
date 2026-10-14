@@ -1593,8 +1593,8 @@ close all
 %% BLOCK 6 - R-READY STATISTICAL EXPORT
 
 % This block is independent of the group-visualization workspace. It loads
-% each component summary saved by BLOCK 3 and exports one workbook per
-% component for the automated R workflow.
+% each component summary saved by BLOCKS 3 and 4 and exports separate JRQA
+% and phase-space RQA workbooks for the automated R workflow.
 components = CFG.block3.components;
 visual_labels = ["No", "No", "Yes", "Yes"];
 music_labels = ["Diff", "Same", "Diff", "Same"];
@@ -1656,6 +1656,78 @@ for componenti = 1:numel(components)
         ['OUT2R_Comp#' num2str(which_comp) '.xlsx']);
     writetable(T,statistics_file)
     fprintf('Saved Component %d statistics: %s\n', ...
+        which_comp,statistics_file);
+
+end
+
+% Export the alternative participant-dimensional phase-space RQA results
+% separately so the established JRQA workbooks remain unchanged.
+phase_statistics_path = fullfile( ...
+    CFG.block6.output_path,'PhaseSpaceRQA');
+if ~isfolder(phase_statistics_path)
+    mkdir(phase_statistics_path)
+end
+
+components = CFG.block4.components;
+for componenti = 1:numel(components)
+
+    which_comp = components(componenti);
+    component_output_path = fullfile( ...
+        CFG.block4.output_path,['Component_' num2str(which_comp)]);
+    phase_summary_file = fullfile(component_output_path, ...
+        ['FREQNESS_PHASERQA_SUMMARY_Comp#' num2str(which_comp) '.mat']);
+    assert(isfile(phase_summary_file), ...
+        ['Missing Component %d phase-space RQA summary. Run BLOCK 4 ' ...
+        'before BLOCK 6.'],which_comp);
+
+    S = load(phase_summary_file, ...
+        'PhaseRQA','meter','list_dyads','nconds','ntrials','nmeters');
+
+    % Average the eight trial-level dyadic measures before statistical
+    % modelling, exactly matching the established JRQA export.
+    avg_RR = mean(S.PhaseRQA.output.RR(S.list_dyads,:,:,:),4);
+    avg_RR = reshape(avg_RR, ...
+        [numel(S.list_dyads) S.nconds S.nmeters]);
+    avg_DET = mean(S.PhaseRQA.output.DET(S.list_dyads,:,:,:),4);
+    avg_DET = reshape(avg_DET, ...
+        [numel(S.list_dyads) S.nconds S.nmeters]);
+
+    assert(all(isfinite(avg_RR),'all') && all(avg_RR > 0,'all'), ...
+        'Phase-space RR must be finite and positive for log modelling.');
+    assert(all(isfinite(avg_DET),'all') && all(avg_DET > 0,'all'), ...
+        'Phase-space DET must be finite and positive for log modelling.');
+
+    nRows = numel(S.list_dyads)*S.nconds*S.nmeters;
+    dyad_col = zeros(nRows,1);
+    visual_col = strings(nRows,1);
+    music_col = strings(nRows,1);
+    meter_col = strings(nRows,1);
+    rr_col = zeros(nRows,1);
+    det_col = zeros(nRows,1);
+    meter_labels = "M" + string(1:S.nmeters);
+
+    row = 1;
+    for dyad_idx = 1:numel(S.list_dyads)
+        for condi = 1:S.nconds
+            for metri = 1:S.nmeters
+                dyad_col(row) = S.list_dyads(dyad_idx);
+                visual_col(row) = visual_labels(condi);
+                music_col(row) = music_labels(condi);
+                meter_col(row) = meter_labels(metri);
+                rr_col(row) = avg_RR(dyad_idx,condi,metri);
+                det_col(row) = avg_DET(dyad_idx,condi,metri);
+                row = row + 1;
+            end
+        end
+    end
+
+    T = table(dyad_col,visual_col,music_col,meter_col,rr_col,det_col, ...
+        'VariableNames',{'Dyad','Visual','Music','Meter','RR','DET'});
+
+    statistics_file = fullfile(phase_statistics_path, ...
+        ['OUT2R_Comp#' num2str(which_comp) '.xlsx']);
+    writetable(T,statistics_file)
+    fprintf('Saved Component %d phase-space RQA statistics: %s\n', ...
         which_comp,statistics_file);
 
 end

@@ -54,27 +54,23 @@ results_root <- file.path(
 )
 statistics_input_path <- file.path(results_root, "06_Statistics_R")
 
-# MATLAB exports one workbook for every component selected for coordination
-# in BLOCK 3. Discover those workbooks here so this script remains in sync
-# without maintaining a second component count in R.
-component_workbooks <- list.files(
-  statistics_input_path,
-  pattern = "^OUT2R_Comp#[0-9]+\\.xlsx$",
-  full.names = FALSE
-)
-if (length(component_workbooks) == 0) {
-  stop(
-    "No component workbooks were found in ",
-    statistics_input_path,
-    ". Run BLOCK 6 in FREQNESS_DyadicDance_Mocap.m first."
+# Analyse the established JRQA workbooks and the separate phase-space RQA
+# exports through the same statistical workflow. Keeping distinct paths
+# prevents either method from replacing the other's inputs or results.
+analysis_methods <- list(
+  JRQA = list(
+    input_path = statistics_input_path,
+    output_subfolder = NULL
+  ),
+  PhaseSpaceRQA = list(
+    input_path = file.path(statistics_input_path, "PhaseSpaceRQA"),
+    output_subfolder = "PhaseSpaceRQA"
   )
-}
-components <- sort(unique(as.integer(sub(
-  "^OUT2R_Comp#([0-9]+)\\.xlsx$", "\\1", component_workbooks
-))))
+)
 
-# One main statistics folder beside FREQNESS_Results_..., containing one
-# subfolder for each exported body-network component.
+# One main statistics folder beside FREQNESS_Results_.... Existing JRQA
+# component folders remain at this level; phase-space results use a separate
+# method subfolder.
 output_root <- file.path(
   repository_path,
   "Dance_Data",
@@ -159,8 +155,16 @@ save_polynomial_diagnostics <- function(models, output_file) {
 
 # Component analysis ----------------------------------------------------------
 
-analyse_component <- function(input_file, component, component_output) {
-  message("Analysing Component ", component, ": ", basename(input_file))
+analyse_component <- function(
+  input_file,
+  component,
+  component_output,
+  method
+) {
+  message(
+    "Analysing ", method, " Component ", component, ": ",
+    basename(input_file)
+  )
 
   data <- read_excel(input_file)
 
@@ -265,7 +269,7 @@ analyse_component <- function(input_file, component, component_output) {
         ) +
         labs(
           title = paste("Mean ± SEM for", meter_name, "-", dv),
-          subtitle = paste("Component", component, "| Raw scale"),
+          subtitle = paste(method, "| Component", component, "| Raw scale"),
           y = dv,
           x = "Music",
           fill = "Visual"
@@ -287,7 +291,7 @@ analyse_component <- function(input_file, component, component_output) {
         ) +
         labs(
           title = paste("Mean ± SEM for", meter_name, "-", dv),
-          subtitle = paste("Component", component, "| Raw scale"),
+          subtitle = paste(method, "| Component", component, "| Raw scale"),
           x = "Music",
           y = dv,
           color = "Visual"
@@ -344,6 +348,7 @@ analyse_component <- function(input_file, component, component_output) {
       analysis_manifest <- bind_rows(
         analysis_manifest,
         data.frame(
+          Method = method,
           Component = component,
           DependentVariable = dv,
           Meter = meter_level,
@@ -453,12 +458,15 @@ analyse_component <- function(input_file, component, component_output) {
   )
   writeLines(
     c(
+      paste("Method:", method),
       paste("Component:", component),
       paste("Input:", input_file),
       paste("Dependent variables:", paste(dependent_variables, collapse = ", ")),
       paste("Metric levels:", paste(meter_display, collapse = ", ")),
       "RR and DET: natural-log transformed for inferential models",
-      "Mirroring: analyzed on its original scale",
+      if ("Mirror" %in% dependent_variables) {
+        "Mirroring: analyzed on its original scale"
+      },
       "Descriptive statistics and plots: original scale for all measures",
       paste(
         "Metric-specific post-hoc correction: Bonferroni across",
@@ -473,52 +481,65 @@ analyse_component <- function(input_file, component, component_output) {
 }
 
 
-# Run every exported component ------------------------------------------------
+# Run every exported component and method -------------------------------------
 
-component_status <- data.frame()
-
-for (component in components) {
-  component_output <- file.path(output_root, paste0("Component_", component))
-  dir.create(component_output, recursive = TRUE, showWarnings = FALSE)
-
-  input_file <- file.path(
-    statistics_input_path,
-    paste0("OUT2R_Comp#", component, ".xlsx")
-  )
-
-  if (!file.exists(input_file)) {
-    notice <- c(
-      paste("Component", component, "was not analysed."),
-      paste("Missing input:", input_file),
-      "Generate the component-specific MATLAB export and rerun this script."
-    )
-    writeLines(notice, file.path(component_output, "INPUT_MISSING.txt"))
-    warning(notice[1], immediate. = TRUE)
-    status <- "missing input"
+for (method in names(analysis_methods)) {
+  method_settings <- analysis_methods[[method]]
+  method_input_path <- method_settings$input_path
+  method_output_root <- if (is.null(method_settings$output_subfolder)) {
+    output_root
   } else {
-    missing_notice <- file.path(component_output, "INPUT_MISSING.txt")
-    if (file.exists(missing_notice)) {
-      unlink(missing_notice)
-    }
-    analyse_component(input_file, component, component_output)
-    status <- "completed"
+    file.path(output_root, method_settings$output_subfolder)
+  }
+  dir.create(method_output_root, recursive = TRUE, showWarnings = FALSE)
+
+  component_workbooks <- list.files(
+    method_input_path,
+    pattern = "^OUT2R_Comp#[0-9]+\\.xlsx$",
+    full.names = FALSE
+  )
+  if (length(component_workbooks) == 0) {
+    stop(
+      "No ", method, " component workbooks were found in ",
+      method_input_path,
+      ". Run BLOCK 6 in FREQNESS_DyadicDance_Mocap.m first."
+    )
+  }
+  components <- sort(unique(as.integer(sub(
+    "^OUT2R_Comp#([0-9]+)\\.xlsx$", "\\1", component_workbooks
+  ))))
+
+  component_status <- data.frame()
+  for (component in components) {
+    component_output <- file.path(
+      method_output_root,
+      paste0("Component_", component)
+    )
+    dir.create(component_output, recursive = TRUE, showWarnings = FALSE)
+
+    input_file <- file.path(
+      method_input_path,
+      paste0("OUT2R_Comp#", component, ".xlsx")
+    )
+    analyse_component(input_file, component, component_output, method)
+
+    component_status <- bind_rows(
+      component_status,
+      data.frame(
+        Method = method,
+        Component = component,
+        InputFile = input_file,
+        Status = "completed",
+        OutputFolder = component_output
+      )
+    )
   }
 
-  component_status <- bind_rows(
+  write.csv(
     component_status,
-    data.frame(
-      Component = component,
-      InputFile = input_file,
-      Status = status,
-      OutputFolder = component_output
-    )
+    file.path(method_output_root, "Component_Status.csv"),
+    row.names = FALSE
   )
 }
-
-write.csv(
-  component_status,
-  file.path(output_root, "Component_Status.csv"),
-  row.names = FALSE
-)
 
 message("Statistical workflow completed. Outputs: ", output_root)
