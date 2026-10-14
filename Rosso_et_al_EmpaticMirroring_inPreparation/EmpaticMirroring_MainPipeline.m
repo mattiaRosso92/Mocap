@@ -1642,10 +1642,9 @@ end
 %% PARTICIPANT METRIC-PROMINENCE MODULE
 
 % This focused module reads the existing core FREQ outputs and never
-% recomputes network estimation. Each requested metric level is normalized
-% by Network 1's mean prominence at all nonmetric frequencies. The global
-% measure averages every available beat-related level across the spectrum
-% (beat/4, beat/2, beat, beat x 2, x 3, and x 4) before the same normalization.
+% recomputes network estimation. The toolbox computes Network 1 prominence
+% at each requested metric level and globally across beat/4, beat/2, beat,
+% beat x 2, x 3, and x 4, normalized by all nonmetric frequencies.
 if run_metric_prominence
     participant_role = 2;
     rawProminenceTrial = nan(nparticipants,nconds,nmeters,ntrials);
@@ -1662,55 +1661,57 @@ if run_metric_prominence
         participanti = analysisRows.ParticipantIndex(analysisi);
         condi = analysisRows.ConditionIndex(analysisi);
         repetitioni = analysisRows.RepetitionIndex(analysisi);
-        participant_grid = FREQ.frex_norm(:,participant_role);
-        global_metric_indices = nan(size(global_metric_levels));
-        for globali = 1:numel(global_metric_levels)
-            [distance,global_metric_indices(globali)] = min(abs( ...
-                participant_grid-global_metric_levels(globali)));
-            assert(distance <= sqrt(eps), ...
-                'The participant frequency grid does not contain a global metric level.');
-            realized_frequency = FREQ.frex(global_metric_indices(globali),participant_role);
-            if isnan(globalMetricFrequencyHz(globali))
-                globalMetricFrequencyHz(globali) = realized_frequency;
-            else
-                assert(abs(realized_frequency-globalMetricFrequencyHz(globali)) <= sqrt(eps), ...
-                    'A global metric frequency differs across core outputs.');
-            end
-        end
-        nonmetric_indices = setdiff(1:numel(participant_grid),global_metric_indices);
-        assert(~isempty(nonmetric_indices), ...
-            'At least one nonmetric frequency is required for normalization.');
-        landscape = FREQ.evals(prominence_component,:,participant_role);
-        assert(all(isfinite(landscape)) && all(landscape >= 0 & landscape <= 100), ...
-            'Participant network landscape must contain finite percentages.');
-        nonmetric_baseline = mean(landscape(nonmetric_indices));
-        assert(isfinite(nonmetric_baseline) && nonmetric_baseline > 0, ...
-            'The nonmetric baseline must be finite and positive.');
-        global_metric_mean = mean(landscape(global_metric_indices));
-        nonmetricBaselineTrial(participanti,condi,repetitioni) = nonmetric_baseline;
-        globalMetricMeanTrial(participanti,condi,repetitioni) = global_metric_mean;
+        participantFREQ.evals = FREQ.evals(:,:,participant_role);
+        participantFREQ.frex = FREQ.frex(:,participant_role);
+        METER = FREQNESS_MetricProminence_Mocap( ...
+            participantFREQ,beat_frex(participant_role), ...
+            'component',prominence_component, ...
+            'metric_levels',meter, ...
+            'global_metric_levels',global_metric_levels);
+        assert(~METER.AnchorInferred && ...
+            isequal(METER.MetricLevels,meter) && ...
+            isequal(METER.GlobalMetricLevels,global_metric_levels), ...
+            'The toolbox metric-prominence configuration differs from the study design.');
+
+        metricProminenceRatioTrial(participanti,condi,:,repetitioni) = ...
+            reshape(METER.MetricProminence,1,1,nmeters,1);
         globalMetricProminenceRatioTrial(participanti,condi,repetitioni) = ...
-            global_metric_mean/nonmetric_baseline;
+            METER.GlobalProminence;
+
+        % Retain the established export provenance without duplicating the
+        % prominence estimator: recover raw values at the toolbox-selected
+        % bins, then derive its common nonmetric baseline from the ratios.
+        raw_values = nan(nmeters,1);
         for metri = 1:nmeters
-            [meter_distance,meter_index] = min(abs( ...
-                participant_grid-meter(metri)));
-            assert(meter_distance <= sqrt(eps), ...
-                'The participant frequency grid does not contain a requested meter.');
-            spectrum_sum = sum(FREQ.evals(:,meter_index,participant_role));
-            assert(abs(spectrum_sum-100) <= 1e-3, ...
-                'FREQ.evals is not normalized to percentage explained variance.');
-            value = landscape(meter_index);
-            assert(isfinite(value) && value >= 0 && value <= 100, ...
-                'Participant network prominence must be a finite percentage.');
-            rawProminenceTrial(participanti,condi,metri,repetitioni) = value;
-            metricProminenceRatioTrial(participanti,condi,metri,repetitioni) = ...
-                value/nonmetric_baseline;
-            realized_frequency = FREQ.frex(meter_index,participant_role);
+            [~,meter_index] = min(abs( ...
+                participantFREQ.frex-METER.MetricFrequencies(metri)));
+            raw_values(metri) = participantFREQ.evals( ...
+                prominence_component,meter_index);
+            rawProminenceTrial(participanti,condi,metri,repetitioni) = ...
+                raw_values(metri);
+            realized_frequency = METER.MetricFrequencies(metri);
             if isnan(prominenceFrequencyHz(metri))
                 prominenceFrequencyHz(metri) = realized_frequency;
             else
                 assert(abs(realized_frequency-prominenceFrequencyHz(metri)) <= sqrt(eps), ...
                     'A metric frequency differs across core outputs.');
+            end
+        end
+        baseline_values = raw_values./METER.MetricProminence;
+        assert(max(abs(baseline_values-baseline_values(1))) <= 1e-10, ...
+            'The toolbox metric levels do not share one nonmetric baseline.');
+        nonmetric_baseline = mean(baseline_values);
+        nonmetricBaselineTrial(participanti,condi,repetitioni) = ...
+            nonmetric_baseline;
+        globalMetricMeanTrial(participanti,condi,repetitioni) = ...
+            METER.GlobalProminence*nonmetric_baseline;
+        for globali = 1:numel(global_metric_levels)
+            realized_frequency = METER.GlobalFrequencies(globali);
+            if isnan(globalMetricFrequencyHz(globali))
+                globalMetricFrequencyHz(globali) = realized_frequency;
+            else
+                assert(abs(realized_frequency-globalMetricFrequencyHz(globali)) <= sqrt(eps), ...
+                    'A global metric frequency differs across core outputs.');
             end
         end
     end

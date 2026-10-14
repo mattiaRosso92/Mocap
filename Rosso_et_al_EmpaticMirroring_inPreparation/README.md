@@ -51,14 +51,13 @@ sections. The numbered analysis blocks are:
    effects, and corrected omnibus tables.
 
 Between Blocks 5 and 6, the independent **participant metric-prominence
-module** loads the existing core `FREQ` files and extracts Network 1's
-percentage of explained variance at beat/4, beat/2, beat, and beat x 2. Each
-value is divided by the mean prominence across all nonmetric frequencies. A
-second global measure averages every metric level available in the spectrum
-(beat/4, beat/2, beat, beat x 2, x 3, and x 4) before applying the same
-normalization. Repeated trials are averaged within participant-condition cells,
-and network estimation is never rerun. The module can be switched independently
-with `run_metric_prominence`.
+module** loads the existing core `FREQ` files and calls
+`FREQNESS_MetricProminence_Mocap` for participant Network 1. It returns
+normalized prominence at beat/4, beat/2, beat, and beat x 2, plus a global
+measure across beat/4, beat/2, beat, beat x 2, x 3, and x 4. Repeated trials
+are averaged within participant-condition cells, and network estimation is
+never rerun. The module can be switched independently with
+`run_metric_prominence`.
 
 A final unnumbered validation section can compare every numerical summary and
 statistical export with a supplied reference run.
