@@ -11,11 +11,36 @@ function setupOnce(testCase)
 testRoot = fileparts(mfilename('fullpath'));
 studyRoot = fileparts(testRoot);
 pipelineFile = fullfile(studyRoot,'EmpaticMirroring_MainPipeline.m');
+statisticsFile = fullfile(studyRoot,'EmpaticMirroring_Stats.R');
 
 testCase.TestData.studyRoot = studyRoot;
 testCase.TestData.pipelineFile = pipelineFile;
 testCase.TestData.pipelineText = fileread(pipelineFile);
+testCase.TestData.statisticsText = fileread(statisticsFile);
 testCase.TestData.outputRoot = fullfile(studyRoot,'outputs');
+
+end
+
+
+function testProminenceUsesMatchedInstructionNormalization(testCase)
+
+statisticsText = testCase.TestData.statisticsText;
+requiredStatements = { ...
+    'InstructionNormalizedMetricProminenceRatio', ...
+    'LogInstructionNormalizedMetricProminence', ...
+    'InstructionNormalizedGlobalMetricProminenceRatio', ...
+    'LogInstructionNormalizedGlobalMetricProminence', ...
+    'include_instruction = FALSE', ...
+    'prominence_model, ~ Complexity | Movement * Meter', ...
+    'global_prominence_model, ~ Complexity | Movement'};
+
+for statementi = 1:numel(requiredStatements)
+    verifyTrue(testCase,contains(statisticsText,requiredStatements{statementi}), ...
+        sprintf('Missing instruction-normalization contract: %s', ...
+        requiredStatements{statementi}));
+end
+verifyTrue(testCase,contains(testCase.TestData.pipelineText, ...
+    'models their log ratio without an'));
 
 end
 

@@ -1863,6 +1863,10 @@ end
 
 %% BLOCK 6 - MIXED-EFFECTS MODELS IN R
 
+% Prominence inference matches mirroring and observation within participant
+% and the remaining design factors, then models their log ratio without an
+% Instruction factor. Raw instruction-specific exports remain unchanged.
+
 if run_blocks(6)
     statistics_script = fullfile(path_study,'EmpaticMirroring_Stats.R');
     statistics_input = fullfile(path_statistics,'OUT2R_AllComponents.csv');

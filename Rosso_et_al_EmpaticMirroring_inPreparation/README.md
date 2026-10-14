@@ -159,16 +159,19 @@ The main exports are:
 Landscape correlations are Fisher-z transformed only for statistical
 modelling; exported values remain correlations on their original scale.
 
-The network-prominence model uses the same `Meter` factor as the coordination
-and RQA outcomes:
-`LogMetricProminence ~ Instruction * Complexity * Version * Movement * Meter +
-(1 | Participant)`. Meter-specific models receive Bonferroni correction across
-the four metric levels. Complexity pairwise contrasts and linear/quadratic
-trends are reported within each Instruction x Movement x Meter combination
-with Holm correction. The global model omits Meter and uses
-`LogGlobalMetricProminence ~ Instruction * Complexity * Version * Movement +
-(1 | Participant)`. Figures back-transform estimated marginal means to the
-ratio scale, where 1 denotes equal metric and nonmetric prominence.
+For prominence inference, mirroring is normalized by observation within each
+participant and matched Complexity x Version x Movement x Meter cell. The model
+therefore removes Instruction and uses
+`log(mirroring/observation metric-prominence ratio) ~ Complexity * Version *
+Movement * Meter + (1 | Participant)`. Meter-specific models receive
+Bonferroni correction across the four metric levels. Complexity pairwise
+contrasts and linear/quadratic trends are reported within each Movement x Meter
+combination with Holm correction. The corresponding global model omits Meter:
+`log(mirroring/observation global-prominence ratio) ~ Complexity * Version *
+Movement + (1 | Participant)`. Only complete matched instruction pairs enter
+these models, and pairing coverage is exported explicitly. Figures
+back-transform estimated marginal means to the ratio scale, where 1 denotes
+equal prominence in mirroring and observation.
 
 ## Validated full run
 
