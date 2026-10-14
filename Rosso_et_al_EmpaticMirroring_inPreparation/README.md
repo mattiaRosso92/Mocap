@@ -51,14 +51,13 @@ sections. The numbered analysis blocks are:
    effects, and corrected omnibus tables.
 
 Between Blocks 5 and 6, the independent **participant metric-prominence
-module** loads the existing core `FREQ` files and extracts Network 1's
-percentage of explained variance at beat/4, beat/2, beat, and beat x 2. Each
-value is divided by the mean prominence across all nonmetric frequencies. A
-second global measure averages every metric level available in the spectrum
-(beat/4, beat/2, beat, beat x 2, x 3, and x 4) before applying the same
-normalization. Repeated trials are averaged within participant-condition cells,
-and network estimation is never rerun. The module can be switched independently
-with `run_metric_prominence`.
+module** loads the existing core `FREQ` files and calls
+`FREQNESS_MetricProminence_Mocap` for participant Network 1. It returns
+normalized prominence at beat/4, beat/2, beat, and beat x 2, plus a global
+measure across beat/4, beat/2, beat, beat x 2, x 3, and x 4. Repeated trials
+are averaged within participant-condition cells, and network estimation is
+never rerun. The module can be switched independently with
+`run_metric_prominence`.
 
 A final unnumbered validation section can compare every numerical summary and
 statistical export with a supplied reference run.
@@ -159,19 +158,23 @@ The main exports are:
 Landscape correlations are Fisher-z transformed only for statistical
 modelling; exported values remain correlations on their original scale.
 
-For prominence inference, mirroring is normalized by observation within each
-participant and matched Complexity x Version x Movement x Meter cell. The model
-therefore removes Instruction and uses
-`log(mirroring/observation metric-prominence ratio) ~ Complexity * Version *
+For prominence inference, each metric value is already normalized against the
+nonmetric spectrum. Instruction therefore remains an experimental factor in
+the meter-resolved model:
+`log(metric/nonmetric prominence ratio) ~ Instruction * Complexity * Version *
 Movement * Meter + (1 | Participant)`. Meter-specific models receive
 Bonferroni correction across the four metric levels. Complexity pairwise
-contrasts and linear/quadratic trends are reported within each Movement x Meter
-combination with Holm correction. The corresponding global model omits Meter:
-`log(mirroring/observation global-prominence ratio) ~ Complexity * Version *
-Movement + (1 | Participant)`. Only complete matched instruction pairs enter
-these models, and pairing coverage is exported explicitly. Figures
-back-transform estimated marginal means to the ratio scale, where 1 denotes
-equal prominence in mirroring and observation.
+contrasts and linear/quadratic trends are reported within each Instruction x
+Movement x Meter combination with Holm correction. The corresponding global
+model omits Meter:
+`log(global metric/nonmetric prominence ratio) ~ Instruction * Complexity *
+Version * Movement + (1 | Participant)`. Figures back-transform estimated
+marginal means to the prominence-ratio scale, where 1 denotes equal prominence
+at metric and nonmetric frequencies.
+
+Significant omnibus Complexity x Version and Version x Movement terms are also
+followed by Holm-corrected contrasts averaged over factors not involved in the
+respective interaction.
 
 ## Validated full run
 

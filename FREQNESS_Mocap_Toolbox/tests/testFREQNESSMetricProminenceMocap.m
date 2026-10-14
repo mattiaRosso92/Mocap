@@ -186,6 +186,22 @@ verifyEqual(testCase,METER.MetricFrequencies,[.9;1.9]);
 end
 
 
+function testNegativeResidualEigenvaluesAreAllowed(testCase)
+
+frex = [.5 1 1.5 2 3];
+first = [20 40 25 50 30; 80.01 60 75 50 70; ...
+    -.01 0 0 0 0];
+FREQ = syntheticFREQ(first,frex);
+
+METER = FREQNESS_MetricProminence_Mocap(FREQ,1, ...
+    'metric_levels',[.5 1 2]);
+
+verifyEqual(testCase,METER.MetricProminence,[20;40;50]/25, ...
+    'AbsTol',1e-12);
+
+end
+
+
 function testInputValidation(testCase)
 
 frex = [.5 1 1.5 2 3];
@@ -214,6 +230,13 @@ verifyFailureMessage(testCase,@() FREQNESS_MetricProminence_Mocap( ...
     FREQ,1,'metric_levels',[1 1.1]), ...
     ['The frequency grid maps multiple metric_levels values onto the same ' ...
     'bin for at least one participant.']);
+
+negativeSelected = FREQ;
+negativeSelected.evals(1,1) = -.01;
+negativeSelected.evals(2,1) = negativeSelected.evals(2,1)+.01;
+verifyFailureMessage(testCase,@() FREQNESS_MetricProminence_Mocap( ...
+    negativeSelected,1), ...
+    'The selected component must contain non-negative eigenvalues.');
 
 unnormalized = FREQ;
 unnormalized.evals = unnormalized.evals/100;

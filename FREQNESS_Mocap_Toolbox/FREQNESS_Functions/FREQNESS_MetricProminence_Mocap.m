@@ -19,6 +19,8 @@ function METER = FREQNESS_MetricProminence_Mocap(FREQ,anchor_frex,varargin)
 %  - FREQ : structure with fields
 %          • FREQ.evals -> complete normalized eigenspectrum
 %                         [nEigenvalues x nFrex x (nParticipants)]
+%                         The selected component must be non-negative;
+%                         numerical residuals in other components are allowed.
 %          • FREQ.frex  -> shared frequency vector [nFrex x 1], or an
 %                         [nFrex x nParticipants] frequency matrix
 %
@@ -104,9 +106,8 @@ end
 
 eigenspectrum = FREQ.evals;
 if ~isnumeric(eigenspectrum) || ~isreal(eigenspectrum) || ...
-        ndims(eigenspectrum) > 3 || any(~isfinite(eigenspectrum(:))) || ...
-        any(eigenspectrum(:) < 0)
-    error(['FREQ.evals must be a real finite numeric array of non-negative ' ...
+        ndims(eigenspectrum) > 3 || any(~isfinite(eigenspectrum(:)))
+    error(['FREQ.evals must be a real finite numeric array of ' ...
         'eigenvalues in [nEigenvalues x nFrex x (nParticipants)] format.']);
 end
 
@@ -123,6 +124,10 @@ if ~isnumeric(which_comp) || ~isreal(which_comp) || ...
         which_comp > neigenvalues
     error(['component must be one positive integer indexing the first ' ...
         'dimension of FREQ.evals.']);
+end
+selected_eigenspectrum = eigenspectrum(which_comp,:,:);
+if any(selected_eigenspectrum < 0,'all')
+    error('The selected component must contain non-negative eigenvalues.');
 end
 
 eigenspectrum_sum = reshape(sum(eigenspectrum,1),nfrex,nsubs);
