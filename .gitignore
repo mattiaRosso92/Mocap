@@ -24,6 +24,9 @@ FREQNESS_Output/
 Dance_Data/
 Rosso_et_al_PlayersExpertise_inPreparation/Example_data/
 
+# Orchestra study local data, tags, and generated results
+Rosso_et_al_Orchestra_inPreparation/concertproject_kiersten/
+
 # Motion-capture data exports
 *.mat
 *.qtm

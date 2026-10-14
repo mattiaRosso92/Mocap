@@ -101,16 +101,35 @@ default_input <- file.path(
 default_similarity_input <- file.path(
   study_root, "outputs", "05_Statistics_R", "OUT2R_LandscapeSimilarity.csv"
 )
+default_prominence_input <- file.path(
+  study_root, "outputs", "05_Statistics_R", "OUT2R_NetworkProminence.csv"
+)
+default_global_prominence_input <- file.path(
+  study_root, "outputs", "05_Statistics_R",
+  "OUT2R_GlobalMetricProminence.csv"
+)
 default_output <- file.path(study_root, "outputs", "06_Statistics_Results")
 input_file <- argument_value("--input=", default_input)
 similarity_input_file <- argument_value(
   "--similarity-input=", default_similarity_input
+)
+prominence_input_file <- argument_value(
+  "--prominence-input=", default_prominence_input
+)
+global_prominence_input_file <- argument_value(
+  "--global-prominence-input=", default_global_prominence_input
 )
 output_root <- argument_value("--output=", default_output)
 
 input_file <- normalizePath(input_file, mustWork = TRUE)
 similarity_input_file <- normalizePath(
   similarity_input_file, mustWork = TRUE
+)
+prominence_input_file <- normalizePath(
+  prominence_input_file, mustWork = TRUE
+)
+global_prominence_input_file <- normalizePath(
+  global_prominence_input_file, mustWork = TRUE
 )
 if (
   dir.exists(output_root) &&
@@ -162,6 +181,18 @@ data <- read_csv(
 )
 similarity_data <- read_csv(
   similarity_input_file,
+  col_types = cols(Participant = col_character()),
+  show_col_types = FALSE,
+  progress = FALSE
+)
+prominence_data <- read_csv(
+  prominence_input_file,
+  col_types = cols(Participant = col_character()),
+  show_col_types = FALSE,
+  progress = FALSE
+)
+global_prominence_data <- read_csv(
+  global_prominence_input_file,
   col_types = cols(Participant = col_character()),
   show_col_types = FALSE,
   progress = FALSE
@@ -296,6 +327,163 @@ similarity_data <- similarity_data %>%
     Component = factor(Component, levels = sort(unique(Component)))
   )
 
+prominence_required <- c(
+  "Participant", "Instruction", "Complexity", "Version", "Movement",
+  "Condition", "Meter", "MeterLevel", "Component", "NRepetitions",
+  "FrequencyHz", "RawProminencePercent", "NonMetricBaselinePercent",
+  "MetricProminenceRatio", "LogMetricProminence"
+)
+prominence_missing <- setdiff(prominence_required, names(prominence_data))
+if (length(prominence_missing) > 0 || nrow(prominence_data) == 0) {
+  stop(
+    "Network-prominence export is empty or missing columns: ",
+    paste(prominence_missing, collapse = ", ")
+  )
+}
+prominence_numeric <- c(
+  "Condition", "MeterLevel", "Component", "NRepetitions", "FrequencyHz",
+  "RawProminencePercent", "NonMetricBaselinePercent",
+  "MetricProminenceRatio", "LogMetricProminence"
+)
+if (any(!vapply(
+  prominence_data[prominence_numeric], is.numeric, logical(1)
+))) {
+  stop("Network-prominence analysis columns must be numeric.")
+}
+if (any(!is.finite(as.matrix(prominence_data[prominence_numeric])))) {
+  stop("Network-prominence analysis columns contain non-finite values.")
+}
+if (any(
+  prominence_data$RawProminencePercent < 0 |
+  prominence_data$RawProminencePercent > 100
+)) {
+  stop("RawProminencePercent must lie in [0, 100].")
+}
+if (any(
+  prominence_data$NonMetricBaselinePercent <= 0 |
+  prominence_data$MetricProminenceRatio <= 0
+)) {
+  stop("Normalized network-prominence values must be positive.")
+}
+if (!isTRUE(all.equal(
+  prominence_data$LogMetricProminence,
+  log(prominence_data$MetricProminenceRatio), tolerance = 1e-12
+))) {
+  stop("LogMetricProminence must be the natural log of the ratio.")
+}
+if (!identical(unique(prominence_data$Component), 1)) {
+  stop("Network prominence must use participant Network 1.")
+}
+for (column in names(expected_levels)) {
+  actual <- sort(unique(as.character(prominence_data[[column]])))
+  expected <- sort(expected_levels[[column]])
+  if (!identical(actual, expected)) {
+    stop(column, " levels differ in the network-prominence export.")
+  }
+}
+prominence_meter_map <- distinct(prominence_data, Meter, MeterLevel) %>%
+  arrange(Meter)
+if (
+  !identical(as.character(prominence_meter_map$Meter),
+             names(configured_metric_levels)) ||
+  !isTRUE(all.equal(
+    prominence_meter_map$MeterLevel, unname(configured_metric_levels)
+  ))
+) {
+  stop("Network-prominence Meter labels do not match the analysis contract.")
+}
+if (!isTRUE(all.equal(
+  prominence_data$FrequencyHz,
+  1.67 * prominence_data$MeterLevel,
+  tolerance = 1e-12
+))) {
+  stop("Network-prominence frequencies do not match the 1.67 Hz beat.")
+}
+prominence_key <- c(
+  "Participant", "Instruction", "Complexity", "Version", "Movement", "Meter"
+)
+if (anyDuplicated(prominence_data[prominence_key])) {
+  stop("The network-prominence export contains duplicate factorial keys.")
+}
+prominence_data <- prominence_data %>%
+  mutate(
+    Participant = factor(Participant),
+    Instruction = factor(Instruction, levels = expected_levels$Instruction),
+    Complexity = factor(Complexity, levels = expected_levels$Complexity),
+    Version = factor(as.character(Version), levels = expected_levels$Version),
+    Movement = factor(as.character(Movement), levels = expected_levels$Movement),
+    Meter = factor(Meter, levels = expected_levels$Meter)
+  )
+
+global_prominence_required <- c(
+  "Participant", "Instruction", "Complexity", "Version", "Movement",
+  "Condition", "Component", "NRepetitions", "GlobalMetricMeanPercent",
+  "NonMetricBaselinePercent", "GlobalMetricProminenceRatio",
+  "LogGlobalMetricProminence"
+)
+global_prominence_missing <- setdiff(
+  global_prominence_required, names(global_prominence_data)
+)
+if (length(global_prominence_missing) > 0 || nrow(global_prominence_data) == 0) {
+  stop(
+    "Global metric-prominence export is empty or missing columns: ",
+    paste(global_prominence_missing, collapse = ", ")
+  )
+}
+global_prominence_numeric <- c(
+  "Condition", "Component", "NRepetitions", "GlobalMetricMeanPercent",
+  "NonMetricBaselinePercent", "GlobalMetricProminenceRatio",
+  "LogGlobalMetricProminence"
+)
+if (any(!vapply(
+  global_prominence_data[global_prominence_numeric], is.numeric, logical(1)
+))) {
+  stop("Global metric-prominence analysis columns must be numeric.")
+}
+if (any(!is.finite(as.matrix(
+  global_prominence_data[global_prominence_numeric]
+)))) {
+  stop("Global metric-prominence analysis columns contain non-finite values.")
+}
+if (any(
+  global_prominence_data$GlobalMetricMeanPercent < 0 |
+  global_prominence_data$GlobalMetricMeanPercent > 100 |
+  global_prominence_data$NonMetricBaselinePercent <= 0 |
+  global_prominence_data$GlobalMetricProminenceRatio <= 0
+)) {
+  stop("Global metric-prominence values violate their valid ranges.")
+}
+if (!isTRUE(all.equal(
+  global_prominence_data$LogGlobalMetricProminence,
+  log(global_prominence_data$GlobalMetricProminenceRatio), tolerance = 1e-12
+))) {
+  stop("LogGlobalMetricProminence must be the natural log of the ratio.")
+}
+if (!identical(unique(global_prominence_data$Component), 1)) {
+  stop("Global metric prominence must use participant Network 1.")
+}
+for (column in c("Instruction", "Complexity", "Version", "Movement")) {
+  actual <- sort(unique(as.character(global_prominence_data[[column]])))
+  expected <- sort(expected_levels[[column]])
+  if (!identical(actual, expected)) {
+    stop(column, " levels differ in the global metric-prominence export.")
+  }
+}
+global_prominence_key <- c(
+  "Participant", "Instruction", "Complexity", "Version", "Movement"
+)
+if (anyDuplicated(global_prominence_data[global_prominence_key])) {
+  stop("The global metric-prominence export contains duplicate factorial keys.")
+}
+global_prominence_data <- global_prominence_data %>%
+  mutate(
+    Participant = factor(Participant),
+    Instruction = factor(Instruction, levels = expected_levels$Instruction),
+    Complexity = factor(Complexity, levels = expected_levels$Complexity),
+    Version = factor(as.character(Version), levels = expected_levels$Version),
+    Movement = factor(as.character(Movement), levels = expected_levels$Movement)
+  )
+
 components <- levels(data$Component)
 analysis_outcomes <- outcomes
 if (smoke_test) {
@@ -407,8 +595,11 @@ model_diagnostics <- function(model, model_data) {
   )
 }
 
-fit_model <- function(model_data, include_meter) {
-  fixed_factors <- c("Instruction", "Complexity", "Version", "Movement")
+fit_model <- function(model_data, include_meter, include_instruction = TRUE) {
+  fixed_factors <- c("Complexity", "Version", "Movement")
+  if (include_instruction) {
+    fixed_factors <- c("Instruction", fixed_factors)
+  }
   if (include_meter) {
     fixed_factors <- c(fixed_factors, "Meter")
   }
@@ -770,6 +961,469 @@ write_csv(
 )
 
 
+# Participant instruction-normalized metric-prominence analysis --------------
+
+prominence_output <- file.path(output_root, "NetworkProminence")
+prominence_full_output <- file.path(prominence_output, "All_Meters")
+dir.create(prominence_full_output, recursive = TRUE, showWarnings = FALSE)
+
+# Match observation and mirroring within participant and every remaining
+# experimental factor. Zero on the log scale denotes equal prominence.
+prominence_pair_keys <- c(
+  "Participant", "Complexity", "Version", "Movement", "Meter",
+  "MeterLevel", "Component", "FrequencyHz"
+)
+observation_prominence <- prominence_data %>%
+  filter(Instruction == "obs") %>%
+  select(
+    all_of(prominence_pair_keys),
+    ObservationMetricProminenceRatio = MetricProminenceRatio,
+    ObservationLogMetricProminence = LogMetricProminence,
+    ObservationNRepetitions = NRepetitions
+  )
+mirroring_prominence <- prominence_data %>%
+  filter(Instruction == "mir") %>%
+  select(
+    all_of(prominence_pair_keys),
+    MirroringMetricProminenceRatio = MetricProminenceRatio,
+    MirroringLogMetricProminence = LogMetricProminence,
+    MirroringNRepetitions = NRepetitions
+  )
+prominence_model_data <- inner_join(
+  observation_prominence, mirroring_prominence,
+  by = prominence_pair_keys
+) %>%
+  mutate(
+    InstructionNormalizedMetricProminenceRatio =
+      MirroringMetricProminenceRatio / ObservationMetricProminenceRatio,
+    LogInstructionNormalizedMetricProminence =
+      MirroringLogMetricProminence - ObservationLogMetricProminence,
+    ModelOutcome = LogInstructionNormalizedMetricProminence
+  )
+if (nrow(prominence_model_data) == 0) {
+  stop("No complete observation-mirroring prominence pairs were found.")
+}
+if (!isTRUE(all.equal(
+  prominence_model_data$LogInstructionNormalizedMetricProminence,
+  log(prominence_model_data$InstructionNormalizedMetricProminenceRatio),
+  tolerance = 1e-12
+))) {
+  stop("Instruction-normalized prominence log ratios are inconsistent.")
+}
+write_csv(
+  prominence_model_data %>% select(-ModelOutcome),
+  file.path(prominence_output, "InstructionNormalized_MeterResolved.csv")
+)
+write_csv(
+  data.frame(
+    ObservationRows = nrow(observation_prominence),
+    MirroringRows = nrow(mirroring_prominence),
+    CompletePairs = nrow(prominence_model_data),
+    UnmatchedObservationRows = nrow(anti_join(
+      observation_prominence, mirroring_prominence, by = prominence_pair_keys
+    )),
+    UnmatchedMirroringRows = nrow(anti_join(
+      mirroring_prominence, observation_prominence, by = prominence_pair_keys
+    ))
+  ),
+  file.path(prominence_output, "InstructionPairing_Coverage.csv")
+)
+prominence_pairing_by_participant <- full_join(
+  observation_prominence %>% count(Participant, name = "ObservationRows"),
+  mirroring_prominence %>% count(Participant, name = "MirroringRows"),
+  by = "Participant"
+) %>%
+  full_join(
+    prominence_model_data %>% count(Participant, name = "CompletePairs"),
+    by = "Participant"
+  ) %>%
+  mutate(
+    across(
+      c(ObservationRows, MirroringRows, CompletePairs),
+      ~ coalesce(.x, 0L)
+    ),
+    IncludedInModel = CompletePairs > 0
+  ) %>%
+  arrange(Participant)
+write_csv(
+  prominence_pairing_by_participant,
+  file.path(prominence_output, "InstructionPairing_Coverage_ByParticipant.csv")
+)
+
+prominence_fit <- fit_model(
+  prominence_model_data, include_meter = TRUE, include_instruction = FALSE
+)
+prominence_model <- prominence_fit$model
+prominence_anova <- anova_to_data_frame(anova(prominence_model, type = 3))
+prominence_p_column <- p_value_column(prominence_anova)
+prominence_anova$PValueRaw <- prominence_anova[[prominence_p_column]]
+write_text(
+  summary(prominence_model),
+  output_file = file.path(prominence_full_output, "Factorial_Model_Summary.txt")
+)
+writeLines(
+  deparse(prominence_fit$formula),
+  file.path(prominence_full_output, "Factorial_Model_Formula.txt")
+)
+write_csv(
+  prominence_anova,
+  file.path(prominence_full_output, "Factorial_Type_III_ANOVA.csv")
+)
+write_csv(
+  model_diagnostics(prominence_model, prominence_model_data),
+  file.path(prominence_full_output, "Model_Fit_Diagnostics.csv")
+)
+write_csv(
+  safe_shapiro(residuals(prominence_model)),
+  file.path(prominence_full_output, "Residual_Shapiro_Wilk.csv")
+)
+write_simple_effect_contrasts(
+  prominence_model, prominence_fit$fixed_factors,
+  file.path(prominence_full_output, "Simple_Effect_Contrasts_Holm.csv")
+)
+
+prominence_emmeans <- emmeans(
+  prominence_model, ~ Complexity | Movement * Meter
+)
+prominence_emmeans_table <- as.data.frame(summary(
+  prominence_emmeans, infer = c(TRUE, TRUE)
+))
+prominence_lower_column <- grep(
+  "LCL$", names(prominence_emmeans_table), value = TRUE
+)[1]
+prominence_upper_column <- grep(
+  "UCL$", names(prominence_emmeans_table), value = TRUE
+)[1]
+prominence_emmeans_table$ProminenceRatio <- exp(prominence_emmeans_table$emmean)
+prominence_emmeans_table$RatioLowerCL <- exp(
+  prominence_emmeans_table[[prominence_lower_column]]
+)
+prominence_emmeans_table$RatioUpperCL <- exp(
+  prominence_emmeans_table[[prominence_upper_column]]
+)
+prominence_complexity_pairs <- as.data.frame(summary(
+  pairs(prominence_emmeans, adjust = "holm"), infer = c(TRUE, TRUE)
+))
+prominence_complexity_trends <- as.data.frame(summary(
+  contrast(prominence_emmeans, method = "poly", adjust = "holm"),
+  infer = c(TRUE, TRUE)
+))
+write_csv(
+  prominence_emmeans_table,
+  file.path(prominence_output, "Complexity_EstimatedMarginalMeans.csv")
+)
+write_csv(
+  prominence_complexity_pairs,
+  file.path(prominence_output, "Complexity_Contrasts_Holm.csv")
+)
+write_csv(
+  prominence_complexity_trends,
+  file.path(prominence_output, "Complexity_Trends_Holm.csv")
+)
+
+prominence_meter_means <- emmeans(prominence_model, ~ Meter)
+prominence_meter_tests <- as.data.frame(summary(
+  prominence_meter_means, infer = c(TRUE, TRUE), null = 0, adjust = "holm"
+))
+prominence_meter_tests$MirroringObservationRatio <- exp(
+  prominence_meter_tests$emmean
+)
+write_csv(
+  prominence_meter_tests,
+  file.path(prominence_output, "Meter_MirroringObservation_Tests_Holm.csv")
+)
+
+prominence_meter_anova_tables <- list()
+for (meter_name in levels(prominence_model_data$Meter)) {
+  meter_level <- configured_metric_levels[[meter_name]]
+  meter_output <- file.path(
+    prominence_output, paste0("Meter_", meter_level, "x")
+  )
+  dir.create(meter_output, recursive = TRUE, showWarnings = FALSE)
+  meter_data <- prominence_model_data %>% filter(Meter == meter_name)
+  meter_fit <- fit_model(
+    meter_data, include_meter = FALSE, include_instruction = FALSE
+  )
+  meter_model <- meter_fit$model
+  meter_anova <- anova_to_data_frame(anova(meter_model, type = 3))
+  meter_p_column <- p_value_column(meter_anova)
+  meter_anova$PValueRaw <- meter_anova[[meter_p_column]]
+  meter_anova$Meter <- meter_name
+  meter_anova$MeterLevel <- meter_level
+  prominence_meter_anova_tables[[meter_name]] <- meter_anova
+  write_text(
+    summary(meter_model),
+    output_file = file.path(meter_output, "Mixed_Model_Summary.txt")
+  )
+  write_csv(
+    meter_anova,
+    file.path(meter_output, "Type_III_ANOVA_Uncorrected.csv")
+  )
+  write_csv(
+    model_diagnostics(meter_model, meter_data),
+    file.path(meter_output, "Model_Fit_Diagnostics.csv")
+  )
+  write_csv(
+    safe_shapiro(residuals(meter_model)),
+    file.path(meter_output, "Residual_Shapiro_Wilk.csv")
+  )
+  write_simple_effect_contrasts(
+    meter_model, meter_fit$fixed_factors,
+    file.path(meter_output, "Simple_Effect_Contrasts_Holm.csv")
+  )
+}
+prominence_meter_anova <- bind_rows(prominence_meter_anova_tables)
+prominence_meter_anova$PValueBonferroniAcrossMeters <- ave(
+  prominence_meter_anova$PValueRaw,
+  prominence_meter_anova$Term,
+  FUN = function(values) p.adjust(values, method = "bonferroni")
+)
+prominence_meter_anova$SignificantBonferroniAcrossMeters <-
+  prominence_meter_anova$PValueBonferroniAcrossMeters < 0.05
+write_csv(
+  prominence_meter_anova,
+  file.path(prominence_output, "MeterSpecific_Type_III_ANOVA_Bonferroni.csv")
+)
+
+if (make_plots) {
+  save_residual_diagnostics(
+    prominence_model,
+    "Participant Network 1 mirroring/observation metric prominence",
+    file.path(prominence_full_output, "Residual_Diagnostics.png")
+  )
+  prominence_plot <- ggplot(
+    prominence_emmeans_table %>% mutate(
+      MeterLabel = factor(
+        Meter, levels = names(configured_metric_levels),
+        labels = c("Beat/4", "Beat/2", "Beat", "Beat x 2")
+      )
+    ),
+    aes(x = Complexity, y = ProminenceRatio, group = 1)
+  ) +
+    geom_hline(yintercept = 1, linetype = "dotted", color = "grey45") +
+    geom_line(linewidth = 0.9, color = "#007C91") +
+    geom_point(size = 2.5, color = "#007C91") +
+    geom_errorbar(
+      aes(
+        ymin = RatioLowerCL,
+        ymax = RatioUpperCL
+      ),
+      width = 0.12, color = "#007C91"
+    ) +
+    facet_grid(
+      Movement ~ MeterLabel,
+      labeller = labeller(Movement = label_both, MeterLabel = label_value)
+    ) +
+    labs(
+      title = "Instruction-normalized participant Network 1 prominence",
+      subtitle = paste(
+        "Mirroring / observation ratio of metric-to-nonmetric prominence;",
+        "Version averaged by the model; dotted line = equal prominence"
+      ),
+      x = "Stimulus complexity",
+      y = "Mirroring / observation prominence ratio"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(plot.title = element_text(face = "bold", hjust = 0.5))
+  ggsave(
+    file.path(prominence_output, "NetworkProminence_Complexity_EMMeans.png"),
+    prominence_plot, width = 14, height = 7.5, dpi = 240, bg = "white"
+  )
+}
+
+
+# Global instruction-normalized metric-prominence analysis ------------------
+
+global_prominence_output <- file.path(prominence_output, "Global")
+dir.create(global_prominence_output, recursive = TRUE, showWarnings = FALSE)
+global_pair_keys <- c(
+  "Participant", "Complexity", "Version", "Movement", "Component"
+)
+observation_global_prominence <- global_prominence_data %>%
+  filter(Instruction == "obs") %>%
+  select(
+    all_of(global_pair_keys),
+    ObservationGlobalMetricProminenceRatio = GlobalMetricProminenceRatio,
+    ObservationLogGlobalMetricProminence = LogGlobalMetricProminence,
+    ObservationNRepetitions = NRepetitions
+  )
+mirroring_global_prominence <- global_prominence_data %>%
+  filter(Instruction == "mir") %>%
+  select(
+    all_of(global_pair_keys),
+    MirroringGlobalMetricProminenceRatio = GlobalMetricProminenceRatio,
+    MirroringLogGlobalMetricProminence = LogGlobalMetricProminence,
+    MirroringNRepetitions = NRepetitions
+  )
+global_prominence_model_data <- inner_join(
+  observation_global_prominence, mirroring_global_prominence,
+  by = global_pair_keys
+) %>%
+  mutate(
+    InstructionNormalizedGlobalMetricProminenceRatio =
+      MirroringGlobalMetricProminenceRatio /
+      ObservationGlobalMetricProminenceRatio,
+    LogInstructionNormalizedGlobalMetricProminence =
+      MirroringLogGlobalMetricProminence -
+      ObservationLogGlobalMetricProminence,
+    ModelOutcome = LogInstructionNormalizedGlobalMetricProminence
+  )
+if (nrow(global_prominence_model_data) == 0) {
+  stop("No complete observation-mirroring global prominence pairs were found.")
+}
+if (!isTRUE(all.equal(
+  global_prominence_model_data$LogInstructionNormalizedGlobalMetricProminence,
+  log(global_prominence_model_data$InstructionNormalizedGlobalMetricProminenceRatio),
+  tolerance = 1e-12
+))) {
+  stop("Instruction-normalized global prominence log ratios are inconsistent.")
+}
+write_csv(
+  global_prominence_model_data %>% select(-ModelOutcome),
+  file.path(global_prominence_output, "InstructionNormalized_Global.csv")
+)
+write_csv(
+  data.frame(
+    ObservationRows = nrow(observation_global_prominence),
+    MirroringRows = nrow(mirroring_global_prominence),
+    CompletePairs = nrow(global_prominence_model_data),
+    UnmatchedObservationRows = nrow(anti_join(
+      observation_global_prominence, mirroring_global_prominence,
+      by = global_pair_keys
+    )),
+    UnmatchedMirroringRows = nrow(anti_join(
+      mirroring_global_prominence, observation_global_prominence,
+      by = global_pair_keys
+    ))
+  ),
+  file.path(global_prominence_output, "InstructionPairing_Coverage.csv")
+)
+global_prominence_fit <- fit_model(
+  global_prominence_model_data,
+  include_meter = FALSE, include_instruction = FALSE
+)
+global_prominence_model <- global_prominence_fit$model
+global_prominence_anova <- anova_to_data_frame(
+  anova(global_prominence_model, type = 3)
+)
+global_prominence_p_column <- p_value_column(global_prominence_anova)
+global_prominence_anova$PValueRaw <-
+  global_prominence_anova[[global_prominence_p_column]]
+write_text(
+  summary(global_prominence_model),
+  output_file = file.path(global_prominence_output, "Factorial_Model_Summary.txt")
+)
+writeLines(
+  deparse(global_prominence_fit$formula),
+  file.path(global_prominence_output, "Factorial_Model_Formula.txt")
+)
+write_csv(
+  global_prominence_anova,
+  file.path(global_prominence_output, "Factorial_Type_III_ANOVA.csv")
+)
+write_csv(
+  model_diagnostics(global_prominence_model, global_prominence_model_data),
+  file.path(global_prominence_output, "Model_Fit_Diagnostics.csv")
+)
+write_csv(
+  safe_shapiro(residuals(global_prominence_model)),
+  file.path(global_prominence_output, "Residual_Shapiro_Wilk.csv")
+)
+write_simple_effect_contrasts(
+  global_prominence_model, global_prominence_fit$fixed_factors,
+  file.path(global_prominence_output, "Simple_Effect_Contrasts_Holm.csv")
+)
+
+global_prominence_emmeans <- emmeans(
+  global_prominence_model, ~ Complexity | Movement
+)
+global_prominence_emmeans_table <- as.data.frame(summary(
+  global_prominence_emmeans, infer = c(TRUE, TRUE)
+))
+global_lower_column <- grep(
+  "LCL$", names(global_prominence_emmeans_table), value = TRUE
+)[1]
+global_upper_column <- grep(
+  "UCL$", names(global_prominence_emmeans_table), value = TRUE
+)[1]
+global_prominence_emmeans_table$ProminenceRatio <- exp(
+  global_prominence_emmeans_table$emmean
+)
+global_prominence_emmeans_table$RatioLowerCL <- exp(
+  global_prominence_emmeans_table[[global_lower_column]]
+)
+global_prominence_emmeans_table$RatioUpperCL <- exp(
+  global_prominence_emmeans_table[[global_upper_column]]
+)
+global_complexity_pairs <- as.data.frame(summary(
+  pairs(global_prominence_emmeans, adjust = "holm"), infer = c(TRUE, TRUE)
+))
+global_complexity_trends <- as.data.frame(summary(
+  contrast(global_prominence_emmeans, method = "poly", adjust = "holm"),
+  infer = c(TRUE, TRUE)
+))
+write_csv(
+  global_prominence_emmeans_table,
+  file.path(global_prominence_output, "Complexity_EstimatedMarginalMeans.csv")
+)
+write_csv(
+  global_complexity_pairs,
+  file.path(global_prominence_output, "Complexity_Contrasts_Holm.csv")
+)
+write_csv(
+  global_complexity_trends,
+  file.path(global_prominence_output, "Complexity_Trends_Holm.csv")
+)
+
+global_prominence_overall <- emmeans(global_prominence_model, ~ 1)
+global_prominence_overall_test <- as.data.frame(summary(
+  global_prominence_overall, infer = c(TRUE, TRUE), null = 0
+))
+global_prominence_overall_test$MirroringObservationRatio <- exp(
+  global_prominence_overall_test$emmean
+)
+write_csv(
+  global_prominence_overall_test,
+  file.path(global_prominence_output, "Overall_MirroringObservation_Test.csv")
+)
+
+if (make_plots) {
+  save_residual_diagnostics(
+    global_prominence_model,
+    "Participant Network 1 mirroring/observation global prominence",
+    file.path(global_prominence_output, "Residual_Diagnostics.png")
+  )
+  global_prominence_plot <- ggplot(
+    global_prominence_emmeans_table,
+    aes(x = Complexity, y = ProminenceRatio, group = 1)
+  ) +
+    geom_hline(yintercept = 1, linetype = "dotted", color = "grey45") +
+    geom_line(linewidth = 0.9, color = "#007C91") +
+    geom_point(size = 2.5, color = "#007C91") +
+    geom_errorbar(
+      aes(ymin = RatioLowerCL, ymax = RatioUpperCL),
+      width = 0.12, color = "#007C91"
+    ) +
+    facet_wrap(~ Movement, labeller = label_both) +
+    labs(
+      title = "Instruction-normalized global metric prominence",
+      subtitle = paste0(
+        "Mean at beat/4, beat/2, beat, beat x 2, x 3, and x 4 ",
+        "relative to all other frequencies;\nmirroring / observation; ",
+        "Version averaged; dotted line = equal prominence"
+      ),
+      x = "Stimulus complexity",
+      y = "Mirroring / observation prominence ratio"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(plot.title = element_text(face = "bold", hjust = 0.5))
+  ggsave(
+    file.path(global_prominence_output, "GlobalMetricProminence_Complexity_EMMeans.png"),
+    global_prominence_plot, width = 10, height = 6.5, dpi = 240, bg = "white"
+  )
+}
+
+
 # Across-outcome multiplicity and reproducibility -----------------------------
 
 full_anova_all <- bind_rows(full_anova_tables)
@@ -784,6 +1438,8 @@ write_csv(analysis_manifest, file.path(output_root, "Analysis_Manifest.csv"))
 run_configuration <- c(
   paste("Input:", input_file),
   paste("Landscape similarity input:", similarity_input_file),
+  paste("Network prominence input:", prominence_input_file),
+  paste("Global metric prominence input:", global_prominence_input_file),
   paste("Input rows:", nrow(data)),
   paste("Participants:", nlevels(data$Participant)),
   paste("Components:", paste(components, collapse = ", ")),
@@ -810,6 +1466,20 @@ run_configuration <- c(
   "Coverage columns: reported as QC, not modelled as scientific outcomes",
   "No additional RQA coverage threshold was imposed",
   "Teacher-only summaries: descriptive only; repeated teacher copies are not independent",
+  paste(
+    "Instruction-normalized network prominence model:",
+    "log(mirroring/observation metric-prominence ratio) ~ Complexity * Version *",
+    "Movement * Meter + (1 | Participant)"
+  ),
+  paste(
+    "Instruction-normalized global metric prominence model:",
+    "log(mirroring/observation global-prominence ratio) ~ Complexity * Version *",
+    "Movement + (1 | Participant)"
+  ),
+  "Instruction is removed after matched within-participant mirroring/observation normalization",
+  "Global metric set: beat/4, beat/2, beat, beat x 2, beat x 3, beat x 4",
+  "Normalization baseline: mean Network 1 prominence across all other frequencies",
+  "Prominence Complexity trends: linear and quadratic within Movement x Meter",
   paste("Completed:", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"))
 )
 writeLines(run_configuration, file.path(output_root, "Run_Configuration.txt"))
