@@ -101,16 +101,25 @@ default_input <- file.path(
 default_similarity_input <- file.path(
   study_root, "outputs", "05_Statistics_R", "OUT2R_LandscapeSimilarity.csv"
 )
+default_beat_prominence_input <- file.path(
+  study_root, "outputs", "05_Statistics_R", "OUT2R_BeatProminence.csv"
+)
 default_output <- file.path(study_root, "outputs", "06_Statistics_Results")
 input_file <- argument_value("--input=", default_input)
 similarity_input_file <- argument_value(
   "--similarity-input=", default_similarity_input
+)
+beat_prominence_input_file <- argument_value(
+  "--beat-prominence-input=", default_beat_prominence_input
 )
 output_root <- argument_value("--output=", default_output)
 
 input_file <- normalizePath(input_file, mustWork = TRUE)
 similarity_input_file <- normalizePath(
   similarity_input_file, mustWork = TRUE
+)
+beat_prominence_input_file <- normalizePath(
+  beat_prominence_input_file, mustWork = TRUE
 )
 if (
   dir.exists(output_root) &&
@@ -162,6 +171,12 @@ data <- read_csv(
 )
 similarity_data <- read_csv(
   similarity_input_file,
+  col_types = cols(Participant = col_character()),
+  show_col_types = FALSE,
+  progress = FALSE
+)
+beat_prominence_data <- read_csv(
+  beat_prominence_input_file,
   col_types = cols(Participant = col_character()),
   show_col_types = FALSE,
   progress = FALSE
@@ -294,6 +309,66 @@ similarity_data <- similarity_data %>%
     Version = factor(as.character(Version), levels = expected_levels$Version),
     Movement = factor(as.character(Movement), levels = expected_levels$Movement),
     Component = factor(Component, levels = sort(unique(Component)))
+  )
+
+beat_prominence_required <- c(
+  "Participant", "Instruction", "Complexity", "Version", "Movement",
+  "Condition", "Component", "NRepetitions", "BeatFrequencyHz",
+  "BeatFrequencyNormalized", "BeatProminencePercent"
+)
+beat_prominence_missing <- setdiff(
+  beat_prominence_required, names(beat_prominence_data)
+)
+if (length(beat_prominence_missing) > 0 || nrow(beat_prominence_data) == 0) {
+  stop(
+    "Beat-prominence export is empty or missing columns: ",
+    paste(beat_prominence_missing, collapse = ", ")
+  )
+}
+beat_numeric <- c(
+  "Condition", "Component", "NRepetitions", "BeatFrequencyHz",
+  "BeatFrequencyNormalized", "BeatProminencePercent"
+)
+if (any(!vapply(
+  beat_prominence_data[beat_numeric], is.numeric, logical(1)
+))) {
+  stop("Beat-prominence analysis columns must be numeric.")
+}
+if (any(!is.finite(as.matrix(beat_prominence_data[beat_numeric])))) {
+  stop("Beat-prominence analysis columns contain non-finite values.")
+}
+if (any(
+  beat_prominence_data$BeatProminencePercent < 0 |
+  beat_prominence_data$BeatProminencePercent > 100
+)) {
+  stop("BeatProminencePercent must lie in [0, 100].")
+}
+if (
+  !identical(unique(beat_prominence_data$Component), 1) ||
+  !isTRUE(all.equal(unique(beat_prominence_data$BeatFrequencyNormalized), 1))
+) {
+  stop("Beat prominence must use participant Network 1 at exactly 1 x beat.")
+}
+for (column in names(similarity_expected_levels)) {
+  actual <- sort(unique(as.character(beat_prominence_data[[column]])))
+  expected <- sort(similarity_expected_levels[[column]])
+  if (!identical(actual, expected)) {
+    stop(column, " levels differ in the beat-prominence export.")
+  }
+}
+beat_key <- c(
+  "Participant", "Instruction", "Complexity", "Version", "Movement"
+)
+if (anyDuplicated(beat_prominence_data[beat_key])) {
+  stop("The beat-prominence export contains duplicate factorial keys.")
+}
+beat_prominence_data <- beat_prominence_data %>%
+  mutate(
+    Participant = factor(Participant),
+    Instruction = factor(Instruction, levels = expected_levels$Instruction),
+    Complexity = factor(Complexity, levels = expected_levels$Complexity),
+    Version = factor(as.character(Version), levels = expected_levels$Version),
+    Movement = factor(as.character(Movement), levels = expected_levels$Movement)
   )
 
 components <- levels(data$Component)
@@ -770,6 +845,114 @@ write_csv(
 )
 
 
+# Participant beat-prominence analysis ---------------------------------------
+
+beat_output <- file.path(output_root, "BeatProminence")
+dir.create(beat_output, recursive = TRUE, showWarnings = FALSE)
+beat_formula <- BeatProminencePercent ~
+  Complexity * Instruction * Movement + Version + (1 | Participant)
+beat_model <- lmer(
+  beat_formula,
+  data = beat_prominence_data,
+  REML = TRUE,
+  control = lmerControl(
+    optimizer = "bobyqa", optCtrl = list(maxfun = 200000)
+  )
+)
+beat_anova <- anova_to_data_frame(anova(beat_model, type = 3))
+beat_p_column <- p_value_column(beat_anova)
+beat_anova$PValueRaw <- beat_anova[[beat_p_column]]
+write_text(
+  summary(beat_model),
+  output_file = file.path(beat_output, "Factorial_Model_Summary.txt")
+)
+writeLines(
+  deparse(beat_formula),
+  file.path(beat_output, "Factorial_Model_Formula.txt")
+)
+write_csv(
+  beat_anova,
+  file.path(beat_output, "Factorial_Type_III_ANOVA.csv")
+)
+write_csv(
+  model_diagnostics(beat_model, beat_prominence_data),
+  file.path(beat_output, "Model_Fit_Diagnostics.csv")
+)
+write_csv(
+  safe_shapiro(residuals(beat_model)),
+  file.path(beat_output, "Residual_Shapiro_Wilk.csv")
+)
+
+beat_emmeans <- emmeans(
+  beat_model, ~ Complexity | Instruction * Movement
+)
+beat_emmeans_table <- as.data.frame(summary(
+  beat_emmeans, infer = c(TRUE, TRUE)
+))
+beat_complexity_pairs <- as.data.frame(summary(
+  pairs(beat_emmeans, adjust = "holm"), infer = c(TRUE, TRUE)
+))
+beat_complexity_trends <- as.data.frame(summary(
+  contrast(beat_emmeans, method = "poly", adjust = "holm"),
+  infer = c(TRUE, TRUE)
+))
+write_csv(
+  beat_emmeans_table,
+  file.path(beat_output, "Complexity_EstimatedMarginalMeans.csv")
+)
+write_csv(
+  beat_complexity_pairs,
+  file.path(beat_output, "Complexity_Contrasts_Holm.csv")
+)
+write_csv(
+  beat_complexity_trends,
+  file.path(beat_output, "Complexity_Trends_Holm.csv")
+)
+
+if (make_plots) {
+  save_residual_diagnostics(
+    beat_model, "Participant Network 1 beat prominence",
+    file.path(beat_output, "Residual_Diagnostics.png")
+  )
+  lower_column <- grep("LCL$", names(beat_emmeans_table), value = TRUE)[1]
+  upper_column <- grep("UCL$", names(beat_emmeans_table), value = TRUE)[1]
+  beat_plot <- ggplot(
+    beat_emmeans_table,
+    aes(
+      x = Complexity, y = emmean, color = Instruction,
+      group = Instruction
+    )
+  ) +
+    geom_line(linewidth = 0.9) +
+    geom_point(size = 2.8) +
+    geom_errorbar(
+      aes(
+        ymin = .data[[lower_column]],
+        ymax = .data[[upper_column]]
+      ),
+      width = 0.12
+    ) +
+    facet_wrap(~Movement, labeller = label_both) +
+    labs(
+      title = "Participant Network 1 prominence at the beat",
+      subtitle = paste0(
+        "Estimated marginal means at ",
+        format(unique(beat_prominence_data$BeatFrequencyHz), digits = 3),
+        " Hz; Version averaged by the model"
+      ),
+      x = "Stimulus complexity",
+      y = "Explained variance (%)",
+      color = "Instruction"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(plot.title = element_text(face = "bold", hjust = 0.5))
+  ggsave(
+    file.path(beat_output, "BeatProminence_Complexity_EMMeans.png"),
+    beat_plot, width = 10, height = 5.8, dpi = 240, bg = "white"
+  )
+}
+
+
 # Across-outcome multiplicity and reproducibility -----------------------------
 
 full_anova_all <- bind_rows(full_anova_tables)
@@ -784,6 +967,7 @@ write_csv(analysis_manifest, file.path(output_root, "Analysis_Manifest.csv"))
 run_configuration <- c(
   paste("Input:", input_file),
   paste("Landscape similarity input:", similarity_input_file),
+  paste("Beat prominence input:", beat_prominence_input_file),
   paste("Input rows:", nrow(data)),
   paste("Participants:", nlevels(data$Participant)),
   paste("Components:", paste(components, collapse = ", ")),
@@ -810,6 +994,11 @@ run_configuration <- c(
   "Coverage columns: reported as QC, not modelled as scientific outcomes",
   "No additional RQA coverage threshold was imposed",
   "Teacher-only summaries: descriptive only; repeated teacher copies are not independent",
+  paste(
+    "Beat prominence model:",
+    "Network 1 percent variance at 1 x beat ~ Complexity * Instruction *",
+    "Movement + Version + (1 | Participant)"
+  ),
   paste("Completed:", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"))
 )
 writeLines(run_configuration, file.path(output_root, "Run_Configuration.txt"))

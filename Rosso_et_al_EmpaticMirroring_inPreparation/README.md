@@ -50,6 +50,12 @@ sections. The numbered analysis blocks are:
 6. **Mixed-effects modelling in R** - factorial models, diagnostics, simple
    effects, and corrected omnibus tables.
 
+Between Blocks 5 and 6, the independent **participant beat-prominence module**
+loads the existing core `FREQ` files and extracts Network 1's percentage of
+explained variance at exactly 1 x beat. It averages repeated trials within each
+participant-condition cell and never reruns network estimation. The module can
+be switched independently with `run_beat_prominence`.
+
 A final unnumbered validation section can compare every numerical summary and
 statistical export with a supplied reference run.
 
@@ -138,10 +144,18 @@ The main exports are:
 - `OUT2R_AllComponents.csv`: Participant x factorial cell x Meter x Component,
   containing spatial coordination and eight RQA measures with coverage QC;
 - `OUT2R_LandscapeSimilarity.csv`: Participant x factorial cell x Component,
-  containing selected-component and H2-entropy landscape correlations.
+  containing selected-component and H2-entropy landscape correlations;
+- `OUT2R_BeatProminence.csv`: Participant x factorial cell, containing
+  participant Network 1 prominence at 1 x beat as percentage explained
+  variance and the number of averaged repetitions.
 
 Landscape correlations are Fisher-z transformed only for statistical
 modelling; exported values remain correlations on their original scale.
+
+The focused beat-prominence model is
+`BeatProminencePercent ~ Complexity * Instruction * Movement + Version +
+(1 | Participant)`. Complexity pairwise contrasts and polynomial trends are
+reported within each Instruction x Movement combination with Holm correction.
 
 ## Validated full run
 

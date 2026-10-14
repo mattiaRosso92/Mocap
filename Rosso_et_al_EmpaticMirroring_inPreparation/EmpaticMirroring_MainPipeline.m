@@ -36,6 +36,7 @@ path_rqa = fullfile(path_interaction,'01_PhaseSpaceRQA');
 path_spatial = fullfile(path_interaction,'02_SpatialAndLandscape');
 path_group = fullfile(path_output,'04_Group');
 path_figures = fullfile(path_group,'Figures');
+path_beat_prominence = fullfile(path_group,'BeatProminence');
 path_statistics = fullfile(path_output,'05_Statistics_R');
 
 assert(isfolder(path_data),'Data directory not found: %s',path_data);
@@ -46,7 +47,7 @@ addpath(fullfile(path_toolbox,'FREQNESS_ExternalFunctions'))
 
 output_paths = {path_output,path_qc,path_models,path_participants, ...
     path_landscape,path_interaction,path_rqa,path_spatial,path_group, ...
-    path_figures,path_statistics};
+    path_figures,path_beat_prominence,path_statistics};
 for pathi = 1:numel(output_paths)
     if ~isfolder(output_paths{pathi}); mkdir(output_paths{pathi}); end
 end
@@ -54,6 +55,7 @@ end
 % Run controls. Existing compatible outputs are reused by default. Set
 % EMPATIC_MIRRORING_OVERWRITE=1 for a complete production rebuild.
 run_blocks = true(1,6);
+run_beat_prominence = true;
 overwrite = strcmp(getenv('EMPATIC_MIRRORING_OVERWRITE'),'1');
 save_flag = true;
 vis_flag = true;
@@ -102,6 +104,8 @@ meter = [.25 .5 1 2];
 components = 1:2;
 ncomps = 4;
 regularisation = .01;
+beat_prominence_component = 1;
+beat_prominence_frequency_normalized = 1;
 if strcmp(filter_width_calibration,'legacy')
     filter_width = FREQNESS_ComputeLegacyFilterWidths_Mocap( ...
         frex,filter_type);
@@ -143,14 +147,15 @@ annotated_subject_notes = ["only 5 recordings" ...
     "very bad quality; disappeared hips" "only 28 recordings"];
 
 save(fullfile(path_output,'EmpaticMirroring_RunConfiguration.mat'), ...
-    'run_blocks','overwrite','save_flag','vis_flag','srate_teacher', ...
+    'run_blocks','run_beat_prominence','overwrite','save_flag','vis_flag','srate_teacher', ...
     'srate_participant','srate','analysis_duration','teacher_offset', ...
     'participant_offset','short_gap_seconds', ...
     'maximum_reconstructed_gap_seconds', ...
     'minimum_complete_timepoint_fraction','marklabels','bones', ...
     'beat_frex','frex','meter','components','ncomps','regularisation', ...
     'filter_width_calibration','filter_type','filter_width', ...
-    'expected_filter_width');
+    'expected_filter_width','beat_prominence_component', ...
+    'beat_prominence_frequency_normalized');
 
 
 %% DATA PREPARATION - FRAME COUNTS, GAPS, AND RECORDING QC
@@ -1635,11 +1640,144 @@ if run_blocks(5)
 end
 
 
+%% PARTICIPANT BEAT-PROMINENCE MODULE
+
+% This focused module reads the existing core FREQ outputs. It does not
+% recompute network estimation or alter the established group summaries.
+% Beat prominence is Network 1's explained variance at exactly 1 x beat.
+if run_beat_prominence
+    participant_role = 2;
+    beatProminenceTrial = nan(nparticipants,nconds,ntrials);
+    beatProminenceFrequencyHz = NaN;
+    fprintf('\nBEAT PROMINENCE: reading %d existing core outputs...\n',height(analysisRows))
+    for analysisi = 1:height(analysisRows)
+        S = load(analysisRows.CoreFile(analysisi),'FREQ');
+        FREQ = S.FREQ;
+        [beat_distance,beat_index] = min(abs( ...
+            FREQ.frex_norm(:,participant_role)-beat_prominence_frequency_normalized));
+        assert(beat_distance <= sqrt(eps), ...
+            'The participant frequency grid does not contain the exact beat.');
+        spectrum_sum = sum(FREQ.evals(:,beat_index,participant_role));
+        assert(abs(spectrum_sum-100) <= 1e-3, ...
+            'FREQ.evals is not normalized to percentage explained variance.');
+        value = FREQ.evals(beat_prominence_component,beat_index,participant_role);
+        assert(isfinite(value) && value >= 0 && value <= 100, ...
+            'Participant beat prominence must be a finite percentage.');
+        participanti = analysisRows.ParticipantIndex(analysisi);
+        condi = analysisRows.ConditionIndex(analysisi);
+        repetitioni = analysisRows.RepetitionIndex(analysisi);
+        beatProminenceTrial(participanti,condi,repetitioni) = value;
+        realized_frequency = FREQ.frex(beat_index,participant_role);
+        if isnan(beatProminenceFrequencyHz)
+            beatProminenceFrequencyHz = realized_frequency;
+        else
+            assert(abs(realized_frequency-beatProminenceFrequencyHz) <= sqrt(eps), ...
+                'Beat frequency differs across core outputs.');
+        end
+    end
+
+    beatProminenceParticipant = mean(beatProminenceTrial,3,'omitnan');
+    beatProminenceNRepetitions = sum(isfinite(beatProminenceTrial),3);
+    valid_cell = beatProminenceNRepetitions > 0 & ...
+        isfinite(beatProminenceParticipant);
+    nrows_beat = nnz(valid_cell);
+    Participant = strings(nrows_beat,1); Instruction = strings(nrows_beat,1);
+    Complexity = strings(nrows_beat,1); Version = zeros(nrows_beat,1);
+    Movement = zeros(nrows_beat,1); Condition = zeros(nrows_beat,1);
+    Component = repmat(beat_prominence_component,nrows_beat,1);
+    NRepetitions = zeros(nrows_beat,1);
+    BeatFrequencyHz = repmat(beatProminenceFrequencyHz,nrows_beat,1);
+    BeatFrequencyNormalized = repmat(beat_prominence_frequency_normalized,nrows_beat,1);
+    BeatProminencePercent = nan(nrows_beat,1);
+    row = 0;
+    for participanti = 1:nparticipants
+        for condi = 1:nconds
+            if ~valid_cell(participanti,condi); continue; end
+            row = row+1; Participant(row) = participantIds(participanti);
+            Instruction(row) = designTable.Instruction(condi);
+            Complexity(row) = designTable.Complexity(condi);
+            Version(row) = designTable.Version(condi);
+            Movement(row) = designTable.Movement(condi);
+            Condition(row) = designTable.ConditionIndex(condi);
+            NRepetitions(row) = beatProminenceNRepetitions(participanti,condi);
+            BeatProminencePercent(row) = beatProminenceParticipant(participanti,condi);
+        end
+    end
+    beatProminenceTable = table(Participant,Instruction,Complexity,Version, ...
+        Movement,Condition,Component,NRepetitions,BeatFrequencyHz, ...
+        BeatFrequencyNormalized,BeatProminencePercent);
+    writetable(beatProminenceTable,fullfile(path_statistics, ...
+        'OUT2R_BeatProminence.csv'))
+    if write_xlsx
+        writetable(beatProminenceTable,fullfile(path_statistics, ...
+            'OUT2R_BeatProminence.xlsx'))
+    end
+    save(fullfile(path_beat_prominence, ...
+        'FREQNESS_ParticipantBeatProminence.mat'), ...
+        'beatProminenceTrial','beatProminenceParticipant', ...
+        'beatProminenceNRepetitions','beatProminenceTable', ...
+        'beatProminenceFrequencyHz','beat_prominence_component', ...
+        'beat_prominence_frequency_normalized','designTable','participantIds','-v7.3')
+
+    if vis_flag
+        instruction_levels = ["obs" "mir"];
+        instruction_names = ["Observation" "Imitation"];
+        complexity_levels = ["low" "medium" "high"];
+        instruction_colors = lines(numel(instruction_levels));
+        fig = figure('Visible',figure_visibility,'Color','w');
+        tiledlayout(1,2,'TileSpacing','compact','Padding','compact');
+        for movementi = 1:2
+            nexttile; hold on
+            for instructioni = 1:numel(instruction_levels)
+                participant_complexity = nan(nparticipants,numel(complexity_levels));
+                for complexityi = 1:numel(complexity_levels)
+                    conditions = find( ...
+                        designTable.Instruction == instruction_levels(instructioni) & ...
+                        designTable.Complexity == complexity_levels(complexityi) & ...
+                        designTable.Movement == movementi);
+                    participant_complexity(:,complexityi) = mean( ...
+                        beatProminenceParticipant(:,conditions),2,'omitnan');
+                end
+                n = sum(isfinite(participant_complexity),1);
+                mu = mean(participant_complexity,1,'omitnan');
+                se = std(participant_complexity,0,1,'omitnan')./sqrt(max(n,1));
+                errorbar(1:numel(complexity_levels),mu,se,'-o', ...
+                    'Color',instruction_colors(instructioni,:), ...
+                    'LineWidth',1.5,'MarkerFaceColor', ...
+                    instruction_colors(instructioni,:))
+            end
+            xticks(1:numel(complexity_levels)); xticklabels(complexity_levels)
+            xlabel('Stimulus complexity'); ylabel('Explained variance (%)')
+            title("Movement "+movementi); grid on
+            if movementi == 1
+                legend(instruction_names,'Location','best')
+            end
+        end
+        sgtitle(sprintf(['Participant Network %d prominence at 1 x beat ' ...
+            '(%.2f Hz)'],beat_prominence_component,beatProminenceFrequencyHz))
+        savefig(fig,fullfile(path_beat_prominence, ...
+            'BeatProminence_Complexity_Participants.fig'))
+        exportgraphics(fig,fullfile(path_beat_prominence, ...
+            'BeatProminence_Complexity_Participants.png'),'Resolution',200)
+    end
+    fprintf('BEAT PROMINENCE exported %d participant-condition rows.\n', ...
+        height(beatProminenceTable))
+end
+
+
 %% BLOCK 6 - MIXED-EFFECTS MODELS IN R
 
 if run_blocks(6)
     statistics_script = fullfile(path_study,'EmpaticMirroring_Stats.R');
-    [R_status,R_output] = system(sprintf('Rscript "%s" --overwrite',statistics_script));
+    statistics_input = fullfile(path_statistics,'OUT2R_AllComponents.csv');
+    similarity_input = fullfile(path_statistics,'OUT2R_LandscapeSimilarity.csv');
+    beat_prominence_input = fullfile(path_statistics,'OUT2R_BeatProminence.csv');
+    statistics_output = fullfile(path_output,'06_Statistics_Results');
+    [R_status,R_output] = system(sprintf([ ...
+        'Rscript "%s" --overwrite --input="%s" ' ...
+        '--similarity-input="%s" --beat-prominence-input="%s" ' ...
+        '--output="%s"'],statistics_script,statistics_input, ...
+        similarity_input,beat_prominence_input,statistics_output));
     fprintf('%s\n',R_output)
     assert(R_status == 0,'R statistical modelling failed.')
 end
