@@ -36,7 +36,7 @@ path_rqa = fullfile(path_interaction,'01_PhaseSpaceRQA');
 path_spatial = fullfile(path_interaction,'02_SpatialAndLandscape');
 path_group = fullfile(path_output,'04_Group');
 path_figures = fullfile(path_group,'Figures');
-path_beat_prominence = fullfile(path_group,'BeatProminence');
+path_metric_prominence = fullfile(path_group,'MetricProminence');
 path_statistics = fullfile(path_output,'05_Statistics_R');
 
 assert(isfolder(path_data),'Data directory not found: %s',path_data);
@@ -47,7 +47,7 @@ addpath(fullfile(path_toolbox,'FREQNESS_ExternalFunctions'))
 
 output_paths = {path_output,path_qc,path_models,path_participants, ...
     path_landscape,path_interaction,path_rqa,path_spatial,path_group, ...
-    path_figures,path_beat_prominence,path_statistics};
+    path_figures,path_metric_prominence,path_statistics};
 for pathi = 1:numel(output_paths)
     if ~isfolder(output_paths{pathi}); mkdir(output_paths{pathi}); end
 end
@@ -55,7 +55,7 @@ end
 % Run controls. Existing compatible outputs are reused by default. Set
 % EMPATIC_MIRRORING_OVERWRITE=1 for a complete production rebuild.
 run_blocks = true(1,6);
-run_beat_prominence = true;
+run_metric_prominence = true;
 overwrite = strcmp(getenv('EMPATIC_MIRRORING_OVERWRITE'),'1');
 save_flag = true;
 vis_flag = true;
@@ -101,11 +101,11 @@ beat_frex = 1.67*ones(1,2);
 frex_vector = (beat_frex(1)/4:beat_frex(1)/8:beat_frex(1)*4)';
 frex = repmat(frex_vector,1,2);
 meter = [.25 .5 1 2];
+global_metric_levels = [.25 .5 1 2 3 4];
 components = 1:2;
 ncomps = 4;
 regularisation = .01;
-beat_prominence_component = 1;
-beat_prominence_frequency_normalized = 1;
+prominence_component = 1;
 if strcmp(filter_width_calibration,'legacy')
     filter_width = FREQNESS_ComputeLegacyFilterWidths_Mocap( ...
         frex,filter_type);
@@ -147,15 +147,14 @@ annotated_subject_notes = ["only 5 recordings" ...
     "very bad quality; disappeared hips" "only 28 recordings"];
 
 save(fullfile(path_output,'EmpaticMirroring_RunConfiguration.mat'), ...
-    'run_blocks','run_beat_prominence','overwrite','save_flag','vis_flag','srate_teacher', ...
+    'run_blocks','run_metric_prominence','overwrite','save_flag','vis_flag','srate_teacher', ...
     'srate_participant','srate','analysis_duration','teacher_offset', ...
     'participant_offset','short_gap_seconds', ...
     'maximum_reconstructed_gap_seconds', ...
     'minimum_complete_timepoint_fraction','marklabels','bones', ...
     'beat_frex','frex','meter','components','ncomps','regularisation', ...
     'filter_width_calibration','filter_type','filter_width', ...
-    'expected_filter_width','beat_prominence_component', ...
-    'beat_prominence_frequency_normalized');
+    'expected_filter_width','prominence_component','global_metric_levels');
 
 
 %% DATA PREPARATION - FRAME COUNTS, GAPS, AND RECORDING QC
@@ -1640,84 +1639,181 @@ if run_blocks(5)
 end
 
 
-%% PARTICIPANT BEAT-PROMINENCE MODULE
+%% PARTICIPANT METRIC-PROMINENCE MODULE
 
-% This focused module reads the existing core FREQ outputs. It does not
-% recompute network estimation or alter the established group summaries.
-% Beat prominence is Network 1's explained variance at exactly 1 x beat.
-if run_beat_prominence
+% This focused module reads the existing core FREQ outputs and never
+% recomputes network estimation. Each requested metric level is normalized
+% by Network 1's mean prominence at all nonmetric frequencies. The global
+% measure averages every available beat-related level across the spectrum
+% (beat/4, beat/2, beat, beat x 2, x 3, and x 4) before the same normalization.
+if run_metric_prominence
     participant_role = 2;
-    beatProminenceTrial = nan(nparticipants,nconds,ntrials);
-    beatProminenceFrequencyHz = NaN;
-    fprintf('\nBEAT PROMINENCE: reading %d existing core outputs...\n',height(analysisRows))
+    rawProminenceTrial = nan(nparticipants,nconds,nmeters,ntrials);
+    nonmetricBaselineTrial = nan(nparticipants,nconds,ntrials);
+    metricProminenceRatioTrial = nan(nparticipants,nconds,nmeters,ntrials);
+    globalMetricMeanTrial = nan(nparticipants,nconds,ntrials);
+    globalMetricProminenceRatioTrial = nan(nparticipants,nconds,ntrials);
+    prominenceFrequencyHz = nan(1,nmeters);
+    globalMetricFrequencyHz = nan(1,numel(global_metric_levels));
+    fprintf('\nMETRIC PROMINENCE: reading %d existing core outputs...\n',height(analysisRows))
     for analysisi = 1:height(analysisRows)
         S = load(analysisRows.CoreFile(analysisi),'FREQ');
         FREQ = S.FREQ;
-        [beat_distance,beat_index] = min(abs( ...
-            FREQ.frex_norm(:,participant_role)-beat_prominence_frequency_normalized));
-        assert(beat_distance <= sqrt(eps), ...
-            'The participant frequency grid does not contain the exact beat.');
-        spectrum_sum = sum(FREQ.evals(:,beat_index,participant_role));
-        assert(abs(spectrum_sum-100) <= 1e-3, ...
-            'FREQ.evals is not normalized to percentage explained variance.');
-        value = FREQ.evals(beat_prominence_component,beat_index,participant_role);
-        assert(isfinite(value) && value >= 0 && value <= 100, ...
-            'Participant beat prominence must be a finite percentage.');
         participanti = analysisRows.ParticipantIndex(analysisi);
         condi = analysisRows.ConditionIndex(analysisi);
         repetitioni = analysisRows.RepetitionIndex(analysisi);
-        beatProminenceTrial(participanti,condi,repetitioni) = value;
-        realized_frequency = FREQ.frex(beat_index,participant_role);
-        if isnan(beatProminenceFrequencyHz)
-            beatProminenceFrequencyHz = realized_frequency;
-        else
-            assert(abs(realized_frequency-beatProminenceFrequencyHz) <= sqrt(eps), ...
-                'Beat frequency differs across core outputs.');
+        participant_grid = FREQ.frex_norm(:,participant_role);
+        global_metric_indices = nan(size(global_metric_levels));
+        for globali = 1:numel(global_metric_levels)
+            [distance,global_metric_indices(globali)] = min(abs( ...
+                participant_grid-global_metric_levels(globali)));
+            assert(distance <= sqrt(eps), ...
+                'The participant frequency grid does not contain a global metric level.');
+            realized_frequency = FREQ.frex(global_metric_indices(globali),participant_role);
+            if isnan(globalMetricFrequencyHz(globali))
+                globalMetricFrequencyHz(globali) = realized_frequency;
+            else
+                assert(abs(realized_frequency-globalMetricFrequencyHz(globali)) <= sqrt(eps), ...
+                    'A global metric frequency differs across core outputs.');
+            end
+        end
+        nonmetric_indices = setdiff(1:numel(participant_grid),global_metric_indices);
+        assert(~isempty(nonmetric_indices), ...
+            'At least one nonmetric frequency is required for normalization.');
+        landscape = FREQ.evals(prominence_component,:,participant_role);
+        assert(all(isfinite(landscape)) && all(landscape >= 0 & landscape <= 100), ...
+            'Participant network landscape must contain finite percentages.');
+        nonmetric_baseline = mean(landscape(nonmetric_indices));
+        assert(isfinite(nonmetric_baseline) && nonmetric_baseline > 0, ...
+            'The nonmetric baseline must be finite and positive.');
+        global_metric_mean = mean(landscape(global_metric_indices));
+        nonmetricBaselineTrial(participanti,condi,repetitioni) = nonmetric_baseline;
+        globalMetricMeanTrial(participanti,condi,repetitioni) = global_metric_mean;
+        globalMetricProminenceRatioTrial(participanti,condi,repetitioni) = ...
+            global_metric_mean/nonmetric_baseline;
+        for metri = 1:nmeters
+            [meter_distance,meter_index] = min(abs( ...
+                participant_grid-meter(metri)));
+            assert(meter_distance <= sqrt(eps), ...
+                'The participant frequency grid does not contain a requested meter.');
+            spectrum_sum = sum(FREQ.evals(:,meter_index,participant_role));
+            assert(abs(spectrum_sum-100) <= 1e-3, ...
+                'FREQ.evals is not normalized to percentage explained variance.');
+            value = landscape(meter_index);
+            assert(isfinite(value) && value >= 0 && value <= 100, ...
+                'Participant network prominence must be a finite percentage.');
+            rawProminenceTrial(participanti,condi,metri,repetitioni) = value;
+            metricProminenceRatioTrial(participanti,condi,metri,repetitioni) = ...
+                value/nonmetric_baseline;
+            realized_frequency = FREQ.frex(meter_index,participant_role);
+            if isnan(prominenceFrequencyHz(metri))
+                prominenceFrequencyHz(metri) = realized_frequency;
+            else
+                assert(abs(realized_frequency-prominenceFrequencyHz(metri)) <= sqrt(eps), ...
+                    'A metric frequency differs across core outputs.');
+            end
         end
     end
 
-    beatProminenceParticipant = mean(beatProminenceTrial,3,'omitnan');
-    beatProminenceNRepetitions = sum(isfinite(beatProminenceTrial),3);
-    valid_cell = beatProminenceNRepetitions > 0 & ...
-        isfinite(beatProminenceParticipant);
-    nrows_beat = nnz(valid_cell);
-    Participant = strings(nrows_beat,1); Instruction = strings(nrows_beat,1);
-    Complexity = strings(nrows_beat,1); Version = zeros(nrows_beat,1);
-    Movement = zeros(nrows_beat,1); Condition = zeros(nrows_beat,1);
-    Component = repmat(beat_prominence_component,nrows_beat,1);
-    NRepetitions = zeros(nrows_beat,1);
-    BeatFrequencyHz = repmat(beatProminenceFrequencyHz,nrows_beat,1);
-    BeatFrequencyNormalized = repmat(beat_prominence_frequency_normalized,nrows_beat,1);
-    BeatProminencePercent = nan(nrows_beat,1);
-    row = 0;
+    rawProminenceParticipant = mean(rawProminenceTrial,4,'omitnan');
+    nonmetricBaselineParticipant = mean(nonmetricBaselineTrial,3,'omitnan');
+    metricProminenceRatioParticipant = mean(metricProminenceRatioTrial,4,'omitnan');
+    prominenceNRepetitions = sum(isfinite(metricProminenceRatioTrial),4);
+    valid_cell = prominenceNRepetitions > 0 & ...
+        isfinite(metricProminenceRatioParticipant);
+    nrows_prominence = nnz(valid_cell);
+    Participant = strings(nrows_prominence,1); Instruction = strings(nrows_prominence,1);
+    Complexity = strings(nrows_prominence,1); Version = zeros(nrows_prominence,1);
+    Movement = zeros(nrows_prominence,1); Condition = zeros(nrows_prominence,1);
+    Meter = strings(nrows_prominence,1); MeterLevel = zeros(nrows_prominence,1);
+    Component = repmat(prominence_component,nrows_prominence,1);
+    NRepetitions = zeros(nrows_prominence,1); FrequencyHz = nan(nrows_prominence,1);
+    RawProminencePercent = nan(nrows_prominence,1);
+    NonMetricBaselinePercent = nan(nrows_prominence,1);
+    MetricProminenceRatio = nan(nrows_prominence,1);
+    LogMetricProminence = nan(nrows_prominence,1); row = 0;
     for participanti = 1:nparticipants
         for condi = 1:nconds
-            if ~valid_cell(participanti,condi); continue; end
+            for metri = 1:nmeters
+                if ~valid_cell(participanti,condi,metri); continue; end
+                row = row+1; Participant(row) = participantIds(participanti);
+                Instruction(row) = designTable.Instruction(condi);
+                Complexity(row) = designTable.Complexity(condi);
+                Version(row) = designTable.Version(condi);
+                Movement(row) = designTable.Movement(condi);
+                Condition(row) = designTable.ConditionIndex(condi);
+                Meter(row) = "M"+string(metri); MeterLevel(row) = meter(metri);
+                NRepetitions(row) = prominenceNRepetitions(participanti,condi,metri);
+                FrequencyHz(row) = prominenceFrequencyHz(metri);
+                RawProminencePercent(row) = rawProminenceParticipant(participanti,condi,metri);
+                NonMetricBaselinePercent(row) = nonmetricBaselineParticipant(participanti,condi);
+                MetricProminenceRatio(row) = ...
+                    metricProminenceRatioParticipant(participanti,condi,metri);
+                LogMetricProminence(row) = log(MetricProminenceRatio(row));
+            end
+        end
+    end
+    prominenceTable = table(Participant,Instruction,Complexity,Version,Movement, ...
+        Condition,Meter,MeterLevel,Component,NRepetitions,FrequencyHz, ...
+        RawProminencePercent,NonMetricBaselinePercent,MetricProminenceRatio, ...
+        LogMetricProminence);
+    writetable(prominenceTable,fullfile(path_statistics,'OUT2R_NetworkProminence.csv'))
+    if write_xlsx
+        writetable(prominenceTable,fullfile(path_statistics,'OUT2R_NetworkProminence.xlsx'))
+    end
+    globalMetricMeanParticipant = mean(globalMetricMeanTrial,3,'omitnan');
+    globalMetricProminenceRatioParticipant = mean( ...
+        globalMetricProminenceRatioTrial,3,'omitnan');
+    globalMetricNRepetitions = sum(isfinite(globalMetricProminenceRatioTrial),3);
+    valid_global = globalMetricNRepetitions > 0 & ...
+        isfinite(globalMetricProminenceRatioParticipant);
+    nrows_global = nnz(valid_global);
+    Participant = strings(nrows_global,1); Instruction = strings(nrows_global,1);
+    Complexity = strings(nrows_global,1); Version = zeros(nrows_global,1);
+    Movement = zeros(nrows_global,1); Condition = zeros(nrows_global,1);
+    Component = repmat(prominence_component,nrows_global,1);
+    NRepetitions = zeros(nrows_global,1);
+    GlobalMetricMeanPercent = nan(nrows_global,1);
+    NonMetricBaselinePercent = nan(nrows_global,1);
+    GlobalMetricProminenceRatio = nan(nrows_global,1);
+    LogGlobalMetricProminence = nan(nrows_global,1); row = 0;
+    for participanti = 1:nparticipants
+        for condi = 1:nconds
+            if ~valid_global(participanti,condi); continue; end
             row = row+1; Participant(row) = participantIds(participanti);
             Instruction(row) = designTable.Instruction(condi);
             Complexity(row) = designTable.Complexity(condi);
             Version(row) = designTable.Version(condi);
             Movement(row) = designTable.Movement(condi);
             Condition(row) = designTable.ConditionIndex(condi);
-            NRepetitions(row) = beatProminenceNRepetitions(participanti,condi);
-            BeatProminencePercent(row) = beatProminenceParticipant(participanti,condi);
+            NRepetitions(row) = globalMetricNRepetitions(participanti,condi);
+            GlobalMetricMeanPercent(row) = globalMetricMeanParticipant(participanti,condi);
+            NonMetricBaselinePercent(row) = nonmetricBaselineParticipant(participanti,condi);
+            GlobalMetricProminenceRatio(row) = ...
+                globalMetricProminenceRatioParticipant(participanti,condi);
+            LogGlobalMetricProminence(row) = log(GlobalMetricProminenceRatio(row));
         end
     end
-    beatProminenceTable = table(Participant,Instruction,Complexity,Version, ...
-        Movement,Condition,Component,NRepetitions,BeatFrequencyHz, ...
-        BeatFrequencyNormalized,BeatProminencePercent);
-    writetable(beatProminenceTable,fullfile(path_statistics, ...
-        'OUT2R_BeatProminence.csv'))
+    globalProminenceTable = table(Participant,Instruction,Complexity,Version, ...
+        Movement,Condition,Component,NRepetitions,GlobalMetricMeanPercent, ...
+        NonMetricBaselinePercent,GlobalMetricProminenceRatio, ...
+        LogGlobalMetricProminence);
+    writetable(globalProminenceTable,fullfile(path_statistics, ...
+        'OUT2R_GlobalMetricProminence.csv'))
     if write_xlsx
-        writetable(beatProminenceTable,fullfile(path_statistics, ...
-            'OUT2R_BeatProminence.xlsx'))
+        writetable(globalProminenceTable,fullfile(path_statistics, ...
+            'OUT2R_GlobalMetricProminence.xlsx'))
     end
-    save(fullfile(path_beat_prominence, ...
-        'FREQNESS_ParticipantBeatProminence.mat'), ...
-        'beatProminenceTrial','beatProminenceParticipant', ...
-        'beatProminenceNRepetitions','beatProminenceTable', ...
-        'beatProminenceFrequencyHz','beat_prominence_component', ...
-        'beat_prominence_frequency_normalized','designTable','participantIds','-v7.3')
+    save(fullfile(path_metric_prominence,'FREQNESS_ParticipantMetricProminence.mat'), ...
+        'rawProminenceTrial','rawProminenceParticipant', ...
+        'nonmetricBaselineTrial','nonmetricBaselineParticipant', ...
+        'metricProminenceRatioTrial','metricProminenceRatioParticipant', ...
+        'globalMetricMeanTrial','globalMetricMeanParticipant', ...
+        'globalMetricProminenceRatioTrial','globalMetricProminenceRatioParticipant', ...
+        'prominenceNRepetitions','globalMetricNRepetitions','prominenceTable', ...
+        'globalProminenceTable','prominenceFrequencyHz','globalMetricFrequencyHz', ...
+        'prominence_component','meter','global_metric_levels','designTable', ...
+        'participantIds','-v7.3')
 
     if vis_flag
         instruction_levels = ["obs" "mir"];
@@ -1725,43 +1821,43 @@ if run_beat_prominence
         complexity_levels = ["low" "medium" "high"];
         instruction_colors = lines(numel(instruction_levels));
         fig = figure('Visible',figure_visibility,'Color','w');
-        tiledlayout(1,2,'TileSpacing','compact','Padding','compact');
+        tiledlayout(2,nmeters,'TileSpacing','compact','Padding','compact');
         for movementi = 1:2
-            nexttile; hold on
-            for instructioni = 1:numel(instruction_levels)
-                participant_complexity = nan(nparticipants,numel(complexity_levels));
-                for complexityi = 1:numel(complexity_levels)
-                    conditions = find( ...
-                        designTable.Instruction == instruction_levels(instructioni) & ...
-                        designTable.Complexity == complexity_levels(complexityi) & ...
-                        designTable.Movement == movementi);
-                    participant_complexity(:,complexityi) = mean( ...
-                        beatProminenceParticipant(:,conditions),2,'omitnan');
+            for metri = 1:nmeters
+                nexttile; hold on
+                for instructioni = 1:numel(instruction_levels)
+                    participant_complexity = nan(nparticipants,numel(complexity_levels));
+                    for complexityi = 1:numel(complexity_levels)
+                        conditions = find( ...
+                            designTable.Instruction == instruction_levels(instructioni) & ...
+                            designTable.Complexity == complexity_levels(complexityi) & ...
+                            designTable.Movement == movementi);
+                        participant_complexity(:,complexityi) = mean( ...
+                            metricProminenceRatioParticipant(:,conditions,metri),2,'omitnan');
+                    end
+                    n = sum(isfinite(participant_complexity),1);
+                    mu = mean(participant_complexity,1,'omitnan');
+                    se = std(participant_complexity,0,1,'omitnan')./sqrt(max(n,1));
+                    errorbar(1:numel(complexity_levels),mu,se,'-o', ...
+                        'Color',instruction_colors(instructioni,:), ...
+                        'LineWidth',1.5,'MarkerFaceColor',instruction_colors(instructioni,:))
                 end
-                n = sum(isfinite(participant_complexity),1);
-                mu = mean(participant_complexity,1,'omitnan');
-                se = std(participant_complexity,0,1,'omitnan')./sqrt(max(n,1));
-                errorbar(1:numel(complexity_levels),mu,se,'-o', ...
-                    'Color',instruction_colors(instructioni,:), ...
-                    'LineWidth',1.5,'MarkerFaceColor', ...
-                    instruction_colors(instructioni,:))
-            end
-            xticks(1:numel(complexity_levels)); xticklabels(complexity_levels)
-            xlabel('Stimulus complexity'); ylabel('Explained variance (%)')
-            title("Movement "+movementi); grid on
-            if movementi == 1
-                legend(instruction_names,'Location','best')
+                xticks(1:numel(complexity_levels)); xticklabels(complexity_levels)
+                yline(1,':','Nonmetric baseline','HandleVisibility','off')
+                xlabel('Stimulus complexity'); ylabel('Metric / nonmetric prominence')
+                title(sprintf('Movement %d, %.2g x beat',movementi,meter(metri))); grid on
+                if movementi == 1 && metri == 1
+                    legend(instruction_names,'Location','best')
+                end
             end
         end
-        sgtitle(sprintf(['Participant Network %d prominence at 1 x beat ' ...
-            '(%.2f Hz)'],beat_prominence_component,beatProminenceFrequencyHz))
-        savefig(fig,fullfile(path_beat_prominence, ...
-            'BeatProminence_Complexity_Participants.fig'))
-        exportgraphics(fig,fullfile(path_beat_prominence, ...
-            'BeatProminence_Complexity_Participants.png'),'Resolution',200)
+        sgtitle(sprintf('Participant Network %d normalized metric prominence',prominence_component))
+        savefig(fig,fullfile(path_metric_prominence,'NetworkProminence_Complexity_Participants.fig'))
+        exportgraphics(fig,fullfile(path_metric_prominence, ...
+            'NetworkProminence_Complexity_Participants.png'),'Resolution',200)
     end
-    fprintf('BEAT PROMINENCE exported %d participant-condition rows.\n', ...
-        height(beatProminenceTable))
+    fprintf(['METRIC PROMINENCE exported %d participant-condition-meter rows ' ...
+        'and %d global rows.\n'],height(prominenceTable),height(globalProminenceTable))
 end
 
 
@@ -1771,13 +1867,15 @@ if run_blocks(6)
     statistics_script = fullfile(path_study,'EmpaticMirroring_Stats.R');
     statistics_input = fullfile(path_statistics,'OUT2R_AllComponents.csv');
     similarity_input = fullfile(path_statistics,'OUT2R_LandscapeSimilarity.csv');
-    beat_prominence_input = fullfile(path_statistics,'OUT2R_BeatProminence.csv');
+    prominence_input = fullfile(path_statistics,'OUT2R_NetworkProminence.csv');
+    global_prominence_input = fullfile(path_statistics,'OUT2R_GlobalMetricProminence.csv');
     statistics_output = fullfile(path_output,'06_Statistics_Results');
     [R_status,R_output] = system(sprintf([ ...
         'Rscript "%s" --overwrite --input="%s" ' ...
-        '--similarity-input="%s" --beat-prominence-input="%s" ' ...
+        '--similarity-input="%s" --prominence-input="%s" ' ...
+        '--global-prominence-input="%s" ' ...
         '--output="%s"'],statistics_script,statistics_input, ...
-        similarity_input,beat_prominence_input,statistics_output));
+        similarity_input,prominence_input,global_prominence_input,statistics_output));
     fprintf('%s\n',R_output)
     assert(R_status == 0,'R statistical modelling failed.')
 end

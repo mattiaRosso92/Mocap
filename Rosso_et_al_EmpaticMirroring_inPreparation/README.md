@@ -50,11 +50,15 @@ sections. The numbered analysis blocks are:
 6. **Mixed-effects modelling in R** - factorial models, diagnostics, simple
    effects, and corrected omnibus tables.
 
-Between Blocks 5 and 6, the independent **participant beat-prominence module**
-loads the existing core `FREQ` files and extracts Network 1's percentage of
-explained variance at exactly 1 x beat. It averages repeated trials within each
-participant-condition cell and never reruns network estimation. The module can
-be switched independently with `run_beat_prominence`.
+Between Blocks 5 and 6, the independent **participant metric-prominence
+module** loads the existing core `FREQ` files and extracts Network 1's
+percentage of explained variance at beat/4, beat/2, beat, and beat x 2. Each
+value is divided by the mean prominence across all nonmetric frequencies. A
+second global measure averages every metric level available in the spectrum
+(beat/4, beat/2, beat, beat x 2, x 3, and x 4) before applying the same
+normalization. Repeated trials are averaged within participant-condition cells,
+and network estimation is never rerun. The module can be switched independently
+with `run_metric_prominence`.
 
 A final unnumbered validation section can compare every numerical summary and
 statistical export with a supplied reference run.
@@ -145,17 +149,26 @@ The main exports are:
   containing spatial coordination and eight RQA measures with coverage QC;
 - `OUT2R_LandscapeSimilarity.csv`: Participant x factorial cell x Component,
   containing selected-component and H2-entropy landscape correlations;
-- `OUT2R_BeatProminence.csv`: Participant x factorial cell, containing
-  participant Network 1 prominence at 1 x beat as percentage explained
-  variance and the number of averaged repetitions.
+- `OUT2R_NetworkProminence.csv`: Participant x factorial cell x Meter,
+  containing raw participant Network 1 prominence, the common nonmetric
+  baseline, their ratio, its log, and the number of averaged repetitions;
+- `OUT2R_GlobalMetricProminence.csv`: Participant x factorial cell, containing
+  the mean across all metric levels in the spectrum, the nonmetric baseline,
+  their ratio, and its log.
 
 Landscape correlations are Fisher-z transformed only for statistical
 modelling; exported values remain correlations on their original scale.
 
-The focused beat-prominence model is
-`BeatProminencePercent ~ Complexity * Instruction * Movement + Version +
-(1 | Participant)`. Complexity pairwise contrasts and polynomial trends are
-reported within each Instruction x Movement combination with Holm correction.
+The network-prominence model uses the same `Meter` factor as the coordination
+and RQA outcomes:
+`LogMetricProminence ~ Instruction * Complexity * Version * Movement * Meter +
+(1 | Participant)`. Meter-specific models receive Bonferroni correction across
+the four metric levels. Complexity pairwise contrasts and linear/quadratic
+trends are reported within each Instruction x Movement x Meter combination
+with Holm correction. The global model omits Meter and uses
+`LogGlobalMetricProminence ~ Instruction * Complexity * Version * Movement +
+(1 | Participant)`. Figures back-transform estimated marginal means to the
+ratio scale, where 1 denotes equal metric and nonmetric prominence.
 
 ## Validated full run
 
