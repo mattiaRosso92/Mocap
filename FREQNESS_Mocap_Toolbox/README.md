@@ -12,6 +12,9 @@ belong in the study directories at the repository root.
   available participant-, visualization-, and coordination-level functions.
 - `FREQNESS_InterpolateGaps_Mocap`: standalone NaN-gap reconstruction and QC
   with output directly compatible with the `bad_segments` analysis option.
+- `FREQNESS_MetricProminence_Mocap`: component prominence at every available
+  or requested harmonic and subharmonic of a supplied or inferred anchor
+  frequency, normalized by the nonmetric network landscape.
 - `FREQNESS_Functions`: MATLAB implementations of the core, second-order, and
   third-order analyses.
 - `FREQNESS_ExampleScripts`: dataset-independent examples demonstrating the
@@ -52,6 +55,20 @@ effective dimensionality from the complete eigenspectrum and visualizes the
 effective number of frequency-specific body networks. Its visualization uses
 the same log2 frequency axis, shaded group SEM, and component palette as the
 network landscape.
+
+`FREQNESS_MetricProminence_Mocap` operates on the complete normalized
+eigenspectrum returned by network estimation. It reports level-specific and
+global metric prominence for every participant. These analysis-ready ratios
+are the first fields in its deliberately minimal `METER` output, followed only
+by the component, realized anchor, metric levels, and nearest frequencies
+needed to interpret them. When no metric levels are requested, all integer
+harmonics and reciprocal-integer subharmonics available within the analyzed
+frequency range are used. The global measure always covers that complete set,
+while explicitly requested levels are also excluded from the nonmetric
+baseline. Component 1 is used by default. An omitted anchor is inferred
+separately for each participant from the selected component's largest
+eigenvalue and produces a warning because this data-driven choice is
+exploratory rather than independent of the measured landscape.
 
 ## Filter widths
 

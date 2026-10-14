@@ -8,11 +8,12 @@
 %
 %  1) Participant-level network estimation
 %  2) Effective dimensionality of the bodily-network eigenspectrum
-%  3) Network-landscape and bodily-pattern visualization
-%  4) Network-landscape similarity across participants
-%  5) Phase-space temporal coordination across participants
-%  6) JRQA temporal coordination across participants (alternative)
-%  7) Spatial coordination across participants
+%  3) Metric prominence of a selected bodily network
+%  4) Network-landscape and bodily-pattern visualization
+%  5) Network-landscape similarity across participants
+%  6) Phase-space temporal coordination across participants
+%  7) JRQA temporal coordination across participants (alternative)
+%  8) Spatial coordination across participants
 %
 %  Place each dataset in a separate folder inside FREQNESS_Data. A dataset
 %  may be stored as one group-level .mat array or as one .mat file per
@@ -56,6 +57,7 @@ clc
 % Network estimation is always run because its output is required by the
 % second- and third-order functions.
 run_effect_dim  = true;
+run_metric_prominence = false;
 run_visualizer  = false;
 run_landscape_similarity = false;
 run_phase_rqa   = false;
@@ -100,7 +102,21 @@ effectdim_plot_all = false;
 
 
 % ------------------------------------------------------------------------
-% BLOCK #3: FREQNESS_Visualizer_Mocap
+% BLOCK #3: FREQNESS_MetricProminence_Mocap
+% ------------------------------------------------------------------------
+
+% Supply one anchor frequency for every participant, or leave empty to use
+% the most prominent frequency of the selected component with a warning.
+% Empty metric-level arrays use every harmonic and subharmonic available in
+% the analyzed frequency grid.
+metric_anchor_frex = [];
+metric_prominence_component = 1;
+metric_prominence_levels = [];
+metric_prominence_global_levels = [];
+
+
+% ------------------------------------------------------------------------
+% BLOCK #4: FREQNESS_Visualizer_Mocap
 % ------------------------------------------------------------------------
 
 % The current skeleton visualization supports the 22-marker configuration
@@ -132,7 +148,7 @@ patterns_bones = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10; ...
 
 
 % ------------------------------------------------------------------------
-% BLOCK #4: FREQNESS_LandscapeSimilarity
+% BLOCK #5: FREQNESS_LandscapeSimilarity
 % ------------------------------------------------------------------------
 
 % Leave the frequency range empty to use all frequencies. Otherwise, the
@@ -142,7 +158,7 @@ landscape_similarity_frequency_range = [];
 
 
 % ------------------------------------------------------------------------
-% BLOCK #5: FREQNESS_PhaseSpaceRQA_Mocap
+% BLOCK #6: FREQNESS_PhaseSpaceRQA_Mocap
 % ------------------------------------------------------------------------
 
 % target_frex may be one frequency reused for all participants or one value
@@ -169,7 +185,7 @@ phaserqa_animation_pause = 0.01;
 
 
 % ------------------------------------------------------------------------
-% BLOCK #6: FREQNESS_TimeCoord_Mocap (JRQA alternative)
+% BLOCK #7: FREQNESS_TimeCoord_Mocap (JRQA alternative)
 % ------------------------------------------------------------------------
 
 % Embedding settings determined before running temporal coordination.
@@ -182,7 +198,7 @@ timecoord_duration = [0.15 0.85];
 
 
 % ------------------------------------------------------------------------
-% BLOCK #7: FREQNESS_SpaceCoord_Mocap
+% BLOCK #8: FREQNESS_SpaceCoord_Mocap
 % ------------------------------------------------------------------------
 
 spacecoord_metric_levels = [0.25 0.5 1 2];
@@ -198,6 +214,7 @@ ndatasets = numel(allData);
 FREQ       = cell(ndatasets,1);
 H2         = cell(ndatasets,1);
 ED         = cell(ndatasets,1);
+METER      = cell(ndatasets,1);
 similarity_comp = cell(ndatasets,1);
 similarity_entropy = cell(ndatasets,1);
 FREQrqa    = cell(ndatasets,1);
@@ -227,6 +244,18 @@ for datai = 1:ndatasets
         this_frex = frex{datai};
     else
         this_frex = frex;
+    end
+
+    if run_metric_prominence
+        if iscell(metric_anchor_frex)
+            if datai > numel(metric_anchor_frex)
+                error('No metric anchor was provided for dataset %s.', ...
+                    dataLabels{datai});
+            end
+            this_metric_anchor_frex = metric_anchor_frex{datai};
+        else
+            this_metric_anchor_frex = metric_anchor_frex;
+        end
     end
 
     if run_phase_rqa || run_time_coord || run_space_coord %#ok<UNRCH>
@@ -292,7 +321,22 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #3: FREQNESS_Visualizer_Mocap
+    % BLOCK #3: FREQNESS_MetricProminence_Mocap
+    % =====================================================================
+
+    if run_metric_prominence
+
+        METER{datai} = FREQNESS_MetricProminence_Mocap( ...
+            FREQ{datai},this_metric_anchor_frex, ...
+            'component',metric_prominence_component, ...
+            'metric_levels',metric_prominence_levels, ...
+            'global_metric_levels',metric_prominence_global_levels);
+
+    end
+
+
+    %% ====================================================================
+    % BLOCK #4: FREQNESS_Visualizer_Mocap
     % =====================================================================
 
     if run_visualizer
@@ -332,7 +376,7 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #4: FREQNESS_LandscapeSimilarity
+    % BLOCK #5: FREQNESS_LandscapeSimilarity
     % =====================================================================
 
     if run_landscape_similarity
@@ -346,7 +390,7 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #5: FREQNESS_PhaseSpaceRQA_Mocap
+    % BLOCK #6: FREQNESS_PhaseSpaceRQA_Mocap
     % =====================================================================
 
     if run_phase_rqa %#ok<UNRCH>
@@ -373,7 +417,7 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #6: FREQNESS_TimeCoord_Mocap (JRQA alternative)
+    % BLOCK #7: FREQNESS_TimeCoord_Mocap (JRQA alternative)
     % =====================================================================
 
     if run_time_coord
@@ -398,7 +442,7 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #7: FREQNESS_SpaceCoord_Mocap
+    % BLOCK #8: FREQNESS_SpaceCoord_Mocap
     % =====================================================================
 
     if run_space_coord %#ok<UNRCH>
