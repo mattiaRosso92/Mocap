@@ -58,12 +58,15 @@ network landscape.
 
 `FREQNESS_MetricProminence_Mocap` operates on the complete normalized
 eigenspectrum returned by network estimation. It reports level-specific and
-global metric prominence for every participant. When no metric levels are
-requested, all integer harmonics and reciprocal-integer subharmonics available
-within the analyzed frequency range are used. The global measure always covers
-that complete set, while explicitly requested levels are also excluded from
-the nonmetric baseline. Component 1 is used by default. An omitted anchor is
-inferred separately for each participant from the selected component's largest
+global metric prominence for every participant. These analysis-ready ratios
+are the first fields in its deliberately minimal `METER` output, followed only
+by the component, realized anchor, metric levels, and nearest frequencies
+needed to interpret them. When no metric levels are requested, all integer
+harmonics and reciprocal-integer subharmonics available within the analyzed
+frequency range are used. The global measure always covers that complete set,
+while explicitly requested levels are also excluded from the nonmetric
+baseline. Component 1 is used by default. An omitted anchor is inferred
+separately for each participant from the selected component's largest
 eigenvalue and produces a warning because this data-driven choice is
 exploratory rather than independent of the measured landscape.
 

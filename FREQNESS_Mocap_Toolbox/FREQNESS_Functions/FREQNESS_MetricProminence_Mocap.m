@@ -11,7 +11,7 @@ function METER = FREQNESS_MetricProminence_Mocap(FREQ,anchor_frex,varargin)
 %  nonmetric frequencies. A global measure averages every available metric
 %  level before applying the same normalization. Requested frequencies are
 %  matched to their nearest neighbors in FREQ.frex, and the realized
-%  frequencies and indices are retained in the output.
+%  frequencies are retained in the output.
 %
 % ------------------------------------------------------------------------
 %  INPUT ARGUMENTS:
@@ -42,10 +42,28 @@ function METER = FREQNESS_MetricProminence_Mocap(FREQ,anchor_frex,varargin)
 % ------------------------------------------------------------------------
 %  OUTPUT ARGUMENT:
 % ------------------------------------------------------------------------
-%  - METER : structure containing the selected component and anchor,
-%            nonmetric frequencies and baseline, the global metric measure,
-%            and the requested level-specific prominence measures. Numeric
-%            level outputs are [nLevels x nParticipants].
+%  - METER : structure containing only the outcome measures and the
+%            information required to interpret them:
+%          • GlobalProminence   -> mean prominence across the global metric
+%                                   set, divided by the mean prominence at
+%                                   all nonmetric frequencies
+%                                   [1 x nParticipants]
+%          • MetricProminence   -> prominence at each requested metric level,
+%                                   divided by the same nonmetric mean
+%                                   [nLevels x nParticipants]
+%          • Component          -> component used for the computation
+%          • AnchorFrequency    -> frequency-bin value used as the anchor
+%                                   [1 x nParticipants]
+%          • AnchorInferred     -> true when the anchor was inferred from
+%                                   the selected component's spectral peak
+%          • MetricLevels       -> multipliers represented by the rows of
+%                                   MetricProminence [1 x nLevels]
+%          • MetricFrequencies  -> nearest frequencies used for those levels
+%                                   [nLevels x nParticipants]
+%          • GlobalMetricLevels -> multipliers included in GlobalProminence
+%                                    [1 x nGlobalLevels]
+%          • GlobalFrequencies -> nearest frequencies used for the global set
+%                                   [nGlobalLevels x nParticipants]
 %
 % ------------------------------------------------------------------------
 %  AUTHORS:
@@ -138,6 +156,7 @@ validate_metric_levels( ...
 %% Select or infer the anchor frequency
 
 if isempty(anchor_frex)
+    anchor_inferred = true;
     anchor_frex = zeros(1,nsubs);
     anchor_indices = zeros(1,nsubs);
     for subi = 1:nsubs
@@ -146,13 +165,12 @@ if isempty(anchor_frex)
         anchor_frex(subi) = ...
             frex_by_participant(anchor_indices(subi),subi);
     end
-    anchor_source = 'inferred-from-peak';
     warning('FREQNESS:MetricProminence:InferredAnchor', ...
         ['No anchor frequency was supplied. The most prominent frequency ' ...
         'of component #%d was used for each participant: %s Hz.'], ...
         which_comp,strjoin(string(anchor_frex),', '));
-    requested_anchor = [];
 else
+    anchor_inferred = false;
     if ~isnumeric(anchor_frex) || ~isreal(anchor_frex) || ...
             ~isvector(anchor_frex) || ...
             ~ismember(numel(anchor_frex),[1 nsubs]) || ...
@@ -160,12 +178,10 @@ else
         error(['anchor_frex must be empty, one positive finite scalar, or ' ...
             'contain one positive finite frequency per participant.']);
     end
-    requested_anchor = reshape(anchor_frex,1,[]);
-    anchor_frex = requested_anchor;
+    anchor_frex = reshape(anchor_frex,1,[]);
     if isscalar(anchor_frex)
         anchor_frex = repmat(anchor_frex,1,nsubs);
     end
-    anchor_source = 'supplied';
     anchor_indices = zeros(1,nsubs);
     for subi = 1:nsubs
         if anchor_frex(subi) < frex_by_participant(1,subi) || ...
@@ -223,7 +239,6 @@ if nnonmetric < 1
 end
 
 nonmetric_indices = zeros(nnonmetric,nsubs);
-nonmetric_frex = zeros(nnonmetric,nsubs);
 nonmetric_baseline = zeros(1,nsubs);
 raw_prominence = zeros(nlevels,nsubs);
 global_mean = zeros(1,nsubs);
@@ -231,8 +246,6 @@ global_mean = zeros(1,nsubs);
 for subi = 1:nsubs
     nonmetric_indices(:,subi) = setdiff( ...
         (1:nfrex)',global_metric_indices(:,subi),'stable');
-    nonmetric_frex(:,subi) = frex_by_participant( ...
-        nonmetric_indices(:,subi),subi);
     nonmetric_baseline(subi) = mean( ...
         landscape(nonmetric_indices(:,subi),subi));
     raw_prominence(:,subi) = landscape(metric_indices(:,subi),subi);
@@ -247,37 +260,22 @@ end
 prominence_ratio = raw_prominence./nonmetric_baseline;
 global_prominence_ratio = global_mean./nonmetric_baseline;
 if any(prominence_ratio <= 0,'all') || any(global_prominence_ratio <= 0)
-    error('Metric prominence ratios must be positive for log transformation.');
+    error('Metric prominence ratios must be positive.');
 end
 
 
 %% Assemble output structure
 
-METER = [];
+METER = struct;
+METER.GlobalProminence = global_prominence_ratio;
+METER.MetricProminence = prominence_ratio;
 METER.Component = which_comp;
-METER.Anchor.RequestedFrequency = requested_anchor;
-METER.Anchor.SelectedFrequency = selected_anchor_frex;
-METER.Anchor.SelectedIndex = anchor_indices;
-METER.Anchor.Source = anchor_source;
-METER.AvailableMetricLevels = available_metric_levels;
-
-METER.NonMetric.Frequencies = nonmetric_frex;
-METER.NonMetric.Indices = nonmetric_indices;
-METER.NonMetric.MeanProminencePercent = nonmetric_baseline;
-
-METER.Global.MetricLevels = global_metric_levels;
-METER.Global.SelectedFrequencies = global_metric_frex;
-METER.Global.SelectedIndices = global_metric_indices;
-METER.Global.MeanProminencePercent = global_mean;
-METER.Global.ProminenceRatio = global_prominence_ratio;
-METER.Global.LogProminenceRatio = log(global_prominence_ratio);
-
-METER.Levels.MetricLevels = metric_levels;
-METER.Levels.SelectedFrequencies = metric_frex;
-METER.Levels.SelectedIndices = metric_indices;
-METER.Levels.RawProminencePercent = raw_prominence;
-METER.Levels.ProminenceRatio = prominence_ratio;
-METER.Levels.LogProminenceRatio = log(prominence_ratio);
+METER.AnchorFrequency = selected_anchor_frex;
+METER.AnchorInferred = anchor_inferred;
+METER.MetricLevels = metric_levels;
+METER.MetricFrequencies = metric_frex;
+METER.GlobalMetricLevels = global_metric_levels;
+METER.GlobalFrequencies = global_metric_frex;
 
 fprintf(['\nFREQNESS Metric Prominence: computed component #%d at %d ' ...
     'metric levels for %d participants.\n'],which_comp,nlevels,nsubs);

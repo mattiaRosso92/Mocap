@@ -28,19 +28,18 @@ expectedLevels = [.25 .5 1 2 3 4];
 expectedRaw = [20 30 40 50 35 15]';
 expectedBaseline = 25;
 
+verifyEqual(testCase,fieldnames(METER),{ ...
+    'GlobalProminence';'MetricProminence';'Component'; ...
+    'AnchorFrequency';'AnchorInferred';'MetricLevels'; ...
+    'MetricFrequencies';'GlobalMetricLevels';'GlobalFrequencies'});
 verifyEqual(testCase,METER.Component,1);
-verifyEqual(testCase,METER.Levels.MetricLevels,expectedLevels);
-verifyEqual(testCase,METER.Global.MetricLevels,expectedLevels);
-verifyEqual(testCase,METER.Levels.RawProminencePercent,expectedRaw);
-verifyEqual(testCase,METER.NonMetric.MeanProminencePercent,expectedBaseline);
-verifyEqual(testCase,METER.Levels.ProminenceRatio, ...
+verifyEqual(testCase,METER.MetricLevels,expectedLevels);
+verifyEqual(testCase,METER.GlobalMetricLevels,expectedLevels);
+verifyEqual(testCase,METER.MetricProminence, ...
     expectedRaw/expectedBaseline,'AbsTol',1e-12);
-verifyEqual(testCase,METER.Global.MeanProminencePercent, ...
-    mean(expectedRaw),'AbsTol',1e-12);
-verifyEqual(testCase,METER.Global.ProminenceRatio, ...
+verifyEqual(testCase,METER.GlobalProminence, ...
     mean(expectedRaw)/expectedBaseline,'AbsTol',1e-12);
-verifyEqual(testCase,METER.Global.LogProminenceRatio, ...
-    log(METER.Global.ProminenceRatio),'AbsTol',1e-12);
+verifyFalse(testCase,METER.AnchorInferred);
 
 end
 
@@ -53,9 +52,8 @@ FREQ = syntheticFREQ(first,frex);
 
 METER = FREQNESS_MetricProminence_Mocap(FREQ,1);
 
-verifyEqual(testCase,METER.AvailableMetricLevels,[1/3 .5 1 2 3], ...
+verifyEqual(testCase,METER.MetricLevels,[1/3 .5 1 2 3], ...
     'AbsTol',1e-12);
-verifyEqual(testCase,METER.NonMetric.Frequencies,1.5);
 
 end
 
@@ -70,11 +68,9 @@ FREQ = syntheticFREQ(first,frex);
 METER = FREQNESS_MetricProminence_Mocap(FREQ,1, ...
     'metric_levels',[.5 1 2]);
 
-verifyEqual(testCase,METER.Levels.MetricLevels,[.5 1 2]);
-verifyEqual(testCase,METER.Global.MetricLevels,[.25 .5 1 2 3 4]);
-verifyEqual(testCase,METER.NonMetric.Frequencies,1.5);
-verifyEqual(testCase,METER.Levels.RawProminencePercent,[30 40 50]');
-verifyEqual(testCase,METER.Levels.ProminenceRatio,[30 40 50]'/25, ...
+verifyEqual(testCase,METER.MetricLevels,[.5 1 2]);
+verifyEqual(testCase,METER.GlobalMetricLevels,[.25 .5 1 2 3 4]);
+verifyEqual(testCase,METER.MetricProminence,[30 40 50]'/25, ...
     'AbsTol',1e-12);
 
 end
@@ -91,9 +87,11 @@ METER = FREQNESS_MetricProminence_Mocap(FREQ,1, ...
     'metric_levels',[.25 2], ...
     'global_metric_levels',[.5 1]);
 
-verifyEqual(testCase,METER.Global.MetricLevels,[.25 .5 1 2]);
-verifyEqual(testCase,METER.NonMetric.Frequencies,[1.5;3;4]);
-verifyEqual(testCase,METER.NonMetric.MeanProminencePercent,25);
+verifyEqual(testCase,METER.GlobalMetricLevels,[.25 .5 1 2]);
+verifyEqual(testCase,METER.MetricProminence,[20;50]/25, ...
+    'AbsTol',1e-12);
+verifyEqual(testCase,METER.GlobalProminence,35/25, ...
+    'AbsTol',1e-12);
 
 end
 
@@ -111,9 +109,7 @@ METER = FREQNESS_MetricProminence_Mocap(FREQ,1, ...
 
 expectedBaseline = mean([50 40 45 35 55]);
 verifyEqual(testCase,METER.Component,2);
-verifyEqual(testCase,METER.Levels.RawProminencePercent,[30;25]);
-verifyEqual(testCase,METER.NonMetric.MeanProminencePercent,expectedBaseline);
-verifyEqual(testCase,METER.Levels.ProminenceRatio, ...
+verifyEqual(testCase,METER.MetricProminence, ...
     [30;25]/expectedBaseline,'AbsTol',1e-12);
 
 end
@@ -129,11 +125,13 @@ FREQ = syntheticFREQ(cat(3,first,second),frex);
 METER = FREQNESS_MetricProminence_Mocap(FREQ,[1 1], ...
     'metric_levels',[.5 1 2]);
 
-verifySize(testCase,METER.Levels.RawProminencePercent,[3 2]);
-verifySize(testCase,METER.Global.ProminenceRatio,[1 2]);
-verifyEqual(testCase,METER.Levels.RawProminencePercent, ...
-    [20 30;40 45;50 40]);
-verifyEqual(testCase,METER.Anchor.SelectedFrequency,[1 1]);
+verifySize(testCase,METER.MetricProminence,[3 2]);
+verifySize(testCase,METER.GlobalProminence,[1 2]);
+verifyEqual(testCase,METER.MetricProminence, ...
+    [.8 1.5;1.6 2.25;2 2],'AbsTol',1e-12);
+verifyEqual(testCase,METER.GlobalProminence,[1.4 1.75], ...
+    'AbsTol',1e-12);
+verifyEqual(testCase,METER.AnchorFrequency,[1 1]);
 
 end
 
@@ -148,9 +146,9 @@ FREQ = syntheticFREQ(cat(3,first,second),frex);
 METER = FREQNESS_MetricProminence_Mocap(FREQ,[1 2], ...
     'metric_levels',[.5 1 2]);
 
-verifyEqual(testCase,METER.Levels.SelectedFrequencies, ...
+verifyEqual(testCase,METER.MetricFrequencies, ...
     [.5 1;1 2;2 4]);
-verifyEqual(testCase,METER.Anchor.SelectedFrequency,[1 2]);
+verifyEqual(testCase,METER.AnchorFrequency,[1 2]);
 
 end
 
@@ -166,10 +164,8 @@ verifyWarning(testCase,@() FREQNESS_MetricProminence_Mocap(FREQ), ...
     'FREQNESS:MetricProminence:InferredAnchor');
 METER = callWithWarningDisabled(FREQ);
 
-verifyEqual(testCase,METER.Anchor.SelectedFrequency,2);
-verifyEqual(testCase,METER.Anchor.SelectedIndex,5);
-verifyEqual(testCase,METER.Anchor.Source,'inferred-from-peak');
-verifyEmpty(testCase,METER.Anchor.RequestedFrequency);
+verifyEqual(testCase,METER.AnchorFrequency,2);
+verifyTrue(testCase,METER.AnchorInferred);
 
 end
 
@@ -184,8 +180,8 @@ METER = FREQNESS_MetricProminence_Mocap(FREQ,1, ...
     'metric_levels',[1 2], ...
     'global_metric_levels',[1 2]);
 
-verifyEqual(testCase,METER.Anchor.SelectedFrequency,.9);
-verifyEqual(testCase,METER.Levels.SelectedFrequencies,[.9;1.9]);
+verifyEqual(testCase,METER.AnchorFrequency,.9);
+verifyEqual(testCase,METER.MetricFrequencies,[.9;1.9]);
 
 end
 
