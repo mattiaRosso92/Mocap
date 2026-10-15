@@ -42,8 +42,10 @@ The MATLAB toolbox currently contains three levels of analysis:
 3. `FREQNESS_PhaseSpaceRQA_Mocap`, `FREQNESS_TimeCoord_Mocap`, and
    `FREQNESS_SpaceCoord_Mocap` provide third-order temporal and spatial
    coordination analyses across multiple participants. Phase-space RQA is
-   the embedding-free temporal alternative; JRQA remains available for
-   direct methodological comparison.
+   the embedding-free temporal alternative. JRQA supports a validated route
+   with explicit anti-alias filtering, delay-embedding, recurrence threshold,
+   Theiler exclusion, and complete provenance, while its former behavior is
+   retained through an explicit legacy-compatible option.
 
 ## Reference test case
 

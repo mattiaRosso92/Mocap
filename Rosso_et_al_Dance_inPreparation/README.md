@@ -5,11 +5,32 @@ study-specific preprocessing, orchestration, statistical analysis, and figure
 generation in this directory; reusable functionality belongs in
 `FREQNESS_Mocap_Toolbox`.
 
-The Dance pipeline retains JRQA in its existing group-analysis section and
-runs participant-dimensional phase-space RQA in the immediately following,
-separate section. This keeps the two temporal-coordination formulations
-independent while matching component, frequency, duration, filtering, and
-downsampling settings for comparison.
+The Dance pipeline retains the historical JRQA outputs and the separate
+participant-dimensional phase-space RQA implementation. Corrected JRQA is run
+by `FREQNESS_DyadicDance_JRQA_Validation.m`, which consumes the completed core
+outputs without modifying them or either earlier temporal analysis.
+
+## Validated JRQA reanalysis
+
+The validation workflow applies the manuscript's physical 10 Hz anti-alias
+filter at the original 250 Hz sampling rate before downsampling to 25 Hz. It
+estimates delay from the first local minimum of mutual information, selects
+the first embedding dimension meeting the false-nearest-neighbour criterion,
+and derives component-specific global parameters from the central 15--85% of
+each trial.
+
+Two labelled specifications are written under
+`03_Coordination_JRQA_Validated`: `CorrectedManuscript` uses the stated 10%
+phase-space-radius method, while `Robustness` fixes each participant's marginal
+recurrence rate at 5% and excludes the full embedding window around the
+identity. Trial-level outputs, component summaries, parameter provenance, and
+R-ready workbooks are kept separate from all historical results.
+
+Block 5 additionally runs a reproducible circular-shift control on a
+predefined stratified subset. It preserves each partner's recurrence geometry
+while disrupting between-participant temporal alignment, and saves observed,
+null, empirical-p, and standardized RR/DET results under
+`03_Coordination_JRQA_Validated/SurrogateValidation`.
 
 ## Filter-width calibration
 
@@ -48,3 +69,13 @@ comparisons, diagnostics, and four-level Bonferroni correction to both temporal
 methods. Phase-space results are kept separately in
 `FREQNESS_Mocap_Stats_Results/PhaseSpaceRQA` so existing JRQA results are not
 overwritten.
+
+Validated JRQA workbooks are stored in
+`06_Statistics_R/JRQA_Validated/<specification>`. By default,
+`FREQNESS_Mocap_Stats.R` analyses only these new workbooks and saves model
+outputs beneath
+`FREQNESS_Mocap_Stats_Results/JRQA_Validated/<specification>`, so rerunning the
+validation cannot replace earlier JRQA or phase-space statistics.
+Method-comparison and circular-shift summaries are saved alongside these
+outputs under `JRQA_Validated/Method_Comparison` and
+`JRQA_Validated/Surrogate_Validation`, respectively.
