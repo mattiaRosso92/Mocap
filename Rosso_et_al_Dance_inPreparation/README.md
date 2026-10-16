@@ -10,6 +10,27 @@ participant-dimensional phase-space RQA implementation. Corrected JRQA is run
 by `FREQNESS_DyadicDance_JRQA_Validation.m`, which consumes the completed core
 outputs without modifying them or either earlier temporal analysis.
 
+## Recovered-dyad Dance pipeline
+
+The main Dance script includes all 35 dyads. It preserves dyad 13's recorded
+condition labels (7/8/9/8 trials) and excludes only dyad 32's original trial 32,
+whose two participant files contain no recorded coordinates. After the existing
+last-marker removal, the other 63 recordings from these dyads have complete
+coordinates and matching 15,000-sample participant lengths. No gap reconstruction
+or condition relabelling is needed for those recordings.
+
+`CFG.common.excluded_trials` uses original recording IDs. The shared
+`trial_indices` and `trial_counts` determine the loops in all blocks. Unused
+array slots are NaN; trial averages omit these slots, retaining the dyad as the
+statistical unit. Original trial IDs remain saved with core outputs. Recovered
+analyses use a separate `<filter tag>_recovered_dyads` results folder, preserving
+earlier group summaries. Run Block 0 before resuming a later block.
+
+`CFG.block4.standardize` retains the existing true default; false selects
+non-standardised phase-space RQA and separate numerical/statistical output
+folders. The radius remains 10% of maximum phase-space distance. These changes
+do not alter toolbox functions or the separate validated-JRQA script.
+
 ## Validated JRQA reanalysis
 
 The validation workflow applies the manuscript's physical 10 Hz anti-alias
@@ -57,7 +78,7 @@ Every calibration and filter combination has a separate results subdirectory:
 
 ```text
 Dance_Data/FREQNESS_Results_Rosso_et_al_inPreparation/
-`-- <physical|legacy>_<logarithmic|linear>/
+`-- <physical|legacy>_<logarithmic|linear>_recovered_dyads/
     |-- 01_Core/
     |-- 02_Landscape/
     |-- 03_Coordination/
