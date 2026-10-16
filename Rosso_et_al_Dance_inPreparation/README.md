@@ -26,10 +26,39 @@ statistical unit. Original trial IDs remain saved with core outputs. Recovered
 analyses use a separate `<filter tag>_recovered_dyads` results folder, preserving
 earlier group summaries. Run Block 0 before resuming a later block.
 
-`CFG.block4.standardize` retains the existing true default; false selects
+`CFG.block5.standardize` retains the existing true default; false selects
 non-standardised phase-space RQA and separate numerical/statistical output
 folders. The radius remains 10% of maximum phase-space distance. These changes
 do not alter toolbox functions or the separate validated-JRQA script.
+
+## Metric prominence (BLOCK 4)
+
+The main pipeline now runs coordination in Block 3, metric prominence in
+Block 4, phase-space RQA in Block 5, group visualization in Block 6, and
+statistical exports in Block 7. Existing output folder names are preserved
+to avoid invalidating completed analyses; prominence uses `04_MetricProminence`.
+Run Block 0, then Block 4 independently. Component 1 is independently configurable
+in `CFG.block4`. `reuse_core_path` optionally points to a scientifically matching
+completed core folder; only missing core files are taken from it. Do not use
+outputs from another filter calibration or frequency grid.
+
+`FREQNESS_MetricProminence_Mocap` uses each participant's song beat as anchor,
+returns beat/4, beat/2, beat and 2xbeat, and preserves its default Global metric
+set (all available harmonics/subharmonics). All ratios share the nonmetric
+baseline. On the Dance grid the automatic Global set is beat/8, beat/4,
+beat/3, beat/2, beat, 2x, 3x and 4xbeat; beat/3 uses the nearest 3/8xbeat bin.
+The four requested meter frequencies are represented exactly.
+Participant ratios are averaged within each trial, then trials are
+averaged within dyad/condition. This is individual prominence averaged within
+dyad, not a coupling measure. Individual outputs and realized frequencies are
+retained in each trial file, with a compact summary and independent CSV export.
+
+Run `Rscript Rosso_et_al_Dance_inPreparation/FREQNESS_Mocap_MetricProminence_Stats.R`
+from the repository, or pass an input CSV and new output directory as arguments.
+It fits five log-ratio Visual x Music models with a random dyad intercept,
+uses Holm correction across all five outcomes separately for each effect,
+and saves exactly five original-scale condition plots plus model tables and
+residual diagnostics. Existing R output directories are never overwritten.
 
 ## Validated JRQA reanalysis
 
@@ -82,6 +111,7 @@ Dance_Data/FREQNESS_Results_Rosso_et_al_inPreparation/
     |-- 01_Core/
     |-- 02_Landscape/
     |-- 03_Coordination/
+    |-- 04_MetricProminence/
     |-- 04_PhaseSpaceRQA/
     |-- 05_Group/
     `-- 06_Statistics_R/
@@ -94,7 +124,7 @@ Gaussian filter widths.
 
 ## Statistical outputs
 
-BLOCK 6 retains the established JRQA and spatial-similarity workbooks in
+BLOCK 7 retains the established JRQA and spatial-similarity workbooks in
 `06_Statistics_R` and exports participant-dimensional phase-space RR and DET
 to `06_Statistics_R/PhaseSpaceRQA`. `FREQNESS_Mocap_Stats.R` applies the same
 trial averaging, natural-log transformation, mixed-effects models, polynomial
