@@ -59,6 +59,12 @@ statistics_input_path <- file.path(results_root, "06_Statistics_R")
 # explicitly for a deliberate reanalysis.
 run_established_methods <- FALSE
 analysis_methods <- list(
+  FixedDyadRadiusJRQA = list(
+    input_path = file.path(
+      statistics_input_path, "JRQA_Validated", "FixedDyadRadius"
+    ),
+    output_subfolder = file.path("JRQA_Validated", "FixedDyadRadius")
+  ),
   CorrectedManuscriptJRQA = list(
     input_path = file.path(
       statistics_input_path, "JRQA_Validated", "CorrectedManuscript"
@@ -70,6 +76,12 @@ analysis_methods <- list(
       statistics_input_path, "JRQA_Validated", "Robustness"
     ),
     output_subfolder = file.path("JRQA_Validated", "Robustness")
+  ),
+  FaithfulAdaptiveMaxJRQA = list(
+    input_path = file.path(
+      statistics_input_path, "JRQA_Validated", "FaithfulAdaptiveMax"
+    ),
+    output_subfolder = file.path("JRQA_Validated", "FaithfulAdaptiveMax")
   )
 )
 if (run_established_methods) {
@@ -81,6 +93,20 @@ if (run_established_methods) {
     input_path = file.path(statistics_input_path, "PhaseSpaceRQA"),
     output_subfolder = "PhaseSpaceRQA"
   )
+}
+
+# Fit the primary method by default, retaining completed sensitivity outputs.
+# Set a comma-separated list to fit other methods, or an empty string for all.
+requested_methods <- Sys.getenv(
+  "FREQNESS_STATS_METHODS", unset = "FixedDyadRadiusJRQA"
+)
+if (nzchar(requested_methods)) {
+  requested_methods <- trimws(strsplit(requested_methods, ",")[[1]])
+  unknown_methods <- setdiff(requested_methods, names(analysis_methods))
+  if (length(unknown_methods) > 0) {
+    stop("Unknown requested methods: ", paste(unknown_methods, collapse = ", "))
+  }
+  analysis_methods <- analysis_methods[requested_methods]
 }
 
 # One main statistics folder beside FREQNESS_Results_.... Existing JRQA
@@ -519,7 +545,8 @@ for (method in names(analysis_methods)) {
     stop(
       "No ", method, " component workbooks were found in ",
       method_input_path,
-      ". Run BLOCK 6 in FREQNESS_DyadicDance_Mocap.m first."
+      ". Run the corresponding MATLAB statistical export block first " ,
+      "(BLOCK 4 for the JRQA validation pipeline)."
     )
   }
   components <- sort(unique(as.integer(sub(
@@ -563,23 +590,23 @@ for (method in names(analysis_methods)) {
 # Legacy versus validated JRQA comparison -------------------------------------
 
 comparison_output_root <- file.path(
-  output_root, "JRQA_Validated", "Method_Comparison"
+  output_root, "JRQA_Validated", "Method_Comparison_FixedDyadRadius"
 )
 dir.create(comparison_output_root, recursive = TRUE, showWarnings = FALSE)
 
 comparison_inputs <- list(
   Legacy = statistics_input_path,
-  CorrectedManuscript = file.path(
-    statistics_input_path, "JRQA_Validated", "CorrectedManuscript"
+  FaithfulAdaptiveMax = file.path(
+    statistics_input_path, "JRQA_Validated", "FaithfulAdaptiveMax"
   ),
-  Robustness = file.path(
-    statistics_input_path, "JRQA_Validated", "Robustness"
+  FixedDyadRadius = file.path(
+    statistics_input_path, "JRQA_Validated", "FixedDyadRadius"
   )
 )
 
 validated_components <- sort(unique(as.integer(sub(
   "^OUT2R_Comp#([0-9]+)\\.xlsx$", "\\1",
-  list.files(comparison_inputs$CorrectedManuscript, pattern = "^OUT2R_Comp#")
+  list.files(comparison_inputs$FixedDyadRadius, pattern = "^OUT2R_Comp#")
 ))))
 
 for (component in validated_components) {
@@ -633,7 +660,9 @@ for (component in validated_components) {
       scale_color_manual(values = c(
         Legacy = "#777777",
         CorrectedManuscript = "#006D77",
-        Robustness = "#D97706"
+        Robustness = "#D97706",
+        FaithfulAdaptiveMax = "#003399",
+        FixedDyadRadius = "#007C83"
       )) +
       labs(
         title = paste("JRQA method comparison for", dv),
@@ -688,7 +717,9 @@ for (component in validated_components) {
       facet_grid(Method ~ Meter, scales = "free") +
       scale_color_manual(values = c(
         CorrectedManuscript = "#006D77",
-        Robustness = "#D97706"
+        Robustness = "#D97706",
+        FaithfulAdaptiveMax = "#003399",
+        FixedDyadRadius = "#007C83"
       )) +
       labs(
         title = paste("Validated versus legacy", dv),
@@ -712,14 +743,19 @@ for (component in validated_components) {
 # Circular-shift coupling validation -----------------------------------------
 
 surrogate_input_root <- file.path(
-  results_root, "03_Coordination_JRQA_Validated", "SurrogateValidation"
+  results_root, "03_Coordination_JRQA_Validated", "SurrogateValidation",
+  "FixedDyadRadius"
 )
 surrogate_output_root <- file.path(
-  output_root, "JRQA_Validated", "Surrogate_Validation"
+  output_root, "JRQA_Validated", "Surrogate_Validation_FixedDyadRadius"
 )
 dir.create(surrogate_output_root, recursive = TRUE, showWarnings = FALSE)
 
-for (component in validated_components) {
+run_surrogate_statistics <- tolower(Sys.getenv(
+  "FREQNESS_RUN_SURROGATE_STATS", unset = "true"
+)) != "false"
+
+if (run_surrogate_statistics) for (component in validated_components) {
   input_file <- file.path(
     surrogate_input_root,
     paste0("Component_", component),
@@ -765,16 +801,38 @@ for (component in validated_components) {
     row.names = FALSE
   )
 
+  # Exploratory group test: dyad is the independent sampling unit, not each
+  # condition/meter case. These p-values are unadjusted across outcomes.
+  group_tests <- bind_rows(lapply(c("RR", "DET"), function(outcome) {
+    this_data <- surrogate_long %>% filter(Outcome == outcome) %>%
+      mutate(Delta = Observed - NullMean, Dyad = factor(Dyad))
+    model <- lmer(Delta ~ 1 + (1 | Dyad), data = this_data)
+    coefficient <- coef(summary(model))[1, ]
+    data.frame(
+      Outcome = outcome, NDyads = nlevels(this_data$Dyad),
+      NCases = nrow(this_data), MeanDifference = coefficient["Estimate"],
+      SE = coefficient["Std. Error"], DF = coefficient["df"],
+      T = coefficient["t value"], PValue = coefficient["Pr(>|t|)"],
+      PositiveCases = sum(this_data$Delta > 0),
+      EmpiricalPBelow05 = sum(this_data$PValue <= 0.05)
+    )
+  }))
+  write.csv(group_tests, file.path(component_output,
+    "Surrogate_Group_Tests_Exploratory.csv"), row.names = FALSE)
+
   value_long <- bind_rows(
     surrogate_long %>% transmute(
-      Outcome, MeterIndex, MetricLevel, Reference = "Observed", Value = Observed
+      Dyad, Outcome, MeterIndex, MetricLevel,
+      Reference = "Observed", Value = Observed
     ),
     surrogate_long %>% transmute(
-      Outcome, MeterIndex, MetricLevel,
+      Dyad, Outcome, MeterIndex, MetricLevel,
       Reference = "Circular-shift null", Value = NullMean
     )
   )
   value_summary <- value_long %>%
+    group_by(Dyad, Outcome, MeterIndex, MetricLevel, Reference) %>%
+    summarise(Value = mean(Value), .groups = "drop") %>%
     group_by(Outcome, MeterIndex, MetricLevel, Reference) %>%
     summarise(
       Mean = mean(Value),
@@ -800,10 +858,10 @@ for (component in validated_components) {
       "Observed" = "#006D77", "Circular-shift null" = "#A0A0A0"
     )) +
     labs(
-      title = "Observed JRQA exceeds circular-shift controls",
+      title = "Observed JRQA and circular-shift controls",
       subtitle = paste(
         "Component", component,
-        "| robustness embedding | mean ± SEM across sampled cases"
+        "| fixed dyad radius | mean ± SEM across sampled dyads"
       ),
       x = "Metric level relative to beat", y = "Value", color = NULL
     ) +

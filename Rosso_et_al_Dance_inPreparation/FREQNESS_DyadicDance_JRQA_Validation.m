@@ -30,6 +30,8 @@ CFG.target_srate = 25;
 CFG.lowpass_cutoff = 10;
 CFG.filter_order = 4;
 CFG.standardize = true;
+% Normalization is performed inside the toolbox, after filtering and cropping.
+CFG.primary_specification = 'FixedDyadRadius';
 CFG.maximum_lag = 20;
 CFG.maximum_dimension = 5;
 CFG.fnn_threshold = 0.10;
@@ -90,6 +92,7 @@ for componenti = 1:numel(CFG.components)
     if isfile(parameter_file) && ~CFG.overwrite_flag
         loaded_parameters = load(parameter_file,'ParameterEstimates');
         ParameterEstimates = loaded_parameters.ParameterEstimates;
+        parameter_update_flag = false;
     else
         parameter_size = [CFG.nsubs CFG.ndyads CFG.nconds ...
             nmeters CFG.ntrials];
@@ -103,9 +106,11 @@ for componenti = 1:numel(CFG.components)
             'component',which_comp, ...
             'complete',false, ...
             'version','validated-v1');
+        parameter_update_flag = true;
     end
 
     for condi = 1:CFG.nconds
+        condition_update_flag = false;
         for dyadi = CFG.list_dyads
             fprintf(['Parameter estimation: Component %d, Condition %d, ' ...
                 'Dyad %d\n'],which_comp,condi,dyadi);
@@ -153,11 +158,15 @@ for componenti = 1:numel(CFG.components)
                 ParameterEstimates.selected_frequencies( ...
                     :,dyadi,condi,:,triali) = reshape( ...
                     this_parameters.SelectedFrequencies,destination);
+                parameter_update_flag = true;
+                condition_update_flag = true;
             end
         end
 
         % A condition-level checkpoint makes this expensive stage resumable.
-        save(parameter_file,'ParameterEstimates','CFG','-v7.3')
+        if condition_update_flag
+            save(parameter_file,'ParameterEstimates','CFG','-v7.3')
+        end
     end
 
     ParameterEstimates.complete = all(isfinite( ...
@@ -168,7 +177,9 @@ for componenti = 1:numel(CFG.components)
         :,CFG.list_dyads,:,:,:)),'all');
     assert(ParameterEstimates.complete, ...
         'Parameter estimation is incomplete for Component %d.',which_comp);
-    save(parameter_file,'ParameterEstimates','CFG','-v7.3')
+    if parameter_update_flag || ~isfile(parameter_file)
+        save(parameter_file,'ParameterEstimates','CFG','-v7.3')
+    end
 
 
     %% BLOCK 2 - FIXED COMPONENT-LEVEL PARAMETER SPECIFICATIONS
@@ -199,20 +210,36 @@ for componenti = 1:numel(CFG.components)
     RobustJRQA.Component = which_comp;
     RobustJRQA.Version = 'validated-v1-robustness';
 
+    FaithfulAdaptiveMaxJRQA = struct();
+    FaithfulAdaptiveMaxJRQA.tau = ManuscriptJRQA.tau;
+    FaithfulAdaptiveMaxJRQA.m = ManuscriptJRQA.m;
+    FaithfulAdaptiveMaxJRQA.ps = [];
+    FaithfulAdaptiveMaxJRQA.RadiusFraction = CFG.radius_fraction;
+    FaithfulAdaptiveMaxJRQA.Aggregation = ...
+        'manuscript_group_embedding_with_trial_adaptive_radius';
+    FaithfulAdaptiveMaxJRQA.ThresholdMethod = 'adaptive_max_radius';
+    FaithfulAdaptiveMaxJRQA.TheilerWindow = 0;
+    FaithfulAdaptiveMaxJRQA.Component = which_comp;
+    FaithfulAdaptiveMaxJRQA.Version = 'validated-v2-faithful-adaptive-max';
+
     parameter_summary_file = fullfile(component_parameter_path, ...
         ['JRQA_ParameterSummary_Comp#' num2str(which_comp) '.mat']);
-    save(parameter_summary_file,'ManuscriptJRQA','RobustJRQA', ...
-        'ParameterEstimates','CFG','-v7.3')
+    if ~isfile(parameter_summary_file) || CFG.overwrite_flag
+        save(parameter_summary_file,'ManuscriptJRQA','RobustJRQA', ...
+            'ParameterEstimates','CFG','-v7.3')
+    end
 
 
-    %% BLOCK 3 - CORRECTED MANUSCRIPT AND ROBUSTNESS JRQA
+    %% BLOCK 3 - VALIDATED JRQA SPECIFICATIONS
 
     specifications = struct( ...
-        'name',{'CorrectedManuscript','Robustness'}, ...
-        'JRQA',{ManuscriptJRQA,RobustJRQA}, ...
-        'threshold_method',{'radius','fixed_rr'}, ...
-        'threshold',{[],CFG.robust_marginal_rr}, ...
-        'theiler_window',{0,RobustJRQA.TheilerWindow});
+        'name',{'CorrectedManuscript','Robustness', ...
+        'FaithfulAdaptiveMax','FixedDyadRadius'}, ...
+        'JRQA',{ManuscriptJRQA,RobustJRQA,FaithfulAdaptiveMaxJRQA, ...
+        FaithfulAdaptiveMaxJRQA}, ...
+        'threshold_method',{'radius','fixed_rr','adaptive_max_radius','radius'}, ...
+        'threshold',{[],CFG.robust_marginal_rr,CFG.radius_fraction,[]}, ...
+        'theiler_window',{0,RobustJRQA.TheilerWindow,0,0});
 
     for specificationi = 1:numel(specifications)
         specification = specifications(specificationi);
@@ -221,6 +248,47 @@ for componenti = 1:numel(CFG.components)
             ['Component_' num2str(which_comp)]);
         if ~isfolder(component_output_path)
             mkdir(component_output_path)
+        end
+        summary_file = fullfile(component_output_path, ...
+            ['FREQNESS_JRQA_VALIDATED_SUMMARY_Comp#' ...
+            num2str(which_comp) '.mat']);
+        if isfile(summary_file) && ~CFG.overwrite_flag
+            fprintf(['%s JRQA: Component %d summary already exists; ' ...
+                'skipping completed specification.\n'], ...
+                specification.name,which_comp);
+            continue
+        end
+
+        if strcmp(specification.name,'FixedDyadRadius')
+            % Pool all conditions, trials and metric levels with equal weight.
+            % Each dyad/component then uses one radius for both participants.
+            adaptive_summary_file = fullfile(CFG.output_path, ...
+                'FaithfulAdaptiveMax',['Component_' num2str(which_comp)], ...
+                ['FREQNESS_JRQA_VALIDATED_SUMMARY_Comp#' ...
+                num2str(which_comp) '.mat']);
+            adaptive_result = load(adaptive_summary_file, ...
+                'Thresholds','specification','CFG');
+            matching_settings = {'standardize','duration','original_srate', ...
+                'target_srate','lowpass_cutoff','filter_order','metric_levels', ...
+                'list_dyads','nconds','ntrials','radius_fraction'};
+            for settingi = 1:numel(matching_settings)
+                this_setting = matching_settings{settingi};
+                assert(isequal(adaptive_result.CFG.(this_setting),CFG.(this_setting)), ...
+                    'Adaptive radius source differs in CFG.%s.',this_setting);
+            end
+            specification.JRQA = adaptive_result.specification.JRQA;
+            specification.JRQA.ThresholdMethod = 'radius';
+            specification.JRQA.Aggregation = ...
+                'median_dyad_radius_across_conditions_trials_and_metric_levels';
+            specification.JRQA.Version = 'validated-v3-fixed-dyad-radius';
+            specification.DyadRadii = nan(CFG.ndyads,1);
+            for dyadi = CFG.list_dyads
+                this_radius = adaptive_result.Thresholds(dyadi,:,:,:,1);
+                assert(all(isfinite(this_radius) & this_radius > 0,'all'), ...
+                    'Complete positive adaptive radii are required for dyad %d.',dyadi);
+                specification.DyadRadii(dyadi) = median(this_radius,'all');
+            end
+            specification.RadiusSource = adaptive_summary_file;
         end
 
         result_size = [CFG.ndyads CFG.nconds nmeters CFG.ntrials];
@@ -231,6 +299,10 @@ for componenti = 1:numel(CFG.components)
 
         for condi = 1:CFG.nconds
             for dyadi = CFG.list_dyads
+                this_threshold = specification.threshold;
+                if strcmp(specification.name,'FixedDyadRadius')
+                    this_threshold = specification.DyadRadii(dyadi);
+                end
                 fprintf('%s JRQA: Component %d, Condition %d, Dyad %d\n', ...
                     specification.name,which_comp,condi,dyadi);
                 for triali = 1:CFG.ntrials
@@ -258,7 +330,7 @@ for componenti = 1:numel(CFG.components)
                             'standardize',CFG.standardize, ...
                             'threshold_method', ...
                             specification.threshold_method, ...
-                            'threshold',specification.threshold, ...
+                            'threshold',this_threshold, ...
                             'theiler_window', ...
                             specification.theiler_window, ...
                             'lmin',CFG.lmin,'vmin',CFG.vmin, ...
@@ -288,20 +360,18 @@ for componenti = 1:numel(CFG.components)
             '%s Component %d DET contains invalid values.', ...
             specification.name,which_comp);
 
-        summary_file = fullfile(component_output_path, ...
-            ['FREQNESS_JRQA_VALIDATED_SUMMARY_Comp#' ...
-            num2str(which_comp) '.mat']);
         save(summary_file,'RR','DET','MarginalRR','Thresholds', ...
             'specification','which_comp','CFG','-v7.3')
     end
 end
 
 
-%% BLOCK 4 - R-READY EXPORTS FOR BOTH VALIDATED SPECIFICATIONS
+%% BLOCK 4 - R-READY EXPORTS FOR VALIDATED SPECIFICATIONS
 
 visual_labels = ["No" "No" "Yes" "Yes"];
 music_labels = ["Diff" "Same" "Diff" "Same"];
-specification_names = {'CorrectedManuscript','Robustness'};
+specification_names = { ...
+    'CorrectedManuscript','Robustness','FaithfulAdaptiveMax','FixedDyadRadius'};
 
 for specificationi = 1:numel(specification_names)
     specification_name = specification_names{specificationi};
@@ -354,33 +424,32 @@ for specificationi = 1:numel(specification_names)
             'VariableNames',{'Dyad','Visual','Music','Meter','RR','DET'});
         statistics_file = fullfile(specification_statistics_path, ...
             ['OUT2R_Comp#' num2str(which_comp) '.xlsx']);
-        writetable(output_table,statistics_file)
+        if ~isfile(statistics_file) || CFG.overwrite_flag
+            writetable(output_table,statistics_file)
+        end
     end
 end
 
 
 %% BLOCK 5 - STRATIFIED CIRCULAR-SHIFT COUPLING VALIDATION
 
-% This control uses the robustness specification because fixed marginal
-% recurrence and Theiler exclusion isolate joint temporal alignment from
-% recurrence-density and trajectory-continuity effects. Partner 2 is
-% circularly shifted while its recurrence geometry is preserved.
+% Use the primary fixed-dyad radius for observed and shifted recurrence plots.
+% Partner 2 is circularly shifted while its recurrence geometry is preserved.
+% Earlier robustness surrogates remain in their original output directory.
 if CFG.surrogate_flag
     surrogate_output_path = fullfile( ...
-        CFG.output_path,'SurrogateValidation');
+        CFG.output_path,'SurrogateValidation',CFG.primary_specification);
     if ~isfolder(surrogate_output_path)
         mkdir(surrogate_output_path)
     end
 
     for componenti = 1:numel(CFG.components)
         which_comp = CFG.components(componenti);
-        component_parameter_path = fullfile( ...
-            CFG.output_path,'ParameterEstimation', ...
-            ['Component_' num2str(which_comp)]);
-        parameter_summary_file = fullfile(component_parameter_path, ...
-            ['JRQA_ParameterSummary_Comp#' num2str(which_comp) '.mat']);
-        S = load(parameter_summary_file,'RobustJRQA');
-        RobustJRQA = S.RobustJRQA;
+        primary_summary_file = fullfile(CFG.output_path, ...
+            CFG.primary_specification,['Component_' num2str(which_comp)], ...
+            ['FREQNESS_JRQA_VALIDATED_SUMMARY_Comp#' num2str(which_comp) '.mat']);
+        S = load(primary_summary_file,'specification');
+        specification = S.specification;
 
         component_surrogate_path = fullfile( ...
             surrogate_output_path,['Component_' num2str(which_comp)]);
@@ -422,7 +491,7 @@ if CFG.surrogate_flag
                             which_comp*100000+condi*1000+dyadi*10+triali;
                         [FREQjrqa,Surrogates] = ...
                             FREQNESS_JRQASurrogates_Mocap( ...
-                            core_result.GED,RobustJRQA, ...
+                            core_result.GED,specification.JRQA, ...
                             core_result.beat_frex, ...
                             'metric_levels',CFG.metric_levels, ...
                             'component',which_comp, ...
@@ -432,14 +501,14 @@ if CFG.surrogate_flag
                             'lowpass_cutoff',CFG.lowpass_cutoff, ...
                             'filter_order',CFG.filter_order, ...
                             'standardize',CFG.standardize, ...
-                            'threshold_method','fixed_rr', ...
-                            'threshold',CFG.robust_marginal_rr, ...
-                            'theiler_window',RobustJRQA.TheilerWindow, ...
+                            'threshold_method','radius', ...
+                            'threshold',specification.DyadRadii(dyadi), ...
+                            'theiler_window',specification.theiler_window, ...
                             'lmin',CFG.lmin,'vmin',CFG.vmin, ...
                             'n_surrogates',CFG.n_surrogates, ...
                             'random_seed',random_seed);
                         save(surrogate_file,'FREQjrqa','Surrogates', ...
-                            'RobustJRQA','random_seed','which_comp', ...
+                            'specification','random_seed','which_comp', ...
                             'dyadi','condi','triali','CFG','-v7.3')
                     end
 
@@ -470,7 +539,7 @@ if CFG.surrogate_flag
             num2str(which_comp) '.mat']);
         save(summary_file,'observed_rr','observed_det','null_rr_mean', ...
             'null_det_mean','p_rr','p_det','z_rr','z_det', ...
-            'RobustJRQA','CFG','-v7.3')
+            'specification','CFG','-v7.3')
 
         [dyad_grid,condition_grid,meter_grid,trial_grid] = ndgrid( ...
             CFG.surrogate_dyads,CFG.surrogate_conditions, ...

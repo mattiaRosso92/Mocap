@@ -19,18 +19,30 @@ the first embedding dimension meeting the false-nearest-neighbour criterion,
 and derives component-specific global parameters from the central 15--85% of
 each trial.
 
-Two labelled specifications are written under
-`03_Coordination_JRQA_Validated`: `CorrectedManuscript` uses the stated 10%
-phase-space-radius method, while `Robustness` fixes each participant's marginal
-recurrence rate at 5% and excludes the full embedding window around the
-identity. Trial-level outputs, component summaries, parameter provenance, and
-R-ready workbooks are kept separate from all historical results.
+The primary specification is `FixedDyadRadius`, under
+`03_Coordination_JRQA_Validated`. It uses one component-level embedding and
+one radius per dyad/component, pooled without condition labels as the median
+across all trials, conditions, and metric levels. The candidate trial radii
+come from `FaithfulAdaptiveMax`: 10% of each standardized participant's maximum
+Euclidean distance in the final embedding, followed by the partner maximum.
+`CFG.standardize` controls normalization inside the toolbox in both tuning
+and analysis. `FaithfulAdaptiveMax` remains the adaptive sensitivity analysis.
+
+Earlier `CorrectedManuscript` and fixed-5%-marginal-RR `Robustness` results
+remain available for comparison. The former pooled radii estimated with
+individual embeddings and should not be treated as the primary result.
+Completed summaries are skipped when `CFG.overwrite_flag=false`. Trial-level
+outputs, component summaries, parameter provenance, and R-ready workbooks
+have separate specification folders. Core estimates are reused unchanged.
 
 Block 5 additionally runs a reproducible circular-shift control on a
 predefined stratified subset. It preserves each partner's recurrence geometry
 while disrupting between-participant temporal alignment, and saves observed,
 null, empirical-p, and standardized RR/DET results under
-`03_Coordination_JRQA_Validated/SurrogateValidation`.
+`03_Coordination_JRQA_Validated/SurrogateValidation/FixedDyadRadius`.
+Observed and surrogate matrices use the same fixed dyad radius and embedding.
+The default control covers five dyads, one trial per condition, and 100 shifts
+per metric level. This is a sensitivity check rather than full-sample inference.
 
 ## Filter-width calibration
 
@@ -72,10 +84,12 @@ overwritten.
 
 Validated JRQA workbooks are stored in
 `06_Statistics_R/JRQA_Validated/<specification>`. By default,
-`FREQNESS_Mocap_Stats.R` analyses only these new workbooks and saves model
+`FREQNESS_Mocap_Stats.R` analyses only the `FixedDyadRadius` workbooks and saves model
 outputs beneath
 `FREQNESS_Mocap_Stats_Results/JRQA_Validated/<specification>`, so rerunning the
 validation cannot replace earlier JRQA or phase-space statistics.
 Method-comparison and circular-shift summaries are saved alongside these
-outputs under `JRQA_Validated/Method_Comparison` and
-`JRQA_Validated/Surrogate_Validation`, respectively.
+outputs under `JRQA_Validated/Method_Comparison_FixedDyadRadius` and
+`JRQA_Validated/Surrogate_Validation_FixedDyadRadius`, respectively. The default
+selection is `FREQNESS_STATS_METHODS=FixedDyadRadiusJRQA`; override this environment
+variable to select other supported methods before running Rscript.

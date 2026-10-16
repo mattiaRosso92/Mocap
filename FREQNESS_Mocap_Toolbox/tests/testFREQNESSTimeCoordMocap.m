@@ -69,6 +69,67 @@ verifyFalse(testCase,any(output.JointRecurrencePlot( ...
 end
 
 
+function testAdaptiveMaximumRadiusUsesFinalEmbedding(testCase)
+
+FREQ = syntheticFREQ(600);
+JRQA = struct('m',3,'tau',5,'RadiusFraction',0.10);
+output = FREQNESS_TimeCoord_Mocap(FREQ,JRQA,[1 1], ...
+    'implementation','validated', ...
+    'threshold_method','adaptive_max_radius', ...
+    'store_matrices',true);
+
+verifyEqual(testCase,output.ThresholdMethod,'adaptive_max_radius');
+verifyEqual(testCase,output.RadiusFraction,0.10);
+verifySize(testCase,output.ParticipantRadiusEstimates,[1 2]);
+verifyGreaterThan(testCase,min(output.ParticipantRadiusEstimates),0);
+verifyEqual(testCase,output.Thresholds, ...
+    repmat(max(output.ParticipantRadiusEstimates),1,2));
+
+for subi = 1:2
+    phase_space = output.PhaseSpace{subi};
+    squared_norm = sum(phase_space.^2,2);
+    squared_distance = squared_norm+squared_norm'- ...
+        2*(phase_space*phase_space');
+    squared_distance(squared_distance < 0) = 0;
+    expected_radius = 0.10*max(sqrt(squared_distance),[],'all');
+    verifyEqual(testCase,output.ParticipantRadiusEstimates(subi), ...
+        expected_radius,'AbsTol',1e-12);
+end
+
+end
+
+
+function testOptionalStandardizationPreservesUnitsAndScaleInvariance(testCase)
+
+FREQ = syntheticFREQ(350);
+scaled_freq = FREQ;
+scaled_freq.ts(1,:,1,1) = 3*FREQ.ts(1,:,1,1)+12;
+scaled_freq.ts(1,:,1,2) = 7*FREQ.ts(1,:,1,2)-5;
+JRQA = struct('m',3,'tau',4,'ps',0.8);
+arguments = {'implementation','validated','store_matrices',true};
+baseline = FREQNESS_TimeCoord_Mocap(FREQ,JRQA,[1 1],arguments{:});
+normalized = FREQNESS_TimeCoord_Mocap( ...
+    scaled_freq,JRQA,[1 1],arguments{:},'standardize',true);
+raw = FREQNESS_TimeCoord_Mocap( ...
+    scaled_freq,JRQA,[1 1],arguments{:},'standardize',false);
+
+verifyTrue(testCase,normalized.Preprocessing.Standardized);
+verifyFalse(testCase,raw.Preprocessing.Standardized);
+verifyEqual(testCase,normalized.JointRecurrencePlot,baseline.JointRecurrencePlot);
+verifyEqual(testCase,normalized.Thresholds,[0.8 0.8]);
+for subi = 1:2
+    series = reshape(scaled_freq.ts(1,:,1,subi),[],1);
+    nstates = size(raw.PhaseSpace{subi},1);
+    verifyEqual(testCase,raw.PhaseSpace{subi}(:,1),series(1:nstates));
+    verifyEqual(testCase,normalized.Preprocessing.SeriesMean(subi), ...
+        mean(series),'AbsTol',1e-12);
+    verifyEqual(testCase,normalized.Preprocessing.SeriesSD(subi), ...
+        std(series,0),'AbsTol',1e-12);
+end
+
+end
+
+
 function testPreprocessingUsesPhysicalTenHertzCutoff(testCase)
 
 srate = 250;

@@ -27,7 +27,8 @@ function FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
 %
 %  - JRQA : Structure containing scalar positive integers JRQA.m and
 %           JRQA.tau. Validated radius-threshold analyses additionally use
-%           JRQA.ps as one shared radius or one radius per participant.
+%           JRQA.ps as one shared radius or one radius per participant, or
+%           JRQA.RadiusFraction for adaptive_max_radius.
 %
 %  - target_frex : Two-element vector, one anchor frequency per participant.
 %
@@ -41,14 +42,29 @@ function FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
 %  - 'target_srate'      : Sampling rate after integer decimation.
 %  - 'lowpass_cutoff'    : Anti-alias low-pass cutoff in Hz.
 %  - 'filter_order'      : Butterworth order. Default: 4.
-%  - 'standardize'       : Z-score each participant series. Default: true.
-%  - 'threshold_method'  : 'radius' or 'fixed_rr'. Default: 'radius'.
-%  - 'threshold'         : Radius/radii or target marginal RR. For radius,
-%                          empty uses JRQA.ps. Default: empty.
+%  - 'standardize'       : Validated implementation only. Z-score each
+%                          participant's retained time series independently
+%                          after filtering, decimation and duration selection,
+%                          before embedding: (x-mean(x))/std(x,0).
+%                          Default: true. Set false to retain signal units.
+%                          Legacy preprocessing remains unchanged.
+%  - 'threshold_method'  : 'radius', 'adaptive_max_radius', or 'fixed_rr'.
+%                          adaptive_max_radius calculates 10%-style
+%                          participant radii in the final embedding and
+%                          applies their maximum to both participants.
+%                          Default: 'radius'.
+%  - 'threshold'         : Radius/radii, adaptive radius fraction, or target
+%                          marginal RR. For radius, empty uses JRQA.ps. For
+%                          adaptive_max_radius, empty uses
+%                          JRQA.RadiusFraction. Default: empty.
 %  - 'theiler_window'    : Excluded half-width in embedded samples.
 %                          Default: 0.
 %  - 'lmin'/'vmin'       : Minimum diagonal/vertical line length. Default: 2.
 %  - 'store_matrices'    : Retain participant and joint RPs. Default: false.
+%
+%  For repeated-condition analyses, estimate a shared radius externally using
+%  the chosen design and pass it through 'threshold' on every call. The toolbox
+%  does not infer dyads, conditions, or a cross-trial aggregation policy.
 %
 % ------------------------------------------------------------------------
 %  OUTPUT ARGUMENT:
@@ -56,8 +72,9 @@ function FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
 %  - FREQjrqa : Structure array with one element per metric level. Existing
 %               RR, DET, L, Lmax, ENTR, LAM, TT, Vmax, T1, and T2 fields
 %               are preserved. Validated outputs additionally record the
-%               realized thresholds, marginal recurrence rates, embedding,
-%               selected frequencies, eligible pairs, and preprocessing.
+%               realized thresholds, participant radius estimates, radius
+%               fraction, marginal recurrence rates, embedding, selected
+%               frequencies, eligible pairs, and preprocessing.
 %
 % ------------------------------------------------------------------------
 %  AUTHORS:
@@ -99,7 +116,8 @@ validate_duration(opts.duration)
 implementation = validatestring( ...
     lower(char(opts.implementation)),{'legacy','validated'});
 threshold_method = validatestring( ...
-    lower(char(opts.threshold_method)),{'radius','fixed_rr'});
+    lower(char(opts.threshold_method)), ...
+    {'radius','adaptive_max_radius','fixed_rr'});
 validate_nonnegative_integer(opts.theiler_window,'theiler_window')
 validate_positive_integer(opts.lmin,'lmin')
 validate_positive_integer(opts.vmin,'vmin')
@@ -263,7 +281,8 @@ if ~any(eligible_pair_mask(:))
     error('No eligible state pairs remain after Theiler exclusion.');
 end
 
-thresholds = resolve_thresholds( ...
+[thresholds,participant_radius_estimates,radius_fraction] = ...
+    resolve_thresholds( ...
     distance_matrix,eligible_pair_mask,JRQA,threshold_method,opts.threshold);
 participant_rp = false(nstates,nstates,nsubs);
 marginal_rr = zeros(1,nsubs);
@@ -289,6 +308,8 @@ output.Lmax = maximum_diagonal_length(joint_rp,opts.lmin);
 
 output.Thresholds = thresholds;
 output.ThresholdMethod = threshold_method;
+output.ParticipantRadiusEstimates = participant_radius_estimates;
+output.RadiusFraction = radius_fraction;
 output.MarginalRR = marginal_rr;
 output.ExpectedJointRR = prod(marginal_rr);
 output.ExcessJointRR = output.RR-output.ExpectedJointRR;
@@ -310,10 +331,13 @@ end
 
 
 %% Helper function: Resolve participant recurrence thresholds
-function thresholds = resolve_thresholds( ...
+function [thresholds,participant_radius_estimates,radius_fraction] = ...
+    resolve_thresholds( ...
     distance_matrix,eligible_pair_mask,JRQA,method,requested_threshold)
 
 nsubs = numel(distance_matrix);
+participant_radius_estimates = [];
+radius_fraction = [];
 switch method
     case 'radius'
         if isempty(requested_threshold)
@@ -335,6 +359,31 @@ switch method
         if isscalar(thresholds)
             thresholds = repmat(thresholds,1,nsubs);
         end
+
+    case 'adaptive_max_radius'
+        if isempty(requested_threshold)
+            if ~isfield(JRQA,'RadiusFraction') || ...
+                    isempty(JRQA.RadiusFraction)
+                error(['JRQA.RadiusFraction or the threshold option is ' ...
+                    'required for adaptive_max_radius JRQA.']);
+            end
+            radius_fraction = JRQA.RadiusFraction;
+        else
+            radius_fraction = requested_threshold;
+        end
+        if ~isnumeric(radius_fraction) || ~isreal(radius_fraction) || ...
+                ~isscalar(radius_fraction) || ~isfinite(radius_fraction) || ...
+                radius_fraction <= 0 || radius_fraction >= 1
+            error(['adaptive_max_radius threshold must be one radius ' ...
+                'fraction strictly within (0,1).']);
+        end
+
+        participant_radius_estimates = zeros(1,nsubs);
+        for subi = 1:nsubs
+            participant_radius_estimates(subi) = radius_fraction*max( ...
+                distance_matrix{subi},[],'all');
+        end
+        thresholds = repmat(max(participant_radius_estimates),1,nsubs);
 
     case 'fixed_rr'
         if ~isnumeric(requested_threshold) || ...
@@ -434,6 +483,7 @@ output = struct( ...
     'LAM',[],'TT',[],'Vmax',[],'T1',[],'T2',[], ...
     'SelectedFrequencies',[],'MetricLevel',[],'Component',[], ...
     'Implementation','','Thresholds',[],'ThresholdMethod','', ...
+    'ParticipantRadiusEstimates',[],'RadiusFraction',[], ...
     'MarginalRR',[],'ExpectedJointRR',[],'ExcessJointRR',[], ...
     'EmbeddingDimension',[],'Delay',[],'TheilerWindow',[], ...
     'EffectiveStateCount',[],'EligiblePairCount',[], ...
