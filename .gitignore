@@ -17,6 +17,9 @@ __pycache__/
 build/
 dist/
 
+# Local Codex build, preview, and validation artifacts
+.codex/
+
 # Local analysis output
 FREQNESS_Output/
 

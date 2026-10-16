@@ -41,6 +41,20 @@ Its frequency and component inputs can be scalars shared by the whole group
 or participant-specific vectors; component 1 is used for all participants
 when no component is supplied.
 
+Validated `FREQNESS_TimeCoord_Mocap` supports `'standardize',true` (default)
+or `false`. Standardization subtracts each retained participant series' mean
+and divides by its sample standard deviation after filtering, downsampling,
+and cropping, before embedding. Saved `Preprocessing` records the flag, mean,
+and standard deviation. Use `false` for radii expressed in original signal
+units. Legacy calls preserve their existing preprocessing. The general
+MainPipeline exposes this option as `timecoord_standardize`.
+
+For repeated-condition JRQA, a study may pool radius estimates and pass the
+same scalar `'threshold'` with `'threshold_method','radius'` to each call.
+Pooling across trials or conditions belongs in the study pipeline. The
+toolbox does not assume a particular experimental design. Keep normalization,
+embedding, distance, and preprocessing settings consistent when pooling.
+
 The phase-space RQA metrics are independently implemented and callable as:
 `FREQNESS_RQA_RecurrenceRate_Mocap`,
 `FREQNESS_RQA_MeanDiagonalLength_Mocap`,
