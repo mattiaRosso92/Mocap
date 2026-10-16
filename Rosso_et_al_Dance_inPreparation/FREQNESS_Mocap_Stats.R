@@ -54,11 +54,19 @@ results_root <- file.path(
 )
 statistics_input_path <- file.path(results_root, "06_Statistics_R")
 
-# The validated JRQA specifications are the default targets. Historical
+# The latest non-standardized phase-space analysis is the default target. Historical
 # JRQA and phase-space outputs remain untouched unless this flag is changed
 # explicitly for a deliberate reanalysis.
 run_established_methods <- FALSE
 analysis_methods <- list(
+  PhaseSpaceRQANonStandardized = list(
+    input_path = file.path(
+      statistics_input_path, "PhaseSpaceRQA_NonStandardized"
+    ),
+    output_subfolder = file.path(
+      "PhaseSpaceRQA_NonStandardized", "SelectedTransformations"
+    )
+  ),
   FixedDyadRadiusJRQA = list(
     input_path = file.path(
       statistics_input_path, "JRQA_Validated", "FixedDyadRadius"
@@ -98,7 +106,7 @@ if (run_established_methods) {
 # Fit the primary method by default, retaining completed sensitivity outputs.
 # Set a comma-separated list to fit other methods, or an empty string for all.
 requested_methods <- Sys.getenv(
-  "FREQNESS_STATS_METHODS", unset = "FixedDyadRadiusJRQA"
+  "FREQNESS_STATS_METHODS", unset = "PhaseSpaceRQANonStandardized"
 )
 if (nzchar(requested_methods)) {
   requested_methods <- trimws(strsplit(requested_methods, ",")[[1]])
@@ -257,12 +265,15 @@ analyse_component <- function(
     full_model_output <- file.path(dv_output, "All_Meters")
     dir.create(full_model_output, recursive = TRUE, showWarnings = FALSE)
 
-    # Manuscript specification: RR and DET are natural-log transformed before
-    # model fitting; Mirroring remains on its original scale. Figures and
-    # descriptive statistics remain on the original, interpretable scale.
+    # Preserve manuscript transformations for established methods. For the
+    # latest non-standardized phase-space analysis, residual diagnostics favour
+    # log RR and untransformed DET. This post hoc choice is recorded separately.
+    # Figures and descriptive statistics always remain on the original scale.
     model_data <- data
     transformation <- "none"
-    if (dv %in% c("RR", "DET")) {
+    log_transform <- dv %in% c("RR", "DET") &&
+      !(method == "PhaseSpaceRQANonStandardized" && dv == "DET")
+    if (log_transform) {
       if (any(model_data[[dv]] <= 0, na.rm = TRUE)) {
         stop("Cannot log-transform non-positive values in ", dv, ".")
       }
@@ -506,7 +517,11 @@ analyse_component <- function(
       paste("Input:", input_file),
       paste("Dependent variables:", paste(dependent_variables, collapse = ", ")),
       paste("Metric levels:", paste(meter_display, collapse = ", ")),
-      "RR and DET: natural-log transformed for inferential models",
+      if (method == "PhaseSpaceRQANonStandardized") {
+        "Inferential models: natural-log RR; untransformed DET (diagnostic selection)"
+      } else {
+        "RR and DET: natural-log transformed for inferential models"
+      },
       if ("Mirror" %in% dependent_variables) {
         "Mirroring: analyzed on its original scale"
       },

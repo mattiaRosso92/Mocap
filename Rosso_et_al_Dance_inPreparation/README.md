@@ -83,13 +83,23 @@ methods. Phase-space results are kept separately in
 overwritten.
 
 Validated JRQA workbooks are stored in
-`06_Statistics_R/JRQA_Validated/<specification>`. By default,
-`FREQNESS_Mocap_Stats.R` analyses only the `FixedDyadRadius` workbooks and saves model
+`06_Statistics_R/JRQA_Validated/<specification>`. Selecting a validated JRQA
+method in `FREQNESS_Mocap_Stats.R` saves model
 outputs beneath
 `FREQNESS_Mocap_Stats_Results/JRQA_Validated/<specification>`, so rerunning the
 validation cannot replace earlier JRQA or phase-space statistics.
 Method-comparison and circular-shift summaries are saved alongside these
 outputs under `JRQA_Validated/Method_Comparison_FixedDyadRadius` and
-`JRQA_Validated/Surrogate_Validation_FixedDyadRadius`, respectively. The default
-selection is `FREQNESS_STATS_METHODS=FixedDyadRadiusJRQA`; override this environment
-variable to select other supported methods before running Rscript.
+`JRQA_Validated/Surrogate_Validation_FixedDyadRadius`, respectively.
+
+The default model selection is now
+`FREQNESS_STATS_METHODS=PhaseSpaceRQANonStandardized`. It reads the separate
+`06_Statistics_R/PhaseSpaceRQA_NonStandardized` sensitivity exports and fits
+natural-log RR and untransformed DET, following residual diagnostics. This
+post hoc transformation choice is not a preregistered manuscript analysis.
+Outputs go to `PhaseSpaceRQA_NonStandardized/SelectedTransformations` beneath
+the statistics output root, preserving the earlier all-log results. Existing
+JRQA and normalized phase-space methods retain their transformations. This
+does not change the MATLAB pipeline's input-normalization settings or create
+the sensitivity exports; they must already exist. Set the environment variable
+to `FixedDyadRadiusJRQA` (or another supported method) to select other model fits.
