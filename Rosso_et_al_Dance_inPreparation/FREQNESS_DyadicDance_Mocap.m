@@ -69,10 +69,14 @@ CFG.common.filter_output_tag = [CFG.common.filter_width_calibration ...
     '_' CFG.common.filter_type];
 CFG.common.results_folder = fullfile( ...
     'FREQNESS_Results_Rosso_et_al_inPreparation', ...
-    CFG.common.filter_output_tag);
+    [CFG.common.filter_output_tag '_recovered_dyads']);
 CFG.common.results_path = fullfile( ...
     CFG.common.data_path,CFG.common.results_folder);
 CFG.common.ncomps = 4;
+CFG.common.list_dyads = 1:35;
+% Original recording IDs, not within-condition trial slots.
+% Dyad 32 trial 32 contains no recorded marker coordinates for either partner.
+CFG.common.excluded_trials = [32 32];
 
 CFG.block1.output_path = fullfile( ...
     CFG.common.results_path,'01_Core');
@@ -88,6 +92,11 @@ CFG.block4.output_path = fullfile( ...
     CFG.common.results_path,'04_PhaseSpaceRQA');
 CFG.block4.overwrite_flag = false;
 CFG.block4.components = 1:2;
+CFG.block4.standardize = true;
+if ~CFG.block4.standardize
+    CFG.block4.output_path = fullfile( ...
+        CFG.common.results_path,'04_PhaseSpaceRQA_NonStandardized');
+end
 CFG.block5.output_path = fullfile( ...
     CFG.common.results_path,'05_Group');
 CFG.block5.figure_path = fullfile(CFG.block5.output_path,'Figures');
@@ -130,9 +139,6 @@ end
 % a previous configuration unless overwrite_flag is explicitly enabled.
 configuration_file = fullfile( ...
     CFG.common.results_path,'FREQNESS_Dance_RunConfiguration.mat');
-if ~isfile(configuration_file) || CFG.block1.overwrite_flag
-    save(configuration_file,'CFG')
-end
 
 % Choose if you want to enable visualizations
 vis_flag = CFG.block1.visualize;
@@ -166,7 +172,7 @@ srate = 250;
 
 % Design settings
 ndyads = 35;
-list_dyads = [1:12 14:31 33:ndyads]; % Issue with dyad #13: one trial is missing in condi #1 | dyad#32 returns an error with RPparam in condi #4
+list_dyads = CFG.common.list_dyads;
 sublabels= {'_LEFT', '_RIGHT'};
 nsubs = length(sublabels);
 % Design matrix (label_visual, labels_music)
@@ -176,7 +182,27 @@ desMat = [ 0 0 ;  % 'No Visual'  , 'Different Music'ta
     1 1 ]; % 'Yes Visual' , 'Same Music'
 nconds  = size(desMat,1);
 condlabels = {'NOvis-DIFFmus', 'NOvis-SAMEmus', 'YESvis-DIFFmus', 'YESvis-SAMEmus'};
-ntrials = 8; % hard-coded for this experiment
+% Preserve the recorded condition labels, including dyad 13's 7/8/9/8 split.
+% Unused trial slots are NaN, never zero-valued observations.
+CFG.common.trial_indices = cell(ndyads,nconds);
+for dyadi = list_dyads
+    for condi = 1:nconds
+        list_trials = find(lbl_vis(dyadi,:) == desMat(condi,1) & ...
+            lbl_mus(dyadi,:) == desMat(condi,2));
+        excluded_trials = CFG.common.excluded_trials( ...
+            CFG.common.excluded_trials(:,1) == dyadi,2);
+        CFG.common.trial_indices{dyadi,condi} = ...
+            setdiff(list_trials,excluded_trials,'stable');
+        assert(~isempty(CFG.common.trial_indices{dyadi,condi}), ...
+            'No usable trials for dyad %d, condition %d.',dyadi,condi);
+    end
+end
+CFG.common.trial_counts = cellfun(@numel,CFG.common.trial_indices);
+CFG.common.ntrials = max(CFG.common.trial_counts,[],'all');
+ntrials = CFG.common.ntrials;
+if ~isfile(configuration_file) || CFG.block1.overwrite_flag
+    save(configuration_file,'CFG')
+end
 
 
 % Base labels (already excluded the last marker)
@@ -234,13 +260,10 @@ for condi = 1:nconds
         id_dyad_str = sprintf('%02d', id_dyad); % to add the '0' before numbers < 10
 
         % Filter trials by condition
-        list_trials = find(lbl_vis(id_dyad,:) == desMat(condi,1) & (lbl_mus(id_dyad,:) == desMat(condi,2))); % retain uncoupled conditions
-        if length(list_trials) ~= ntrials
-            error('Mismatch between expected and actual trials!')
-        end
+        list_trials = CFG.common.trial_indices{dyadi,condi};
 
         % Analyse trial by trial
-        for triali = 1:ntrials
+        for triali = 1:CFG.common.trial_counts(dyadi,condi)
             id_trial = list_trials(triali);
             id_trial_str = sprintf('%02d', id_trial); % to add the '0' before numbers < 10
 
@@ -464,7 +487,7 @@ for dyadi = list_dyads
     for condi = 1:nconds
         disp(['Condition#' num2str(condi) ' - Dyad #' num2str(dyadi)])
 
-        for triali = 1:ntrials
+        for triali = 1:CFG.common.trial_counts(dyadi,condi)
 
             % Load into a struct so variable name (GED or PCA) becomes a field
             input_file = fullfile(CFG.block1.output_path,sprintf( ...
@@ -522,7 +545,7 @@ if save_flag == 1
         ['FREQNESS_GroupNetworkSummary' prefix{idx_XYZ} '.mat']);
     if ~isfile(group_output_file) || CFG.block2.overwrite_flag
         save(group_output_file,'all_evals','all_pats','all_frex_norm', ...
-            'ED','list_dyads','marker_reference','-v7.3')
+            'ED','list_dyads','marker_reference','CFG','-v7.3')
     end
 end
 
@@ -552,9 +575,9 @@ FREQNESS_Startup_Mocap();
 % Re-initialize settings to import GED outputs from the folder
 ndyads = 35;
 nconds  = 4;
-ntrials = 8;
+ntrials = CFG.common.ntrials;
 nsubs   = 2;
-list_dyads = [1:12 14:31 33:ndyads]; % Issue with dyad #13: one trial is missing in condi #1 | dyad#32 gives arror with RPparam in condi #4
+list_dyads = CFG.common.list_dyads;
 srate = 250;
 
 % This full-experiment script always consumes the new BLOCK 1 outputs.
@@ -599,7 +622,7 @@ disp(['BLOCK 3: Component #' num2str(which_comp)])
 if attune_flag ==1
 
     % Initialize JRQA parameters
-    [tau,m,ps] = deal(zeros(nsubs,ndyads,nconds,nmeters,ntrials));
+    [tau,m,ps] = deal(nan(nsubs,ndyads,nconds,nmeters,ntrials));
 
     % Loop over conditions
     for condi = 1:nconds
@@ -609,7 +632,7 @@ if attune_flag ==1
             disp(['Condition#' num2str(condi) ' - Dyad #' num2str(dyadi)])
 
             % Analyse trial by trial
-            for triali = 1:ntrials
+            for triali = 1:CFG.common.trial_counts(dyadi,condi)
 
                 % Import GED output
                 input_file = fullfile(CFG.block1.output_path,sprintf( ...
@@ -655,9 +678,9 @@ if attune_flag ==1
     end
 
     % Average optimal parameters (assign to input structure)
-    JRQA.tau = round(mean(tau(:)));
-    JRQA.m   = round(mean(m(:)));
-    JRQA.ps  = round(mean(ps(:)),1);
+    JRQA.tau = round(mean(tau(:),'omitnan'));
+    JRQA.m   = round(mean(m(:),'omitnan'));
+    JRQA.ps  = round(mean(ps(:),'omitnan'),1);
 
     % Save output
     parameter_file = fullfile(component_output_path, ...
@@ -684,13 +707,13 @@ else
 end
 
 % Pre-allocate group-level output
-[MIRROR,RR,DET] = deal(zeros(ndyads,nconds,nmeters,ntrials));
+[MIRROR,RR,DET] = deal(nan(ndyads,nconds,nmeters,ntrials));
 
 % Run analyses
 for condi = 1:nconds
     for dyadi = list_dyads
         disp(['Condition#' num2str(condi) ' - Dyad #' num2str(dyadi)])
-        for triali = 1:ntrials
+        for triali = 1:CFG.common.trial_counts(dyadi,condi)
 
             coordination_file = fullfile(component_output_path,sprintf( ...
                 'FREQNESS_COORDINATION_D%d_C%d_T%d.mat', ...
@@ -784,7 +807,7 @@ end
 coordination_summary_file = fullfile(component_output_path, ...
     ['FREQNESS_COORDINATION_SUMMARY_Comp#' num2str(which_comp) '.mat']);
 save(coordination_summary_file,'MIRROR','RR','DET','which_comp', ...
-    'meter','list_dyads','nconds','ntrials','nmeters','-v7.3')
+    'meter','list_dyads','nconds','ntrials','nmeters','CFG','-v7.3')
 
 end
 
@@ -806,9 +829,9 @@ FREQNESS_Startup_Mocap();
 
 ndyads = 35;
 nconds = 4;
-ntrials = 8;
+ntrials = CFG.common.ntrials;
 nsubs = 2;
-list_dyads = [1:12 14:31 33:ndyads];
+list_dyads = CFG.common.list_dyads;
 validation_flag = false;
 
 meter = [.25 .5 1 2];
@@ -848,7 +871,7 @@ PhaseRQA = [];
 % independently.
 PhaseRQA.target_frex      = [];
 PhaseRQA.component        = which_comp;
-PhaseRQA.standardize      = true;
+PhaseRQA.standardize      = CFG.block4.standardize;
 PhaseRQA.threshold_method = 'max_fraction';
 PhaseRQA.threshold        = 0.1;
 PhaseRQA.theiler_window   = 0;
@@ -866,7 +889,7 @@ for condi = 1:nconds
     for dyadi = list_dyads
         disp(['Phase-space RQA: condition #' num2str(condi) ...
             ' - dyad #' num2str(dyadi)])
-        for triali = 1:ntrials
+        for triali = 1:CFG.common.trial_counts(dyadi,condi)
 
             phase_rqa_file = fullfile(component_output_path,sprintf( ...
                 'FREQNESS_PHASERQA_D%d_C%d_T%d.mat', ...
@@ -985,8 +1008,9 @@ for condi = 1:nconds
                 DIV_phase(dyadi,condi,metri,triali)  = FREQrqa(metri).DIV;
             end
 
+            id_trial = CFG.common.trial_indices{dyadi,condi}(triali);
             save(phase_rqa_file,'FREQrqa','PhaseRQA','dyadi', ...
-                'condi','triali','-v7.3')
+                'condi','triali','id_trial','-v7.3')
 
         end
     end
@@ -1006,7 +1030,7 @@ phase_summary_file = fullfile(component_output_path, ...
     ['FREQNESS_PHASERQA_SUMMARY_Comp#' num2str(which_comp) '.mat']);
 if ~isfile(phase_summary_file) || CFG.block4.overwrite_flag
     save(phase_summary_file,'PhaseRQA','which_comp','meter', ...
-        'list_dyads','nconds','ntrials','nmeters','-v7.3')
+        'list_dyads','nconds','ntrials','nmeters','CFG','-v7.3')
 end
 
 end
@@ -1024,9 +1048,9 @@ prefix = {'';'_onlyX';'_onlyY';'_onlyZ'};
 srate = 250;
 ndyads = 35;
 nconds = 4;
-ntrials = 8;
+ntrials = CFG.common.ntrials;
 nsubs = 2;
-list_dyads = [1:12 14:31 33:ndyads];
+list_dyads = CFG.common.list_dyads;
 condlabels = {'NOvis-DIFFmus','NOvis-SAMEmus', ...
     'YESvis-DIFFmus','YESvis-SAMEmus'};
 meter = [.25 .5 1 2];
@@ -1100,8 +1124,8 @@ colors = [0.90 0.22 0.16; ...
           0.12 0.25 0.55];
 
 % Average over trials
-avg_evals = squeeze(mean(all_evals, 3));   %  [dyads,conds,trials,comps,frex,subs]
-avg_pats  = squeeze(mean(all_pats, 3));    %  [dyads,conds,trials,markers,comps,frex,subs]
+avg_evals = squeeze(mean(all_evals, 3, 'omitnan'));   %  [dyads,conds,trials,comps,frex,subs]
+avg_pats  = squeeze(mean(all_pats, 3, 'omitnan'));    %  [dyads,conds,trials,markers,comps,frex,subs]
 
 % Compute group mean & SEM over dyads
 avg_evals = squeeze(mean(avg_evals,length(size(avg_evals))));  % average over subjects(partners) first
@@ -1192,7 +1216,7 @@ sgtitle(['Bodily network prominence across beat-normalized frequencies - ' which
 %%%% ED: SAME LOG2 AXIS APPEARANCE, NO RESAMPLING, SHADED SEM %%%%
 
 % Average ED
-ED = squeeze(mean(ED,3));                   % across trials
+ED = squeeze(mean(ED,3,'omitnan'));                   % across trials
 ED = squeeze(mean(ED,length(size(ED))));    % across subjects (partners)
 avg_ED = squeeze(mean(ED,2));               % avg across dyads
 sem_ED = squeeze(std(ED,0,2)) / sqrt(size(ED,2)); % SEM
@@ -1248,7 +1272,7 @@ sgtitle(['Effective dimensionality of the network landscape across beat-normaliz
 %%%% GRAND-GRANDAVERAGE LANDSCAPE %%%%
 
 % Recompute dyad-level eigenspectra before condition averaging
-gg_evals = squeeze(mean(all_evals, 3));                         % average over trials
+gg_evals = squeeze(mean(all_evals, 3, 'omitnan'));                         % average over trials
 gg_evals = squeeze(mean(gg_evals, length(size(gg_evals))));     % average over subjects/partners
 gg_evals = squeeze(mean(gg_evals, 2));                          % average over conditions
 % gg_evals: [dyads x comps x frex]
@@ -1428,12 +1452,12 @@ end
 % Compute correlation between 1st and 2nd component
 pat1 = squeeze( all_pats(:,:,:,:,1,:,:) ); % component #1
 pat2 = squeeze( all_pats(:,:,:,:,2,:,:) ); % component #2
-corrs2avg = zeros(length(list_dyads),nconds,ntrials,nfrex,nsubs);
+corrs2avg = nan(length(list_dyads),nconds,ntrials,nfrex,nsubs);
 
 % Correlate all markers in the innermost loop
 for dyadi = 1:length(list_dyads)
     for condi = 1:nconds
-        for triali = 1:ntrials
+        for triali = 1:CFG.common.trial_counts(list_dyads(dyadi),condi)
             for frexi = 1:nfrex
                 for subi = 1:nsubs
                     corrs2avg(dyadi,condi,triali,frexi,subi) = corr( squeeze(pat1(dyadi,condi,triali,:,frexi,subi)), squeeze(pat2(dyadi,condi,triali,:,frexi,subi)) );
@@ -1474,7 +1498,7 @@ sgtitle('Spatial correlation between component#1 and component#2')
 which_pattern_comp = 1;
 
 % Average activation patterns across trials
-gg_pats = squeeze(mean(all_pats, 3));
+gg_pats = squeeze(mean(all_pats, 3, 'omitnan'));
 % gg_pats: [dyads x conds x markers x comps x frex x subs]
 
 % Average activation patterns across conditions
@@ -1513,7 +1537,7 @@ for componenti = 1:numel(coordination_results)
     for metrici = 1:numel(coordination_fields)
         metric_data = coordination_results{componenti}.( ...
             coordination_fields{metrici});
-        avg_metric = squeeze(mean(metric_data(list_dyads,:,:,:),4));
+        avg_metric = squeeze(mean(metric_data(list_dyads,:,:,:),4,'omitnan'));
         figure;
         for metri = 1:nmeters
             subplot(ceil(nmeters/3),3,metri);
@@ -1549,7 +1573,7 @@ for componenti = 1:numel(phase_results)
     for metrici = 1:numel(phase_metric_fields)
         phase_metric = phase_results{componenti}.PhaseRQA.output.( ...
             phase_metric_fields{metrici});
-        avg_phase_metric = squeeze(mean(phase_metric(list_dyads,:,:,:),4));
+        avg_phase_metric = squeeze(mean(phase_metric(list_dyads,:,:,:),4,'omitnan'));
         figure;
         for metri = 1:nmeters
             subplot(ceil(nmeters/3),3,metri);
@@ -1615,11 +1639,11 @@ for componenti = 1:numel(components)
         'MIRROR','RR','DET','meter','list_dyads', ...
         'nconds','ntrials','nmeters');
 
-    % Average the eight trial-level dyadic measures before statistical
-    % modelling, matching the manuscript analysis and its 528 observations.
-    avg_MIRROR = squeeze(mean(S.MIRROR(S.list_dyads,:,:,:),4));
-    avg_RR = squeeze(mean(S.RR(S.list_dyads,:,:,:),4));
-    avg_DET = squeeze(mean(S.DET(S.list_dyads,:,:,:),4));
+    % Average the available trial-level dyadic measures before statistical
+    % modelling, retaining one observation per dyad/condition/metric level.
+    avg_MIRROR = squeeze(mean(S.MIRROR(S.list_dyads,:,:,:),4,'omitnan'));
+    avg_RR = squeeze(mean(S.RR(S.list_dyads,:,:,:),4,'omitnan'));
+    avg_DET = squeeze(mean(S.DET(S.list_dyads,:,:,:),4,'omitnan'));
 
     nRows = numel(S.list_dyads)*S.nconds*S.nmeters;
     dyad_col = zeros(nRows,1);
@@ -1664,6 +1688,10 @@ end
 % separately so the established JRQA workbooks remain unchanged.
 phase_statistics_path = fullfile( ...
     CFG.block6.output_path,'PhaseSpaceRQA');
+if ~CFG.block4.standardize
+    phase_statistics_path = fullfile( ...
+        CFG.block6.output_path,'PhaseSpaceRQA_NonStandardized');
+end
 if ~isfolder(phase_statistics_path)
     mkdir(phase_statistics_path)
 end
@@ -1683,12 +1711,12 @@ for componenti = 1:numel(components)
     S = load(phase_summary_file, ...
         'PhaseRQA','meter','list_dyads','nconds','ntrials','nmeters');
 
-    % Average the eight trial-level dyadic measures before statistical
+    % Average the available trial-level dyadic measures before statistical
     % modelling, exactly matching the established JRQA export.
-    avg_RR = mean(S.PhaseRQA.output.RR(S.list_dyads,:,:,:),4);
+    avg_RR = mean(S.PhaseRQA.output.RR(S.list_dyads,:,:,:),4,'omitnan');
     avg_RR = reshape(avg_RR, ...
         [numel(S.list_dyads) S.nconds S.nmeters]);
-    avg_DET = mean(S.PhaseRQA.output.DET(S.list_dyads,:,:,:),4);
+    avg_DET = mean(S.PhaseRQA.output.DET(S.list_dyads,:,:,:),4,'omitnan');
     avg_DET = reshape(avg_DET, ...
         [numel(S.list_dyads) S.nconds S.nmeters]);
 
