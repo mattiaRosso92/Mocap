@@ -94,27 +94,31 @@ CFG.block4.metric_levels = [.25 .5 1 2];
 CFG.block4.global_metric_levels = []; % Toolbox default: all available metric levels.
 CFG.block4.overwrite_flag = false;
 CFG.block4.reuse_core_path = ''; % Optional matching core folder for completed dyads.
-% Existing folder names are retained despite the new block numbering.
-CFG.block5.output_path = fullfile( ...
-    CFG.common.results_path,'04_PhaseSpaceRQA');
+CFG.block5.output_path = fullfile(CFG.common.results_path,'05_LandscapeSimilarity');
+CFG.block5.component = 1;
 CFG.block5.overwrite_flag = false;
-CFG.block5.components = 1:2;
-CFG.block5.standardize = true;
-if ~CFG.block5.standardize
-    CFG.block5.output_path = fullfile( ...
+CFG.block5.reuse_core_path = ''; % Optional matching core folder for completed dyads.
+% Existing folder names are retained despite the new block numbering.
+CFG.block6.output_path = fullfile( ...
+    CFG.common.results_path,'04_PhaseSpaceRQA');
+CFG.block6.overwrite_flag = false;
+CFG.block6.components = 1:2;
+CFG.block6.standardize = true;
+if ~CFG.block6.standardize
+    CFG.block6.output_path = fullfile( ...
         CFG.common.results_path,'04_PhaseSpaceRQA_NonStandardized');
 end
-CFG.block6.output_path = fullfile( ...
-    CFG.common.results_path,'05_Group');
-CFG.block6.figure_path = fullfile(CFG.block6.output_path,'Figures');
-CFG.block6.overwrite_flag = false;
 CFG.block7.output_path = fullfile( ...
-    CFG.common.results_path,'06_Statistics_R');
+    CFG.common.results_path,'05_Group');
+CFG.block7.figure_path = fullfile(CFG.block7.output_path,'Figures');
 CFG.block7.overwrite_flag = false;
+CFG.block8.output_path = fullfile( ...
+    CFG.common.results_path,'06_Statistics_R');
+CFG.block8.overwrite_flag = false;
 
 % Core analysis settings. Visualizing every single trial would open more
 % than one thousand figures, so trial visualization is optional in BLOCK 1
-% and group visualization is consolidated in BLOCK 6.
+% and group visualization is consolidated in BLOCK 7.
 CFG.block1.visualize = false;
 CFG.block1.save = true;
 
@@ -133,9 +137,10 @@ for filei = 1:numel(required_metadata)
 end
 
 output_paths = {CFG.block1.output_path,CFG.block2.output_path,CFG.block4.output_path, ...
-    CFG.block3.output_path,CFG.block5.output_path, ...
-    CFG.block6.output_path,CFG.block6.figure_path, ...
-    CFG.block7.output_path};
+    CFG.block5.output_path, ...
+    CFG.block3.output_path,CFG.block6.output_path, ...
+    CFG.block7.output_path,CFG.block7.figure_path, ...
+    CFG.block8.output_path};
 for pathi = 1:numel(output_paths)
     if ~isfolder(output_paths{pathi})
         mkdir(output_paths{pathi})
@@ -898,7 +903,87 @@ if ~isfile(export_file) || CFG.block4.overwrite_flag
     writetable(table(Dyad,Visual,Music,Level,Prominence),export_file);
 end
 
-%% BLOCK 5 - PHASE-SPACE RQA (ALTERNATIVE TEMPORAL COORDINATION)
+%% BLOCK 5 - LANDSCAPE SIMILARITY
+
+clearvars -except CFG
+addpath(fullfile(fileparts(CFG.common.data_path),'FREQNESS_Mocap_Toolbox'))
+FREQNESS_Startup_Mocap();
+component_path = fullfile(CFG.block5.output_path, ...
+    ['Component_' num2str(CFG.block5.component)]);
+if ~isfolder(component_path), mkdir(component_path); end
+settings = struct('component',CFG.block5.component,'frequency_axis','beat_relative');
+similarity = nan(35,4,CFG.common.ntrials,2); % dyad x condition x trial x outcome
+for dyadi = CFG.common.list_dyads
+    for condi = 1:4
+        for triali = 1:CFG.common.trial_counts(dyadi,condi)
+            id_trial = CFG.common.trial_indices{dyadi,condi}(triali);
+            output_file = fullfile(component_path,sprintf( ...
+                'FREQNESS_SIMILARITY_D%d_C%d_T%d.mat',dyadi,condi,triali));
+            if isfile(output_file) && ~CFG.block5.overwrite_flag
+                S = load(output_file,'similarity_comp','similarity_entropy','id_trial','settings');
+                assert(S.id_trial == id_trial && isequaln(S.settings,settings), ...
+                    'Saved similarity settings/trial differ: %s',output_file);
+                similarity_comp = S.similarity_comp;
+                similarity_entropy = S.similarity_entropy;
+            else
+                core_name = sprintf('FREQNESS_CORE_D%d_C%d_T%d.mat',dyadi,condi,triali);
+                input_file = fullfile(CFG.block1.output_path,core_name);
+                if ~isfile(input_file) && ~isempty(CFG.block5.reuse_core_path)
+                    input_file = fullfile(CFG.block5.reuse_core_path,core_name);
+                end
+                assert(isfile(input_file),'Missing core output: %s',input_file);
+                S = load(input_file,'GED','beat_frex','id_trial');
+                if isfield(S,'id_trial'), assert(S.id_trial == id_trial); end
+                relative_frex = S.GED.frex./reshape(S.beat_frex,1,[]);
+                assert(isequal(size(relative_frex),[32 2]) && ...
+                    max(abs(relative_frex-(1:32)'/8),[],'all') < 1e-12, ...
+                    'Expected both partners on the 1/8-to-4x beat grid: %s',input_file);
+                % Align corresponding beat multiples, NOT absolute Hz: keep
+                % eigenvalues unchanged; no interpolation or re-estimation.
+                FREQ = struct('evals',S.GED.evals,'frex',(1:32)'/8);
+                [similarity_comp,similarity_entropy,selected_frex] = ...
+                    FREQNESS_LandscapeSimilarity(FREQ,'component',settings.component);
+                save(output_file,'similarity_comp','similarity_entropy', ...
+                    'selected_frex','settings','input_file','dyadi','condi','triali','id_trial');
+            end
+            this_similarity = [similarity_comp similarity_entropy];
+            assert(numel(this_similarity)==2 && all(isfinite(this_similarity)) && ...
+                all(abs(this_similarity)<1), ...
+                'Undefined or perfect correlation; inspect D%d C%d T%d before Fisher transformation.', ...
+                dyadi,condi,triali);
+            similarity(dyadi,condi,triali,:) = reshape(this_similarity,1,1,1,2);
+        end
+    end
+end
+summary_file = fullfile(component_path,'FREQNESS_SIMILARITY_SUMMARY.mat');
+if ~isfile(summary_file) || CFG.block5.overwrite_flag
+    save(summary_file,'similarity','CFG');
+end
+% Average trial correlations in Fisher-z space, retaining signed similarity.
+similarity_z = mean(atanh(similarity),3,'omitnan');
+visual_labels = ["No" "No" "Yes" "Yes"];
+music_labels = ["Diff" "Same" "Diff" "Same"];
+outcome_labels = ["Component" "Entropy"];
+[Dyad,FisherZ] = deal(zeros(numel(CFG.common.list_dyads)*8,1));
+[Visual,Music,Outcome] = deal(strings(size(Dyad)));
+rowi = 0;
+for dyadi = CFG.common.list_dyads
+    for condi = 1:4
+        for outcomei = 1:2
+            rowi = rowi+1;
+            Dyad(rowi) = dyadi; Visual(rowi) = visual_labels(condi);
+            Music(rowi) = music_labels(condi); Outcome(rowi) = outcome_labels(outcomei);
+            FisherZ(rowi) = similarity_z(dyadi,condi,1,outcomei);
+        end
+    end
+end
+assert(all(isfinite(FisherZ)));
+export_file = fullfile(component_path,'OUT2R_LandscapeSimilarity.csv');
+if ~isfile(export_file) || CFG.block5.overwrite_flag
+    writetable(table(Dyad,Visual,Music,Outcome,FisherZ),export_file);
+end
+
+%% BLOCK 6 - PHASE-SPACE RQA (ALTERNATIVE TEMPORAL COORDINATION)
 
 % This is intentionally a separate analysis block following the current
 % GroupAnalyses workflow. It permits direct comparison with JRQA while
@@ -935,21 +1020,21 @@ lp_cutoff_norm = .8;
 assert(isfolder(CFG.block1.output_path), ...
     'BLOCK 1 output folder is missing: %s',CFG.block1.output_path);
 
-components = CFG.block5.components;
+components = CFG.block6.components;
 assert(all(components >= 1 & components <= CFG.common.ncomps & ...
     components == fix(components)), ...
-    'CFG.block5.components must contain valid retained component indices.');
+    'CFG.block6.components must contain valid retained component indices.');
 
 for componenti = 1:numel(components)
 
 which_comp = components(componenti);
 component_output_path = fullfile( ...
-    CFG.block5.output_path,['Component_' num2str(which_comp)]);
+    CFG.block6.output_path,['Component_' num2str(which_comp)]);
 if ~isfolder(component_output_path)
     mkdir(component_output_path)
 end
 
-disp(['BLOCK 5: Component #' num2str(which_comp)])
+disp(['BLOCK 6: Component #' num2str(which_comp)])
 
 % Phase-space RQA settings
 PhaseRQA = [];
@@ -958,7 +1043,7 @@ PhaseRQA = [];
 % independently.
 PhaseRQA.target_frex      = [];
 PhaseRQA.component        = which_comp;
-PhaseRQA.standardize      = CFG.block5.standardize;
+PhaseRQA.standardize      = CFG.block6.standardize;
 PhaseRQA.threshold_method = 'max_fraction';
 PhaseRQA.threshold        = 0.1;
 PhaseRQA.theiler_window   = 0;
@@ -981,7 +1066,7 @@ for condi = 1:nconds
             phase_rqa_file = fullfile(component_output_path,sprintf( ...
                 'FREQNESS_PHASERQA_D%d_C%d_T%d.mat', ...
                 dyadi,condi,triali));
-            if isfile(phase_rqa_file) && ~CFG.block5.overwrite_flag
+            if isfile(phase_rqa_file) && ~CFG.block6.overwrite_flag
                 S = load(phase_rqa_file,'FREQrqa');
                 for metri = 1:nmeters
                     RR_phase(dyadi,condi,metri,triali) = S.FREQrqa(metri).RR;
@@ -998,11 +1083,11 @@ for condi = 1:nconds
 
             % Reuse the completed pre-component-folder Component 2 output.
             legacy_phase_rqa_file = fullfile( ...
-                CFG.block5.output_path,sprintf( ...
+                CFG.block6.output_path,sprintf( ...
                 'FREQNESS_PHASERQA_D%d_C%d_T%d.mat', ...
                 dyadi,condi,triali));
             if which_comp == 2 && isfile(legacy_phase_rqa_file) && ...
-                    ~CFG.block5.overwrite_flag
+                    ~CFG.block6.overwrite_flag
                 S = load(legacy_phase_rqa_file,'FREQrqa','PhaseRQA');
                 if isfield(S,'PhaseRQA') && ...
                         isequal(S.PhaseRQA.component,which_comp)
@@ -1115,14 +1200,14 @@ PhaseRQA.output.DIV  = DIV_phase;
 
 phase_summary_file = fullfile(component_output_path, ...
     ['FREQNESS_PHASERQA_SUMMARY_Comp#' num2str(which_comp) '.mat']);
-if ~isfile(phase_summary_file) || CFG.block5.overwrite_flag
+if ~isfile(phase_summary_file) || CFG.block6.overwrite_flag
     save(phase_summary_file,'PhaseRQA','which_comp','meter', ...
         'list_dyads','nconds','ntrials','nmeters','CFG','-v7.3')
 end
 
 end
 
-%% BLOCK 6 - GROUP-LEVEL VISUALIZATION
+%% BLOCK 7 - GROUP-LEVEL VISUALIZATION
 
 % TODO: SEM are fixed, but still do the following for other plots:
 % After fixing, if needed, do the same in FREQNESS_SI_FIlters.m (what about
@@ -1150,7 +1235,7 @@ bones = [1,2;1,4;2,3;3,4;5,6;5,7;6,7;6,8;8,9;9,10; ...
     7,11;11,12;12,13;14,15;14,16;15,16;15,17;17,18;18,19; ...
     16,20;20,21;21,22];
 
-% Import the compact component summaries saved by BLOCKS 3 and 5. Keeping
+% Import the compact component summaries saved by BLOCKS 3 and 6. Keeping
 % the component dimension here ensures that every requested coordination
 % analysis is represented in the consolidated group figures.
 coordination_components = CFG.block3.components;
@@ -1167,15 +1252,15 @@ for componenti = 1:numel(coordination_components)
         'MIRROR','RR','DET','which_comp');
 end
 
-phase_components = CFG.block5.components;
+phase_components = CFG.block6.components;
 phase_results = cell(1,numel(phase_components));
 for componenti = 1:numel(phase_components)
     which_comp = phase_components(componenti);
-    phase_summary_file = fullfile(CFG.block5.output_path, ...
+    phase_summary_file = fullfile(CFG.block6.output_path, ...
         ['Component_' num2str(which_comp)], ...
         ['FREQNESS_PHASERQA_SUMMARY_Comp#' num2str(which_comp) '.mat']);
     assert(isfile(phase_summary_file), ...
-        'Missing BLOCK 5 summary: %s',phase_summary_file);
+        'Missing BLOCK 6 summary: %s',phase_summary_file);
     phase_results{componenti} = load(phase_summary_file,'PhaseRQA');
 end
 
@@ -1687,12 +1772,12 @@ end
 % have completed. Existing figures remain untouched unless requested.
 figure_handles = findall(groot,'Type','figure');
 for figurei = 1:numel(figure_handles)
-    figure_name = fullfile(CFG.block6.figure_path,sprintf( ...
+    figure_name = fullfile(CFG.block7.figure_path,sprintf( ...
         'GROUP_%02d',figurei));
-    if ~isfile([figure_name '.fig']) || CFG.block6.overwrite_flag
+    if ~isfile([figure_name '.fig']) || CFG.block7.overwrite_flag
         savefig(figure_handles(figurei),[figure_name '.fig'])
     end
-    if ~isfile([figure_name '.png']) || CFG.block6.overwrite_flag
+    if ~isfile([figure_name '.png']) || CFG.block7.overwrite_flag
         exportgraphics(figure_handles(figurei),[figure_name '.png'], ...
             'Resolution',200)
     end
@@ -1701,10 +1786,10 @@ close all
 
 
 
-%% BLOCK 7 - R-READY STATISTICAL EXPORT
+%% BLOCK 8 - R-READY STATISTICAL EXPORT
 
 % This block is independent of the group-visualization workspace. It loads
-% each component summary saved by BLOCKS 3 and 5 and exports separate JRQA
+% each component summary saved by BLOCKS 3 and 6 and exports separate JRQA
 % and phase-space RQA workbooks for the automated R workflow.
 components = CFG.block3.components;
 visual_labels = ["No", "No", "Yes", "Yes"];
@@ -1720,7 +1805,7 @@ for componenti = 1:numel(components)
         num2str(which_comp) '.mat']);
     assert(isfile(coordination_summary_file), ...
         ['Missing Component %d coordination summary. Run BLOCK 3 before ' ...
-        'BLOCK 7.'],which_comp);
+        'BLOCK 8.'],which_comp);
 
     S = load(coordination_summary_file, ...
         'MIRROR','RR','DET','meter','list_dyads', ...
@@ -1763,7 +1848,7 @@ for componenti = 1:numel(components)
         'VariableNames',{'Dyad','Visual','Music','Meter', ...
         'Mirror','RR','DET'});
 
-    statistics_file = fullfile(CFG.block7.output_path, ...
+    statistics_file = fullfile(CFG.block8.output_path, ...
         ['OUT2R_Comp#' num2str(which_comp) '.xlsx']);
     writetable(T,statistics_file)
     fprintf('Saved Component %d statistics: %s\n', ...
@@ -1774,26 +1859,26 @@ end
 % Export the alternative participant-dimensional phase-space RQA results
 % separately so the established JRQA workbooks remain unchanged.
 phase_statistics_path = fullfile( ...
-    CFG.block7.output_path,'PhaseSpaceRQA');
-if ~CFG.block5.standardize
+    CFG.block8.output_path,'PhaseSpaceRQA');
+if ~CFG.block6.standardize
     phase_statistics_path = fullfile( ...
-        CFG.block7.output_path,'PhaseSpaceRQA_NonStandardized');
+        CFG.block8.output_path,'PhaseSpaceRQA_NonStandardized');
 end
 if ~isfolder(phase_statistics_path)
     mkdir(phase_statistics_path)
 end
 
-components = CFG.block5.components;
+components = CFG.block6.components;
 for componenti = 1:numel(components)
 
     which_comp = components(componenti);
     component_output_path = fullfile( ...
-        CFG.block5.output_path,['Component_' num2str(which_comp)]);
+        CFG.block6.output_path,['Component_' num2str(which_comp)]);
     phase_summary_file = fullfile(component_output_path, ...
         ['FREQNESS_PHASERQA_SUMMARY_Comp#' num2str(which_comp) '.mat']);
     assert(isfile(phase_summary_file), ...
-        ['Missing Component %d phase-space RQA summary. Run BLOCK 5 ' ...
-        'before BLOCK 7.'],which_comp);
+        ['Missing Component %d phase-space RQA summary. Run BLOCK 6 ' ...
+        'before BLOCK 8.'],which_comp);
 
     S = load(phase_summary_file, ...
         'PhaseRQA','meter','list_dyads','nconds','ntrials','nmeters');

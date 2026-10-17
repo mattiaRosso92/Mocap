@@ -26,7 +26,7 @@ statistical unit. Original trial IDs remain saved with core outputs. Recovered
 analyses use a separate `<filter tag>_recovered_dyads` results folder, preserving
 earlier group summaries. Run Block 0 before resuming a later block.
 
-`CFG.block5.standardize` retains the existing true default; false selects
+`CFG.block6.standardize` retains the existing true default; false selects
 non-standardised phase-space RQA and separate numerical/statistical output
 folders. The radius remains 10% of maximum phase-space distance. These changes
 do not alter toolbox functions or the separate validated-JRQA script.
@@ -34,8 +34,9 @@ do not alter toolbox functions or the separate validated-JRQA script.
 ## Metric prominence (BLOCK 4)
 
 The main pipeline now runs coordination in Block 3, metric prominence in
-Block 4, phase-space RQA in Block 5, group visualization in Block 6, and
-statistical exports in Block 7. Existing output folder names are preserved
+Block 4, landscape similarity in Block 5, phase-space RQA in Block 6,
+group visualization in Block 7, and statistical exports in Block 8.
+Existing output folder names are preserved
 to avoid invalidating completed analyses; prominence uses `04_MetricProminence`.
 Run Block 0, then Block 4 independently. Component 1 is independently configurable
 in `CFG.block4`. `reuse_core_path` optionally points to a scientifically matching
@@ -59,6 +60,30 @@ It fits five log-ratio Visual x Music models with a random dyad intercept,
 uses Holm correction across all five outcomes separately for each effect,
 and saves exactly five original-scale condition plots plus model tables and
 residual diagnostics. Existing R output directories are never overwritten.
+
+## Landscape similarity (BLOCK 5)
+
+Run Block 0 then Block 5 independently. `CFG.block5` selects Component 1
+by default, output/overwrite settings and an optional matching `reuse_core_path`.
+The existing `FREQNESS_LandscapeSimilarity` function correlates the partners'
+component eigenvalue landscapes and their full-eigenspectrum H2 entropy
+landscapes. It does not correlate effective dimensionality.
+
+Partners hearing different songs have different frequencies in Hz. The study
+therefore passes unchanged eigenvalues with a verified shared beat-relative
+axis (1/8 to 4xbeat): corresponding beat multiples, not absolute Hz, are aligned.
+No interpolation or core re-estimation occurs. Trial files retain the selected
+axis, original recording ID, settings and core source path. Outputs live in
+`05_LandscapeSimilarity/Component_1`, independently of earlier analyses.
+
+Signed trial correlations are Fisher-transformed before averaging within
+dyad/condition; undefined or perfect correlations stop the export for inspection.
+`FREQNESS_Mocap_LandscapeSimilarity_Stats.R` fits two Visual x Music models on
+these z averages with a random dyad intercept, applies Holm correction across
+the two outcomes separately for each effect, and produces two condition plots.
+Plot centres and SEM bounds are calculated on z and back-transformed to r.
+Run with Rscript, optionally supplying an input CSV and a new output directory.
+Existing R output directories are not overwritten.
 
 ## Validated JRQA reanalysis
 
@@ -112,6 +137,7 @@ Dance_Data/FREQNESS_Results_Rosso_et_al_inPreparation/
     |-- 02_Landscape/
     |-- 03_Coordination/
     |-- 04_MetricProminence/
+    |-- 05_LandscapeSimilarity/
     |-- 04_PhaseSpaceRQA/
     |-- 05_Group/
     `-- 06_Statistics_R/
@@ -124,7 +150,7 @@ Gaussian filter widths.
 
 ## Statistical outputs
 
-BLOCK 7 retains the established JRQA and spatial-similarity workbooks in
+BLOCK 8 retains the established JRQA and spatial-similarity workbooks in
 `06_Statistics_R` and exports participant-dimensional phase-space RR and DET
 to `06_Statistics_R/PhaseSpaceRQA`. `FREQNESS_Mocap_Stats.R` applies the same
 trial averaging, natural-log transformation, mixed-effects models, polynomial
