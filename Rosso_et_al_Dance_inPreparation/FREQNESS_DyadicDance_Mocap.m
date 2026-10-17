@@ -607,11 +607,11 @@ idx_frex = zeros(nsubs,nmeters);
 % Downsampling with correction for aliasing
 dwn = 10;
 srate = round(srate/dwn); % update sampling rate
-% Low-pass Butterworth filter to avoid aliasing by downsampling
+% Legacy low-pass Butterworth filter before downsampling (not adequate anti-aliasing).
 nyquist = round(srate/2);
 lp_order = 4;        % Filter order
-lp_cutoff_norm = .8; % Normalized cutoff frequency (.8 of the nyquist, when normalized to 1)
-[b_butt, a_butt] = butter(lp_order, lp_cutoff_norm, 'low'); % Coefficients for high-pass filter
+lp_cutoff_norm = .8; % Legacy cutoff: 100 Hz at the original 250 Hz sampling rate.
+[b_butt, a_butt] = butter(lp_order, lp_cutoff_norm, 'low'); % Low-pass; not adequate anti-aliasing for 25 Hz.
 %     % Visualize the filter's freqency response
 %     figure; freqz(b_butt, a_butt, 100, srate); % Frequency response
 
@@ -1014,7 +1014,7 @@ srate = 250;
 dwn = 10;
 srate = round(srate/dwn);
 lp_order = 4;
-lp_cutoff_norm = .8;
+lp_cutoff_norm = .8; % Legacy cutoff: 100 Hz at the original 250 Hz sampling rate.
 [b_butt,a_butt] = butter(lp_order,lp_cutoff_norm,'low');
 
 assert(isfolder(CFG.block1.output_path), ...
@@ -1128,8 +1128,8 @@ for condi = 1:nconds
                 this_target_frex = PhaseRQA.target_frex;
             end
 
-            % Apply the same anti-aliasing filter and downsampling used in
-            % the JRQA block so the methods receive matched time series.
+            % Match the legacy JRQA filtering and downsampling; this 100 Hz
+            % low-pass does not adequately prevent aliasing at 25 Hz.
             phase_components = PhaseRQA.component;
             if isscalar(phase_components)
                 phase_components = repmat(phase_components,1,nsubs);
