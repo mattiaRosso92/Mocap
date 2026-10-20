@@ -5,8 +5,9 @@ study-specific preprocessing, orchestration, statistical analysis, and figure
 generation in this directory; reusable functionality belongs in
 `FREQNESS_Mocap_Toolbox`.
 
-The Dance pipeline retains the historical JRQA outputs and the separate
-participant-dimensional phase-space RQA implementation. Corrected JRQA is run
+The manuscript temporal analysis is participant-dimensional phase-space RQA
+with corrected 10 Hz filtering before decimation to 25 Hz. Historical JRQA
+outputs remain separate. Corrected JRQA is run
 by `FREQNESS_DyadicDance_JRQA_Validation.m`, which consumes the completed core
 outputs without modifying them or either earlier temporal analysis.
 
@@ -26,10 +27,49 @@ statistical unit. Original trial IDs remain saved with core outputs. Recovered
 analyses use a separate `<filter tag>_recovered_dyads` results folder, preserving
 earlier group summaries. Run Block 0 before resuming a later block.
 
-`CFG.block6.standardize` retains the existing true default; false selects
-non-standardised phase-space RQA and separate numerical/statistical output
-folders. The radius remains 10% of maximum phase-space distance. These changes
-do not alter toolbox functions or the separate validated-JRQA script.
+## Manuscript phase-space RQA (BLOCK 6)
+
+All settings are explicit in `CFG.block6` in Block 0:
+
+| Setting | Selected analysis |
+| --- | --- |
+| Dyads / components | All 35 dyads; Components 1 and 2 |
+| Input / output sampling rate | 250 Hz / 25 Hz (`downsample = 10`) |
+| Anti-alias filter | Fourth-order Butterworth, physical cutoff 10 Hz; `filtfilt` on the full input series |
+| Duration | Decimate first, then retain `round(.15*N):round(.85*N)`; 1051 samples for these trials |
+| Metric levels | Each partner's own song beat multiplied by `[.25 .5 1 2]` |
+| Phase space | One participant per dimension; no time-delay embedding |
+| Input standardization | `false`; no z-scoring |
+| Radius | `0.1 * max(pairwise Euclidean distance)` within each trial/component/meter, not a fixed 10% RR |
+| Recurrence criterion | Strict distance `< radius` |
+| Theiler / minimum line lengths | `0` (identity diagonal retained); `lmin = 2`, `vmin = 2` |
+
+The filter is designed at the **original** rate: `10/(250/2) = .08`, not the
+historical `.8` (100 Hz). The physical 10 Hz cutoff does not change with the
+decimation factor; the block rejects factors whose new Nyquist is at or below
+that cutoff. Filtering precedes both decimation and duration selection.
+This downstream correction does not change core estimation, Gaussian filter
+width calibration, effective dimensionality or spatial coordination.
+
+For completed core analyses, run **Block 0, then Block 6, then Block 8**.
+Block 6 first searches `CFG.block1.output_path` (including recovered dyads),
+then the matching legacy `01_Core` folder for the original 33 dyads. It checks
+trial IDs, stored filter widths and selected frequencies. Do not rerun core
+estimation merely to reproduce the temporal analysis. Block 7 is optional for
+group figures; R also produces condition plots.
+
+Numerical outputs use a new folder:
+`04_PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0/Component_<n>`.
+Per-trial files retain the full toolbox output, settings, original trial ID
+and source core path. Existing files are reused only when their saved settings
+and trial IDs match; older RQA caches are not imported. No legacy outputs are
+overwritten. The previously completed downsampling comparison under
+`PhaseSpaceRQA_AA10Hz_Downsample_20261017` remains a separate reference, not an
+automatic input to the main pipeline.
+
+These are **study settings**: reusable toolbox defaults and the separate
+validated-JRQA script are unchanged. Alternate settings require a separate
+output tag/folder and corresponding R input configuration.
 
 ## Metric prominence (BLOCK 4)
 
@@ -94,7 +134,7 @@ the first embedding dimension meeting the false-nearest-neighbour criterion,
 and derives component-specific global parameters from the central 15--85% of
 each trial.
 
-The primary specification is `FixedDyadRadius`, under
+The primary specification within that separate JRQA validation is `FixedDyadRadius`, under
 `03_Coordination_JRQA_Validated`. It uses one component-level embedding and
 one radius per dyad/component, pooled without condition labels as the median
 across all trials, conditions, and metric levels. The candidate trial radii
@@ -138,7 +178,7 @@ Dance_Data/FREQNESS_Results_Rosso_et_al_inPreparation/
     |-- 03_Coordination/
     |-- 04_MetricProminence/
     |-- 05_LandscapeSimilarity/
-    |-- 04_PhaseSpaceRQA/
+    |-- 04_PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0/
     |-- 05_Group/
     `-- 06_Statistics_R/
 ```
@@ -150,14 +190,37 @@ Gaussian filter widths.
 
 ## Statistical outputs
 
-BLOCK 8 retains the established JRQA and spatial-similarity workbooks in
-`06_Statistics_R` and exports participant-dimensional phase-space RR and DET
-to `06_Statistics_R/PhaseSpaceRQA`. `FREQNESS_Mocap_Stats.R` applies the same
-trial averaging, natural-log transformation, mixed-effects models, polynomial
-comparisons, diagnostics, and four-level Bonferroni correction to both temporal
-methods. Phase-space results are kept separately in
-`FREQNESS_Mocap_Stats_Results/PhaseSpaceRQA` so existing JRQA results are not
-overwritten.
+BLOCK 8 exports the selected phase-space RR and DET to
+`06_Statistics_R/PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0`.
+The default `CFG.block8.export_jrqa=false` makes this block independent of
+JRQA completion; historical JRQA/spatial exports remain opt-in. Existing
+workbooks are checked against the current values and left untouched unless
+overwrite is explicitly enabled.
+
+Run `Rscript Rosso_et_al_Dance_inPreparation/FREQNESS_Mocap_Stats.R` from the
+repository root. Its default `PhaseSpaceRQACorrected` method reads both
+components from the matching recovered-dyad MATLAB folder and requires all
+560 unique dyad-condition-meter rows per component. It fits:
+
+- `log(RR) ~ Visual * Music * Meter + (1 | Dyad)`
+- `DET ~ Visual * Music * Meter + (1 | Dyad)` on the original scale
+- Within each meter, the corresponding `Visual * Music + (1 | Dyad)` model
+
+Type III F tests use Satterthwaite degrees of freedom. Within-meter p-values
+receive Bonferroni correction across all four meters separately for each
+effect, outcome and component; alpha is .05. No extra correction is applied
+across outcomes/components. Available trials are averaged **before** log
+transformation, with dyad as the independent sampling unit. Plots show
+original-scale means and SEM across dyads. Polynomial comparisons and residual
+diagnostics are retained; log-RR/raw-DET was a diagnostic-based, post hoc
+choice, not a preregistered model. Residual departures from normality remain
+limitations, especially for DET; significance within one meter alone does not
+establish meter specificity.
+
+R outputs are isolated under
+`Dance_Data/FREQNESS_Mocap_Stats_Results/legacy_logarithmic_recovered_dyads/PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0`.
+Existing corrected-statistics folders are refused unless `overwrite_flag`
+is explicitly enabled. The MATLAB and R configuration tags must agree.
 
 Validated JRQA workbooks are stored in
 `06_Statistics_R/JRQA_Validated/<specification>`. Selecting a validated JRQA
@@ -169,14 +232,22 @@ Method-comparison and circular-shift summaries are saved alongside these
 outputs under `JRQA_Validated/Method_Comparison_FixedDyadRadius` and
 `JRQA_Validated/Surrogate_Validation_FixedDyadRadius`, respectively.
 
-The default model selection is now
-`FREQNESS_STATS_METHODS=PhaseSpaceRQANonStandardized`. It reads the separate
+The earlier method
+`FREQNESS_STATS_METHODS=PhaseSpaceRQANonStandardized` still reads the separate
 `06_Statistics_R/PhaseSpaceRQA_NonStandardized` sensitivity exports and fits
 natural-log RR and untransformed DET, following residual diagnostics. This
 post hoc transformation choice is not a preregistered manuscript analysis.
 Outputs go to `PhaseSpaceRQA_NonStandardized/SelectedTransformations` beneath
 the statistics output root, preserving the earlier all-log results. Existing
 JRQA and normalized phase-space methods retain their transformations. This
-does not change the MATLAB pipeline's input-normalization settings or create
-the sensitivity exports; they must already exist. Set the environment variable
+does not create the historical sensitivity exports; they must already exist.
+Set the environment variable
 to `FixedDyadRadiusJRQA` (or another supported method) to select other model fits.
+Historical method-comparison and surrogate plots run only when
+`run_established_methods=true`; a default phase-space run does not rewrite them.
+
+The actual R scripts used for earlier comparisons, transformation checks,
+dyad recovery and landscape sensitivities are retained in
+[`statistics_history`](statistics_history/README.md). They are audit/sensitivity
+code, not additional steps required by the selected manuscript workflow.
+Data, tables, plots, slide decks and other generated artifacts remain ignored.

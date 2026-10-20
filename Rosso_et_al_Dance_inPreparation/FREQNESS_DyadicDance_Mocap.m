@@ -98,23 +98,43 @@ CFG.block5.output_path = fullfile(CFG.common.results_path,'05_LandscapeSimilarit
 CFG.block5.component = 1;
 CFG.block5.overwrite_flag = false;
 CFG.block5.reuse_core_path = ''; % Optional matching core folder for completed dyads.
-% Existing folder names are retained despite the new block numbering.
-CFG.block6.output_path = fullfile( ...
-    CFG.common.results_path,'04_PhaseSpaceRQA');
+% Manuscript phase-space RQA: the validated 25 Hz, non-standardised analysis.
+% These settings affect only downstream RQA, not core network estimation.
 CFG.block6.overwrite_flag = false;
 CFG.block6.components = 1:2;
-CFG.block6.standardize = true;
-if ~CFG.block6.standardize
-    CFG.block6.output_path = fullfile( ...
-        CFG.common.results_path,'04_PhaseSpaceRQA_NonStandardized');
+CFG.block6.srate = 250;
+CFG.block6.downsample = 10;
+CFG.block6.lowpass_hz = 10; % Fixed physical cutoff, independent of downsample.
+CFG.block6.filter_order = 4;
+CFG.block6.duration = [.15 .85];
+CFG.block6.metric_levels = [.25 .5 1 2];
+CFG.block6.standardize = false;
+CFG.block6.threshold_method = 'max_fraction';
+CFG.block6.threshold = .1; % 10% of each trial's maximum JOINT Euclidean distance.
+CFG.block6.theiler_window = 0; % Retain the identity diagonal, as in the validated run.
+CFG.block6.lmin = 2;
+CFG.block6.vmin = 2;
+CFG.block6.output_tag = sprintf( ...
+    'PhaseSpaceRQA_AA%gHz_Dwn%d_Radius%g_Standardize%d', ...
+    CFG.block6.lowpass_hz,CFG.block6.downsample, ...
+    100*CFG.block6.threshold,CFG.block6.standardize);
+CFG.block6.output_path = fullfile( ...
+    CFG.common.results_path,['04_' CFG.block6.output_tag]);
+CFG.block6.reuse_core_path = '';
+if strcmp(CFG.common.filter_output_tag,'legacy_logarithmic')
+    % The original 33 dyads are here; recovered dyads use block1.output_path.
+    CFG.block6.reuse_core_path = fullfile(CFG.common.data_path, ...
+        'FREQNESS_Results_Rosso_et_al_inPreparation','01_Core');
 end
 CFG.block7.output_path = fullfile( ...
     CFG.common.results_path,'05_Group');
-CFG.block7.figure_path = fullfile(CFG.block7.output_path,'Figures');
+CFG.block7.figure_path = fullfile( ...
+    CFG.block7.output_path,'Figures',CFG.block6.output_tag);
 CFG.block7.overwrite_flag = false;
 CFG.block8.output_path = fullfile( ...
     CFG.common.results_path,'06_Statistics_R');
 CFG.block8.overwrite_flag = false;
+CFG.block8.export_jrqa = false; % Historical JRQA/spatial exports are opt-in.
 
 % Core analysis settings. Visualizing every single trial would open more
 % than one thousand figures, so trial visualization is optional in BLOCK 1
@@ -604,7 +624,7 @@ meter = [.25 .5 1 2];
 nmeters = length(meter);
 idx_frex = zeros(nsubs,nmeters);
 
-% Downsampling with correction for aliasing
+% Historical JRQA downsampling (legacy filter retained for compatibility)
 dwn = 10;
 srate = round(srate/dwn); % update sampling rate
 % Legacy low-pass Butterworth filter before downsampling (not adequate anti-aliasing).
@@ -983,11 +1003,10 @@ if ~isfile(export_file) || CFG.block5.overwrite_flag
     writetable(table(Dyad,Visual,Music,Outcome,FisherZ),export_file);
 end
 
-%% BLOCK 6 - PHASE-SPACE RQA (ALTERNATIVE TEMPORAL COORDINATION)
+%% BLOCK 6 - PHASE-SPACE RQA (MANUSCRIPT TEMPORAL COORDINATION)
 
-% This is intentionally a separate analysis block following the current
-% GroupAnalyses workflow. It permits direct comparison with JRQA while
-% keeping the two temporal-coordination formulations independent.
+% The selected manuscript analysis remains independent of historical JRQA.
+% Run Block 0 then this block to reuse completed core estimates unchanged.
 
 clearvars -except CFG
 
@@ -1006,16 +1025,21 @@ nsubs = 2;
 list_dyads = CFG.common.list_dyads;
 validation_flag = false;
 
-meter = [.25 .5 1 2];
+meter = CFG.block6.metric_levels;
 nmeters = length(meter);
-duration = [.15 .85];
+duration = CFG.block6.duration;
 
-srate = 250;
-dwn = 10;
-srate = round(srate/dwn);
-lp_order = 4;
-lp_cutoff_norm = .8; % Legacy cutoff: 100 Hz at the original 250 Hz sampling rate.
+srate = CFG.block6.srate;
+dwn = CFG.block6.downsample;
+validateattributes(dwn,{'numeric'},{'scalar','integer','positive'});
+assert(CFG.block6.lowpass_hz > 0 && ...
+    CFG.block6.lowpass_hz < srate/(2*dwn), ...
+    'BLOCK 6 lowpass_hz must be positive and below the downsampled Nyquist frequency.');
+lp_order = CFG.block6.filter_order;
+% Design at the ORIGINAL rate: 10/(250/2) = .08, not the legacy .8.
+lp_cutoff_norm = CFG.block6.lowpass_hz/(srate/2);
 [b_butt,a_butt] = butter(lp_order,lp_cutoff_norm,'low');
+srate = srate/dwn;
 
 assert(isfolder(CFG.block1.output_path), ...
     'BLOCK 1 output folder is missing: %s',CFG.block1.output_path);
@@ -1043,12 +1067,20 @@ PhaseRQA = [];
 % independently.
 PhaseRQA.target_frex      = [];
 PhaseRQA.component        = which_comp;
+PhaseRQA.metric_levels    = meter;
+PhaseRQA.duration         = duration;
+PhaseRQA.original_srate   = CFG.block6.srate;
+PhaseRQA.downsample       = dwn;
+PhaseRQA.srate            = srate;
+PhaseRQA.lowpass_hz       = CFG.block6.lowpass_hz;
+PhaseRQA.filter_order     = lp_order;
+PhaseRQA.filter_method    = 'butter_filtfilt_before_decimation';
 PhaseRQA.standardize      = CFG.block6.standardize;
-PhaseRQA.threshold_method = 'max_fraction';
-PhaseRQA.threshold        = 0.1;
-PhaseRQA.theiler_window   = 0;
-PhaseRQA.lmin             = 2;
-PhaseRQA.vmin             = 2;
+PhaseRQA.threshold_method = CFG.block6.threshold_method;
+PhaseRQA.threshold        = CFG.block6.threshold;
+PhaseRQA.theiler_window   = CFG.block6.theiler_window;
+PhaseRQA.lmin             = CFG.block6.lmin;
+PhaseRQA.vmin             = CFG.block6.vmin;
 PhaseRQA.figure           = validation_flag;
 PhaseRQA.animate          = false;
 
@@ -1063,11 +1095,15 @@ for condi = 1:nconds
             ' - dyad #' num2str(dyadi)])
         for triali = 1:CFG.common.trial_counts(dyadi,condi)
 
+            id_trial = CFG.common.trial_indices{dyadi,condi}(triali);
             phase_rqa_file = fullfile(component_output_path,sprintf( ...
                 'FREQNESS_PHASERQA_D%d_C%d_T%d.mat', ...
                 dyadi,condi,triali));
             if isfile(phase_rqa_file) && ~CFG.block6.overwrite_flag
-                S = load(phase_rqa_file,'FREQrqa');
+                S = load(phase_rqa_file,'FREQrqa','PhaseRQA','id_trial');
+                assert(isfield(S,'PhaseRQA') && isfield(S,'id_trial') && ...
+                    isequaln(S.PhaseRQA,PhaseRQA) && S.id_trial == id_trial, ...
+                    'Saved phase-space RQA settings/trial differ: %s',phase_rqa_file);
                 for metri = 1:nmeters
                     RR_phase(dyadi,condi,metri,triali) = S.FREQrqa(metri).RR;
                     L_phase(dyadi,condi,metri,triali) = S.FREQrqa(metri).L;
@@ -1081,46 +1117,32 @@ for condi = 1:nconds
                 continue
             end
 
-            % Reuse the completed pre-component-folder Component 2 output.
-            legacy_phase_rqa_file = fullfile( ...
-                CFG.block6.output_path,sprintf( ...
-                'FREQNESS_PHASERQA_D%d_C%d_T%d.mat', ...
-                dyadi,condi,triali));
-            if which_comp == 2 && isfile(legacy_phase_rqa_file) && ...
-                    ~CFG.block6.overwrite_flag
-                S = load(legacy_phase_rqa_file,'FREQrqa','PhaseRQA');
-                if isfield(S,'PhaseRQA') && ...
-                        isequal(S.PhaseRQA.component,which_comp)
-                    for metri = 1:nmeters
-                        RR_phase(dyadi,condi,metri,triali) = ...
-                            S.FREQrqa(metri).RR;
-                        L_phase(dyadi,condi,metri,triali) = ...
-                            S.FREQrqa(metri).L;
-                        DET_phase(dyadi,condi,metri,triali) = ...
-                            S.FREQrqa(metri).DET;
-                        ENTR_phase(dyadi,condi,metri,triali) = ...
-                            S.FREQrqa(metri).ENTR;
-                        TT_phase(dyadi,condi,metri,triali) = ...
-                            S.FREQrqa(metri).TT;
-                        LAM_phase(dyadi,condi,metri,triali) = ...
-                            S.FREQrqa(metri).LAM;
-                        Vmax_phase(dyadi,condi,metri,triali) = ...
-                            S.FREQrqa(metri).Vmax;
-                        DIV_phase(dyadi,condi,metri,triali) = ...
-                            S.FREQrqa(metri).DIV;
-                    end
-                    continue
-                end
+            % Reuse core estimates, never older RQA results with another filter.
+            core_name = sprintf('FREQNESS_CORE_D%d_C%d_T%d.mat',dyadi,condi,triali);
+            input_file = fullfile(CFG.block1.output_path,core_name);
+            if ~isfile(input_file) && ~isempty(CFG.block6.reuse_core_path)
+                input_file = fullfile(CFG.block6.reuse_core_path,core_name);
             end
-
-            % Import the same FREQ network output used by GroupAnalyses
-            input_file = fullfile(CFG.block1.output_path,sprintf( ...
-                'FREQNESS_CORE_D%d_C%d_T%d.mat', ...
-                dyadi,condi,triali));
             assert(isfile(input_file),'Missing BLOCK 1 output: %s',input_file);
-            S = load(input_file,'GED','beat_frex');
+            S = load(input_file,'GED','beat_frex','id_trial');
+            if isfield(S,'id_trial'), assert(S.id_trial == id_trial); end
             GED = S.GED;
             beat_frex = S.beat_frex;
+
+            if strcmp(CFG.common.filter_width_calibration,'legacy')
+                expected_fwhm = FREQNESS_ComputeLegacyFilterWidths_Mocap( ...
+                    GED.frex,CFG.common.filter_type);
+            else
+                expected_fwhm = FREQNESS_ComputeFilterWidths_Mocap( ...
+                    GED.frex,CFG.common.filter_type);
+            end
+            assert(isequal(size(GED.fwhm),size(expected_fwhm)) && ...
+                max(abs(GED.fwhm-expected_fwhm),[],'all') < 1e-12, ...
+                'Core filter widths do not match CFG: %s',input_file);
+            if isfield(GED,'srate')
+                assert(GED.srate == CFG.block6.srate, ...
+                    'Core sampling rate differs from CFG.block6.srate.');
+            end
 
             if isempty(PhaseRQA.target_frex)
                 this_target_frex = beat_frex;
@@ -1128,8 +1150,11 @@ for condi = 1:nconds
                 this_target_frex = PhaseRQA.target_frex;
             end
 
-            % Match the legacy JRQA filtering and downsampling; this 100 Hz
-            % low-pass does not adequately prevent aliasing at 25 Hz.
+            % Filter the complete 250 Hz series before decimation, then let
+            % the toolbox crop the 15--85% interval on the 25 Hz sample grid.
+            % This ordering preserves the validated endpoints (1051 samples).
+            assert(~isfield(GED,'bad_segments') || isempty(GED.bad_segments), ...
+                'BLOCK 6 expects the complete, gap-free Dance core time series.');
             phase_components = PhaseRQA.component;
             if isscalar(phase_components)
                 phase_components = repmat(phase_components,1,nsubs);
@@ -1140,8 +1165,8 @@ for condi = 1:nconds
             end
             for subi = 1:nsubs
                 for frexi = 1:size(GED.ts,3)
-                    this_ts = squeeze(GED.ts(phase_components(subi), ...
-                        :,frexi,subi));
+                    this_ts = reshape(GED.ts(phase_components(subi), ...
+                        :,frexi,subi),[],1);
                     GED.ts(phase_components(subi),:,frexi,subi) = ...
                         filtfilt(b_butt,a_butt,this_ts);
                 end
@@ -1167,6 +1192,11 @@ for condi = 1:nconds
                 'figure',make_figure, ...
                 'animate',PhaseRQA.animate && make_figure, ...
                 'srate',srate);
+            % Each partner's own song anchors the same beat-relative meters.
+            selected_frex = vertcat(FREQrqa.SelectedFrequencies)';
+            assert(max(abs(selected_frex-reshape(this_target_frex,[],1)*meter), ...
+                [],'all') < 1e-10, ...
+                'A requested Dance meter is absent from the core frequency grid.');
 
             % Assign every RQA output returned by its dedicated function
             for metri = 1:nmeters
@@ -1180,15 +1210,14 @@ for condi = 1:nconds
                 DIV_phase(dyadi,condi,metri,triali)  = FREQrqa(metri).DIV;
             end
 
-            id_trial = CFG.common.trial_indices{dyadi,condi}(triali);
             save(phase_rqa_file,'FREQrqa','PhaseRQA','dyadi', ...
-                'condi','triali','id_trial','-v7.3')
+                'condi','triali','id_trial','input_file','-v7.3')
 
         end
     end
 end
 
-% Keep the alternative analysis together as a study-level result.
+% Keep the manuscript analysis together as a study-level result.
 PhaseRQA.output.RR   = RR_phase;
 PhaseRQA.output.L    = L_phase;
 PhaseRQA.output.DET  = DET_phase;
@@ -1203,6 +1232,12 @@ phase_summary_file = fullfile(component_output_path, ...
 if ~isfile(phase_summary_file) || CFG.block6.overwrite_flag
     save(phase_summary_file,'PhaseRQA','which_comp','meter', ...
         'list_dyads','nconds','ntrials','nmeters','CFG','-v7.3')
+else
+    S = load(phase_summary_file,'PhaseRQA','list_dyads','CFG');
+    assert(isequaln(S.PhaseRQA,PhaseRQA) && ...
+        isequal(S.list_dyads,list_dyads) && ...
+        isequal(S.CFG.common.trial_indices,CFG.common.trial_indices), ...
+        'Saved phase-space summary differs; select a new output folder or explicitly overwrite.');
 end
 
 end
@@ -1789,12 +1824,13 @@ close all
 %% BLOCK 8 - R-READY STATISTICAL EXPORT
 
 % This block is independent of the group-visualization workspace. It loads
-% each component summary saved by BLOCKS 3 and 6 and exports separate JRQA
-% and phase-space RQA workbooks for the automated R workflow.
-components = CFG.block3.components;
+% each component summary and exports the manuscript phase-space workbooks.
+% Historical JRQA/spatial export is optional and never required for RQA.
 visual_labels = ["No", "No", "Yes", "Yes"];
 music_labels = ["Diff", "Same", "Diff", "Same"];
 
+if CFG.block8.export_jrqa
+components = CFG.block3.components;
 for componenti = 1:numel(components)
 
     which_comp = components(componenti);
@@ -1850,20 +1886,19 @@ for componenti = 1:numel(components)
 
     statistics_file = fullfile(CFG.block8.output_path, ...
         ['OUT2R_Comp#' num2str(which_comp) '.xlsx']);
-    writetable(T,statistics_file)
+    if ~isfile(statistics_file) || CFG.block8.overwrite_flag
+        writetable(T,statistics_file)
+    end
     fprintf('Saved Component %d statistics: %s\n', ...
         which_comp,statistics_file);
 
 end
-
-% Export the alternative participant-dimensional phase-space RQA results
-% separately so the established JRQA workbooks remain unchanged.
-phase_statistics_path = fullfile( ...
-    CFG.block8.output_path,'PhaseSpaceRQA');
-if ~CFG.block6.standardize
-    phase_statistics_path = fullfile( ...
-        CFG.block8.output_path,'PhaseSpaceRQA_NonStandardized');
 end
+
+% Export manuscript phase-space RR and DET to their configuration-tagged
+% folder. Earlier JRQA and phase-space workbooks remain unchanged.
+phase_statistics_path = fullfile( ...
+    CFG.block8.output_path,CFG.block6.output_tag);
 if ~isfolder(phase_statistics_path)
     mkdir(phase_statistics_path)
 end
@@ -1881,7 +1916,15 @@ for componenti = 1:numel(components)
         'before BLOCK 8.'],which_comp);
 
     S = load(phase_summary_file, ...
-        'PhaseRQA','meter','list_dyads','nconds','ntrials','nmeters');
+        'PhaseRQA','meter','list_dyads','nconds','ntrials','nmeters','CFG');
+    phase_setting_fields = {'components','srate','downsample','lowpass_hz', ...
+        'filter_order','duration','metric_levels','standardize', ...
+        'threshold_method','threshold','theiler_window','lmin','vmin'};
+    assert(all(cellfun(@(name) isequaln( ...
+        S.CFG.block6.(name),CFG.block6.(name)),phase_setting_fields)) && ...
+        isequal(S.list_dyads,CFG.common.list_dyads) && ...
+        isequal(S.CFG.common.trial_indices,CFG.common.trial_indices), ...
+        'Phase-space summary settings/trials differ from the current CFG.');
 
     % Average the available trial-level dyadic measures before statistical
     % modelling, exactly matching the established JRQA export.
@@ -1894,8 +1937,8 @@ for componenti = 1:numel(components)
 
     assert(all(isfinite(avg_RR),'all') && all(avg_RR > 0,'all'), ...
         'Phase-space RR must be finite and positive for log modelling.');
-    assert(all(isfinite(avg_DET),'all') && all(avg_DET > 0,'all'), ...
-        'Phase-space DET must be finite and positive for log modelling.');
+    assert(all(isfinite(avg_DET),'all') && all(avg_DET >= 0 & avg_DET <= 1,'all'), ...
+        'Phase-space DET must be finite and within [0,1] for raw-scale modelling.');
 
     nRows = numel(S.list_dyads)*S.nconds*S.nmeters;
     dyad_col = zeros(nRows,1);
@@ -1926,7 +1969,14 @@ for componenti = 1:numel(components)
 
     statistics_file = fullfile(phase_statistics_path, ...
         ['OUT2R_Comp#' num2str(which_comp) '.xlsx']);
-    writetable(T,statistics_file)
+    if ~isfile(statistics_file) || CFG.block8.overwrite_flag
+        writetable(T,statistics_file)
+    else
+        saved_table = readtable(statistics_file,'TextType','string');
+        assert(isequal(saved_table(:,1:4),T(:,1:4)) && ...
+            max(abs(saved_table{:,5:6}-T{:,5:6}),[],'all') < 1e-12, ...
+            'Existing phase-space export differs: %s',statistics_file);
+    end
     fprintf('Saved Component %d phase-space RQA statistics: %s\n', ...
         which_comp,statistics_file);
 
