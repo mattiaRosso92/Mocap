@@ -25,6 +25,10 @@ library(lmerTest)  # Satterthwaite denominator degrees of freedom and p-values
 bonferroni_tests <- 4
 bonferroni_alpha <- 0.05 / bonferroni_tests
 configured_metric_levels <- c(M1 = 0.25, M2 = 0.5, M3 = 1, M4 = 2)
+# Must match CFG.common.filter_output_tag and CFG.block6.output_tag in MATLAB.
+study_results_folder <- "legacy_logarithmic_recovered_dyads"
+phase_output_tag <- "PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0"
+overwrite_flag <- FALSE
 
 # Resolve paths relative to this script so it can run from any directory.
 command_args <- commandArgs(trailingOnly = FALSE)
@@ -54,11 +58,16 @@ results_root <- file.path(
 )
 statistics_input_path <- file.path(results_root, "06_Statistics_R")
 
-# The latest non-standardized phase-space analysis is the default target. Historical
-# JRQA and phase-space outputs remain untouched unless this flag is changed
-# explicitly for a deliberate reanalysis.
+# Corrected 35-dyad manuscript analysis; historical paths remain available
+# only for explicitly requested comparisons.
 run_established_methods <- FALSE
 analysis_methods <- list(
+  PhaseSpaceRQACorrected = list(
+    input_path = file.path(
+      results_root, study_results_folder, "06_Statistics_R", phase_output_tag
+    ),
+    output_subfolder = file.path(study_results_folder, phase_output_tag)
+  ),
   PhaseSpaceRQANonStandardized = list(
     input_path = file.path(
       statistics_input_path, "PhaseSpaceRQA_NonStandardized"
@@ -106,7 +115,7 @@ if (run_established_methods) {
 # Fit the primary method by default, retaining completed sensitivity outputs.
 # Set a comma-separated list to fit other methods, or an empty string for all.
 requested_methods <- Sys.getenv(
-  "FREQNESS_STATS_METHODS", unset = "PhaseSpaceRQANonStandardized"
+  "FREQNESS_STATS_METHODS", unset = "PhaseSpaceRQACorrected"
 )
 if (nzchar(requested_methods)) {
   requested_methods <- trimws(strsplit(requested_methods, ",")[[1]])
@@ -228,6 +237,22 @@ analyse_component <- function(
   if (length(missing_columns) > 0) {
     stop("Missing required columns: ", paste(missing_columns, collapse = ", "))
   }
+  if (method == "PhaseSpaceRQACorrected") {
+    # One complete observation per dyad x condition x meter; no silent row
+    # exclusion or fallback to the old 33-dyad export.
+    stopifnot(
+      all(c("RR", "DET") %in% names(data)),
+      nrow(data) == 35 * 4 * 4,
+      setequal(data$Dyad, 1:35),
+      setequal(data$Visual, c("No", "Yes")),
+      setequal(data$Music, c("Diff", "Same")),
+      setequal(data$Meter, names(configured_metric_levels)),
+      !anyNA(data[required_columns]),
+      !anyDuplicated(data[required_columns]),
+      all(is.finite(data$RR) & data$RR > 0 & data$RR <= 1),
+      all(is.finite(data$DET) & data$DET >= 0 & data$DET <= 1)
+    )
+  }
 
   dependent_variables <- setdiff(names(data), required_columns)
   dependent_variables <- dependent_variables[
@@ -272,7 +297,8 @@ analyse_component <- function(
     model_data <- data
     transformation <- "none"
     log_transform <- dv %in% c("RR", "DET") &&
-      !(method == "PhaseSpaceRQANonStandardized" && dv == "DET")
+      !(method %in% c("PhaseSpaceRQACorrected", "PhaseSpaceRQANonStandardized") &&
+        dv == "DET")
     if (log_transform) {
       if (any(model_data[[dv]] <= 0, na.rm = TRUE)) {
         stop("Cannot log-transform non-positive values in ", dv, ".")
@@ -517,7 +543,7 @@ analyse_component <- function(
       paste("Input:", input_file),
       paste("Dependent variables:", paste(dependent_variables, collapse = ", ")),
       paste("Metric levels:", paste(meter_display, collapse = ", ")),
-      if (method == "PhaseSpaceRQANonStandardized") {
+      if (method %in% c("PhaseSpaceRQACorrected", "PhaseSpaceRQANonStandardized")) {
         "Inferential models: natural-log RR; untransformed DET (diagnostic selection)"
       } else {
         "RR and DET: natural-log transformed for inferential models"
@@ -526,6 +552,13 @@ analyse_component <- function(
         "Mirroring: analyzed on its original scale"
       },
       "Descriptive statistics and plots: original scale for all measures",
+      if (method == "PhaseSpaceRQACorrected") {
+        paste(
+          "35 dyads; 250 Hz input; fourth-order 10 Hz Butterworth filtfilt;",
+          "decimation by 10, then 15--85% crop; no z-standardization;",
+          "Euclidean max_fraction radius 0.1; Theiler 0; lmin 2; vmin 2"
+        )
+      },
       paste(
         "Metric-specific post-hoc correction: Bonferroni across",
         bonferroni_tests,
@@ -549,6 +582,14 @@ for (method in names(analysis_methods)) {
   } else {
     file.path(output_root, method_settings$output_subfolder)
   }
+  if (method == "PhaseSpaceRQACorrected" && !overwrite_flag &&
+      dir.exists(method_output_root) &&
+      length(list.files(method_output_root, all.files = TRUE, no.. = TRUE)) > 0) {
+    stop(
+      "Corrected phase-space statistics already exist: ", method_output_root,
+      ". Use a new output_subfolder or explicitly set overwrite_flag = TRUE."
+    )
+  }
   dir.create(method_output_root, recursive = TRUE, showWarnings = FALSE)
 
   component_workbooks <- list.files(
@@ -561,12 +602,15 @@ for (method in names(analysis_methods)) {
       "No ", method, " component workbooks were found in ",
       method_input_path,
       ". Run the corresponding MATLAB statistical export block first " ,
-      "(BLOCK 4 for the JRQA validation pipeline)."
+      "(BLOCK 8 for the Dance pipeline; BLOCK 4 for JRQA validation)."
     )
   }
   components <- sort(unique(as.integer(sub(
     "^OUT2R_Comp#([0-9]+)\\.xlsx$", "\\1", component_workbooks
   ))))
+  if (method == "PhaseSpaceRQACorrected") {
+    stopifnot(identical(components, 1:2))
+  }
 
   component_status <- data.frame()
   for (component in components) {
@@ -599,11 +643,17 @@ for (method in names(analysis_methods)) {
     file.path(method_output_root, "Component_Status.csv"),
     row.names = FALSE
   )
+  writeLines(
+    capture.output(sessionInfo()),
+    file.path(method_output_root, "R_Session_Info.txt")
+  )
 }
 
 
 # Legacy versus validated JRQA comparison -------------------------------------
 
+# Do not regenerate or overwrite historical comparisons in a phase-space run.
+if (run_established_methods) {
 comparison_output_root <- file.path(
   output_root, "JRQA_Validated", "Method_Comparison_FixedDyadRadius"
 )
@@ -913,6 +963,8 @@ if (run_surrogate_statistics) for (component in validated_components) {
     file.path(component_output, "Surrogate_Z_Scores.png"),
     z_plot, width = 10, height = 5.8, dpi = 300, bg = "white"
   )
+}
+
 }
 
 message("Statistical workflow completed. Outputs: ", output_root)
