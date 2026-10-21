@@ -27,6 +27,51 @@ statistical unit. Original trial IDs remain saved with core outputs. Recovered
 analyses use a separate `<filter tag>_recovered_dyads` results folder, preserving
 earlier group summaries. Run Block 0 before resuming a later block.
 
+All blocks now share the matching legacy-core fallback through
+`CFG.common.reuse_core_path`. Block 1 skips those existing cores after checking
+trial IDs and actual filter widths; it does not duplicate the original 33 dyads.
+Block 2 rebuilds the 35-dyad network/ED summary from compact core fields, reusing
+completed legacy ED outputs. Blocks 3–6 follow the same retained-trial list.
+Group plots and exports reject summaries with different dyads/trials instead
+of silently adopting an older 33-dyad list. The current R study scripts require
+all 35 dyads. Historical sensitivity/validation scripts retain their original
+cohorts and are not additional steps in the main manuscript workflow.
+
+## Spatial coordination (BLOCK 3)
+
+Spatial coordination always runs independently of temporal coordination.
+`CFG.block3.compute_jrqa=false` leaves historical JRQA opt-in; the primary
+temporal analysis remains Block 6. No reusable toolbox defaults are changed.
+Components 1 and 2 use the existing `FREQNESS_SpaceCoord_Mocap` calculation:
+Pearson correlations between partners' absolute spatial patterns at matching
+beat-relative frequencies. The legacy 33-dyad spatial values are reused
+unchanged; the recovered 63 trials are calculated from their existing cores.
+Per-trial `FREQNESS_SPATIAL_*` files and separate spatial summaries retain
+original recording IDs and source provenance under `03_Coordination/Component_*`.
+
+Run Block 0, Block 3, then the **spatial section of Block 8** (before
+`Optional historical JRQA export`) to update spatial results alone. No core
+estimation, RQA, or group plotting is needed. Block 8 exports both the mean
+raw trial correlation and the mean trial-level Fisher transform, `atanh(r)`,
+to `06_Statistics_R/SpatialCoordination`. Fisher transformation is performed
+before averaging, not applied to the condition-mean correlation. Undefined
+or perfect correlations and missing retained trials stop the export.
+
+The main R script fits `SpatialRaw` as the manuscript analysis and
+`SpatialFisher` as sensitivity, using the same factorial and metric-specific
+mixed models and four-meter Bonferroni correction. To run only these methods:
+
+```sh
+FREQNESS_STATS_METHODS=SpatialRaw,SpatialFisher Rscript Rosso_et_al_Dance_inPreparation/FREQNESS_Mocap_Stats.R
+Rscript Rosso_et_al_Dance_inPreparation/FREQNESS_Mocap_SpatialComparison.R
+```
+
+Outputs go under `FREQNESS_Mocap_Stats_Results/legacy_logarithmic_recovered_dyads/SpatialCoordination`
+in `Raw`, `Fisher`, and `Comparison` subfolders, without overwriting old results.
+The comparison script reads the saved model tables, compares the legacy 33-dyad
+analysis, and plots raw-r and back-transformed Fisher summaries plus residual
+Q-Q plots. It accepts a new comparison output directory as an optional argument.
+
 ## Manuscript phase-space RQA (BLOCK 6)
 
 All settings are explicit in `CFG.block6` in Block 0:
@@ -51,7 +96,9 @@ that cutoff. Filtering precedes both decimation and duration selection.
 This downstream correction does not change core estimation, Gaussian filter
 width calibration, effective dimensionality or spatial coordination.
 
-For completed core analyses, run **Block 0, then Block 6, then Block 8**.
+For completed core analyses, run **Block 0, then Block 6, then the
+Manuscript phase-space export section of Block 8**. This temporal-only route
+does not require the spatial section; a full run executes both.
 Block 6 first searches `CFG.block1.output_path` (including recovered dyads),
 then the matching legacy `01_Core` folder for the original 33 dyads. It checks
 trial IDs, stored filter widths and selected frequencies. Do not rerun core
@@ -193,14 +240,16 @@ Gaussian filter widths.
 BLOCK 8 exports the selected phase-space RR and DET to
 `06_Statistics_R/PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0`.
 The default `CFG.block8.export_jrqa=false` makes this block independent of
-JRQA completion; historical JRQA/spatial exports remain opt-in. Existing
+JRQA completion; only historical JRQA exports remain opt-in. Spatial exports
+always run in their separate folder. Existing
 workbooks are checked against the current values and left untouched unless
 overwrite is explicitly enabled.
 
 Run `Rscript Rosso_et_al_Dance_inPreparation/FREQNESS_Mocap_Stats.R` from the
-repository root. Its default `PhaseSpaceRQACorrected` method reads both
-components from the matching recovered-dyad MATLAB folder and requires all
-560 unique dyad-condition-meter rows per component. It fits:
+repository root. Its defaults are `SpatialRaw`, `SpatialFisher`, and
+`PhaseSpaceRQACorrected`. All read both components from their matching
+recovered-dyad MATLAB folders and require all 560 unique
+dyad-condition-meter rows per component. The temporal models are:
 
 - `log(RR) ~ Visual * Music * Meter + (1 | Dyad)`
 - `DET ~ Visual * Music * Meter + (1 | Dyad)` on the original scale
