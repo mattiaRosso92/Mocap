@@ -99,7 +99,8 @@ width calibration, effective dimensionality or spatial coordination.
 For completed core analyses, run **Block 0, then Block 6, then the
 Manuscript phase-space export section of Block 8**. This temporal-only route
 does not require the spatial section; a full run executes both.
-Block 6 first searches `CFG.block1.output_path` (including recovered dyads),
+Block 6 reuses the validated RR/DET results described below when available.
+Otherwise, it searches `CFG.block1.output_path` (including recovered dyads),
 then the matching legacy `01_Core` folder for the original 33 dyads. It checks
 trial IDs, stored filter widths and selected frequencies. Do not rerun core
 estimation merely to reproduce the temporal analysis. Block 7 is optional for
@@ -107,12 +108,25 @@ group figures; R also produces condition plots.
 
 Numerical outputs use a new folder:
 `04_PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0/Component_<n>`.
-Per-trial files retain the full toolbox output, settings, original trial ID
-and source core path. Existing files are reused only when their saved settings
-and trial IDs match; older RQA caches are not imported. No legacy outputs are
-overwritten. The previously completed downsampling comparison under
-`PhaseSpaceRQA_AA10Hz_Downsample_20261017` remains a separate reference, not an
-automatic input to the main pipeline.
+For the legacy-logarithmic core analysis, `CFG.block6.reuse_rqa_path`
+automatically selects the completed corrected comparison under
+`PhaseSpaceRQA_AA10Hz_Downsample_20261017` when present. With overwrite disabled,
+Block 6 validates its settings, all retained trial IDs, core metadata,
+partner-specific frequencies, sample counts and trial/summary agreement.
+It creates only two component summaries containing the saved **RR and DET**
+and source provenance: no RQA is recomputed, no original files are changed,
+and no per-trial files are duplicated. Subsequent runs validate and reuse
+these self-contained summaries, even if the comparison folder is unavailable.
+Block 7 plots only saved metrics; Block 8 exports the same RR/DET to R.
+The other six RQA metrics were not retained by that comparison and are **not**
+invented or represented as computed missing values.
+
+Without a reusable summary or comparison, normal computation is unchanged:
+per-trial files retain the full toolbox output, settings, original trial ID
+and source core path. Existing files require matching settings and trial IDs.
+To compute all eight metrics, clear `CFG.block6.reuse_rqa_path` and choose a
+new output folder. A mismatch stops reuse rather than silently recalculating
+or overwriting results.
 
 These are **study settings**: reusable toolbox defaults and the separate
 validated-JRQA script are unchanged. Alternate settings require a separate

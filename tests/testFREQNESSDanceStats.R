@@ -34,8 +34,10 @@ if(file.exists(file.path(reference,"Factor10_Component1.xlsx"))) {
   p_ref <- read.csv(file.path(reference,"R_Statistics","Primary_PostHoc_Tests.csv"),check.names=FALSE)
   for(component in 1:2) {
     folder <- file.path(output,paste0("Component_",component))
-    env$analyse_component(file.path(reference,paste0("Factor10_Component",component,".xlsx")),
-      component,folder,"PhaseSpaceRQACorrected")
+    input <- file.path(root,"06_Statistics_R","PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0",
+      paste0("OUT2R_Comp#",component,".xlsx"))
+    if(!file.exists(input)) input <- file.path(reference,paste0("Factor10_Component",component,".xlsx"))
+    env$analyse_component(input,component,folder,"PhaseSpaceRQACorrected")
     for(dv in c("RR","DET")) {
       f <- read.csv(file.path(folder,dv,"All_Meters","Factorial_Type_III_ANOVA.csv"),check.names=FALSE)
       p <- read.csv(file.path(folder,dv,"PostHoc_Type_III_ANOVA_Bonferroni.csv"),check.names=FALSE)
