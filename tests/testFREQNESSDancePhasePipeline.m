@@ -8,7 +8,7 @@ repo = fileparts(fileparts(mfilename('fullpath')));
 code = fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation', ...
     'FREQNESS_DyadicDance_Mocap.m'));
 CFG.common = struct('data_path',tempdir,'results_path',tempdir, ...
-    'filter_output_tag','legacy_logarithmic');
+    'filter_output_tag','legacy_logarithmic','reuse_core_path',tempdir);
 first = strfind(code,'% Manuscript phase-space RQA:');
 last = strfind(code,'CFG.block7.output_path =');
 eval(code(first:last-1)); % Evaluate the actual settings, without running a study.
@@ -32,7 +32,7 @@ verifyEqual(testCase,p.output_tag, ...
     'PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0');
 verifyTrue(testCase,contains(testCase.TestData.r_code,p.output_tag));
 verifyTrue(testCase,contains(testCase.TestData.r_code, ...
-    'unset = "PhaseSpaceRQACorrected"'));
+    'unset = "SpatialRaw,SpatialFisher,PhaseSpaceRQACorrected"'));
 end
 
 function testPhysicalFilterAndCrop(testCase)
@@ -63,5 +63,5 @@ verifyTrue(testCase,contains(block6,'S.id_trial == id_trial'));
 verifyTrue(testCase,contains(block6,'CFG.block6.lowpass_hz/(srate/2)'));
 verifyTrue(testCase,contains(code,'CFG.block8.export_jrqa = false'));
 verifyTrue(testCase,contains(testCase.TestData.r_code, ...
-    'Corrected phase-space statistics already exist'));
+    'Statistics already exist'));
 end

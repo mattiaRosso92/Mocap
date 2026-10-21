@@ -77,6 +77,16 @@ CFG.common.list_dyads = 1:35;
 % Original recording IDs, not within-condition trial slots.
 % Dyad 32 trial 32 contains no recorded marker coordinates for either partner.
 CFG.common.excluded_trials = [32 32];
+% Reuse matching original outputs across ALL blocks, not only temporal RQA.
+CFG.common.reuse_results_path = '';
+if strcmp(CFG.common.filter_output_tag,'legacy_logarithmic')
+    CFG.common.reuse_results_path = fullfile(CFG.common.data_path, ...
+        'FREQNESS_Results_Rosso_et_al_inPreparation');
+end
+CFG.common.reuse_core_path = '';
+if ~isempty(CFG.common.reuse_results_path)
+    CFG.common.reuse_core_path = fullfile(CFG.common.reuse_results_path,'01_Core');
+end
 
 CFG.block1.output_path = fullfile( ...
     CFG.common.results_path,'01_Core');
@@ -88,16 +98,17 @@ CFG.block3.output_path = fullfile( ...
     CFG.common.results_path,'03_Coordination');
 CFG.block3.overwrite_flag = false;
 CFG.block3.components = 1:2;
+CFG.block3.compute_jrqa = false; % Spatial always runs; historical JRQA is opt-in.
 CFG.block4.output_path = fullfile(CFG.common.results_path,'04_MetricProminence');
 CFG.block4.component = 1;
 CFG.block4.metric_levels = [.25 .5 1 2];
 CFG.block4.global_metric_levels = []; % Toolbox default: all available metric levels.
 CFG.block4.overwrite_flag = false;
-CFG.block4.reuse_core_path = ''; % Optional matching core folder for completed dyads.
+CFG.block4.reuse_core_path = CFG.common.reuse_core_path;
 CFG.block5.output_path = fullfile(CFG.common.results_path,'05_LandscapeSimilarity');
 CFG.block5.component = 1;
 CFG.block5.overwrite_flag = false;
-CFG.block5.reuse_core_path = ''; % Optional matching core folder for completed dyads.
+CFG.block5.reuse_core_path = CFG.common.reuse_core_path;
 % Manuscript phase-space RQA: the validated 25 Hz, non-standardised analysis.
 % These settings affect only downstream RQA, not core network estimation.
 CFG.block6.overwrite_flag = false;
@@ -120,11 +131,14 @@ CFG.block6.output_tag = sprintf( ...
     100*CFG.block6.threshold,CFG.block6.standardize);
 CFG.block6.output_path = fullfile( ...
     CFG.common.results_path,['04_' CFG.block6.output_tag]);
-CFG.block6.reuse_core_path = '';
-if strcmp(CFG.common.filter_output_tag,'legacy_logarithmic')
-    % The original 33 dyads are here; recovered dyads use block1.output_path.
-    CFG.block6.reuse_core_path = fullfile(CFG.common.data_path, ...
-        'FREQNESS_Results_Rosso_et_al_inPreparation','01_Core');
+CFG.block6.reuse_core_path = CFG.common.reuse_core_path;
+% Reuse the validated RR/DET comparison if present; never import older filters.
+CFG.block6.reuse_rqa_path = '';
+if strcmp(CFG.common.filter_output_tag,'legacy_logarithmic') && ...
+        isfolder(fullfile(CFG.common.results_path, ...
+        'PhaseSpaceRQA_AA10Hz_Downsample_20261017'))
+    CFG.block6.reuse_rqa_path = fullfile(CFG.common.results_path, ...
+        'PhaseSpaceRQA_AA10Hz_Downsample_20261017');
 end
 CFG.block7.output_path = fullfile( ...
     CFG.common.results_path,'05_Group');
@@ -134,7 +148,7 @@ CFG.block7.overwrite_flag = false;
 CFG.block8.output_path = fullfile( ...
     CFG.common.results_path,'06_Statistics_R');
 CFG.block8.overwrite_flag = false;
-CFG.block8.export_jrqa = false; % Historical JRQA/spatial exports are opt-in.
+CFG.block8.export_jrqa = false; % Historical JRQA only; spatial exports always run.
 
 % Core analysis settings. Visualizing every single trial would open more
 % than one thousand figures, so trial visualization is optional in BLOCK 1
@@ -302,33 +316,33 @@ for condi = 1:nconds
             output_file = fullfile(CFG.block1.output_path,sprintf( ...
                 'FREQNESS_CORE_D%d_C%d_T%d%s.mat', ...
                 dyadi,condi,triali,prefix{idx_XYZ}));
-            if isfile(output_file) && ~CFG.block1.overwrite_flag
+            input_file = output_file;
+            if ~isfile(input_file) && ~isempty(CFG.common.reuse_core_path)
+                input_file = fullfile(CFG.common.reuse_core_path,sprintf( ...
+                    'FREQNESS_CORE_D%d_C%d_T%d%s.mat', ...
+                    dyadi,condi,triali,prefix{idx_XYZ}));
+            end
+            if isfile(input_file) && ~CFG.block1.overwrite_flag
                 if strcmp(which_method,'GED')
-                    saved_core = load(output_file,'GED');
-                    assert(isfield(saved_core,'GED') && ...
-                        isfield(saved_core.GED,'frex'), ...
-                        'Existing core output lacks filter provenance.');
+                    % Read only compact fields; do not reload saved time series.
+                    saved_core = load(input_file,'id_trial');
+                    assert(saved_core.id_trial == id_trial,'Saved core trial ID differs.');
+                    saved_frex = h5read(input_file,'/GED/frex');
+                    saved_fwhm = h5read(input_file,'/GED/fwhm');
                     if strcmp(CFG.common.filter_width_calibration,'legacy')
                         saved_expected_filter_width = ...
                             FREQNESS_ComputeLegacyFilterWidths_Mocap( ...
-                            saved_core.GED.frex,CFG.common.filter_type);
+                            saved_frex,CFG.common.filter_type);
                     else
                         saved_expected_filter_width = ...
                             FREQNESS_ComputeFilterWidths_Mocap( ...
-                            saved_core.GED.frex,CFG.common.filter_type);
+                            saved_frex,CFG.common.filter_type);
                     end
-                    assert(isfield(saved_core.GED,'filter_width_calibration') && ...
-                        strcmpi(saved_core.GED.filter_width_calibration, ...
-                        CFG.common.filter_width_calibration) && ...
-                        isfield(saved_core.GED,'filter_type') && ...
-                        strcmpi(saved_core.GED.filter_type, ...
-                        CFG.common.filter_type) && ...
-                        isfield(saved_core.GED,'fwhm') && ...
-                        isequal(saved_core.GED.fwhm, ...
-                        saved_expected_filter_width), ...
+                    assert(isequal(size(saved_fwhm),size(saved_expected_filter_width)) && ...
+                        max(abs(saved_fwhm-saved_expected_filter_width),[],'all') < 1e-12, ...
                         'Existing core output uses an incompatible filter calibration.');
                 end
-                fprintf('BLOCK 1 output exists; skipping %s.\n',output_file);
+                fprintf('BLOCK 1 output exists; skipping %s.\n',input_file);
                 continue
             end
 
@@ -525,11 +539,19 @@ for dyadi = list_dyads
             input_file = fullfile(CFG.block1.output_path,sprintf( ...
                 'FREQNESS_CORE_D%d_C%d_T%d%s.mat', ...
                 dyadi,condi,triali,prefix{idx_XYZ}));
+            if ~isfile(input_file) && ~isempty(CFG.common.reuse_core_path)
+                input_file = fullfile(CFG.common.reuse_core_path,sprintf( ...
+                    'FREQNESS_CORE_D%d_C%d_T%d%s.mat', ...
+                    dyadi,condi,triali,prefix{idx_XYZ}));
+            end
             assert(isfile(input_file),'Missing BLOCK 1 output: %s',input_file);
-            S = load(input_file,which_method,'marker_reference');
-
-            % Alias to the chosen method struct (either S.GED or S.PCA)
-            M = S.(which_method);
+            S = load(input_file,'marker_reference','id_trial');
+            assert(S.id_trial == CFG.common.trial_indices{dyadi,condi}(triali));
+            % Group landscapes need no sample-resolved time series.
+            M = [];
+            for field = {'evals','pats','frex','frex_norm'}
+                M.(field{1}) = h5read(input_file,['/' which_method '/' field{1}]);
+            end
 
             % Initialize group-level outputs once, using the loaded struct sizes
             if dyadi == list_dyads(1) && condi == 1 && triali == 1
@@ -550,7 +572,18 @@ for dyadi = list_dyads
             % retain only the requested spatial components for visualization.
             all_evals(dyadi,condi,triali,:,:,:) = M.evals;
             all_pats(dyadi,condi,triali,:,1:ncomps2keep,:,:) = M.pats(:,1:ncomps2keep,:,:);
-            [this_H2,this_ED] = FREQNESS_EffectDim_Mocap(M,'figure',false);
+            legacy_landscape_file = fullfile(CFG.common.reuse_results_path, ...
+                '02_Landscape',sprintf('FREQNESS_LANDSCAPE_D%d_C%d_T%d%s.mat', ...
+                dyadi,condi,triali,prefix{idx_XYZ}));
+            if ~CFG.block2.overwrite_flag && ~isempty(CFG.common.reuse_results_path) && ...
+                    isfile(legacy_landscape_file)
+                S = load(legacy_landscape_file,'H2','ED_trial','frex');
+                assert(max(abs(S.frex-M.frex),[],'all') < 1e-12);
+                this_H2 = S.H2;
+                this_ED = S.ED_trial;
+            else
+                [this_H2,this_ED] = FREQNESS_EffectDim_Mocap(M,'figure',false);
+            end
             ED(condi,dyadi,triali,:,:) = this_ED;
 
             % Match the HYPER-NESS stage convention: one compact landscape
@@ -578,12 +611,17 @@ if save_flag == 1
     if ~isfile(group_output_file) || CFG.block2.overwrite_flag
         save(group_output_file,'all_evals','all_pats','all_frex_norm', ...
             'ED','list_dyads','marker_reference','CFG','-v7.3')
+    else
+        S = load(group_output_file,'list_dyads','CFG');
+        assert(isequal(S.list_dyads,CFG.common.list_dyads) && ...
+            isequal(S.CFG.common.trial_indices,CFG.common.trial_indices), ...
+            'Existing group summary has different dyads/trials; use a new folder.');
     end
 end
 
 
 
-%% BLOCK 3 - JRQA TEMPORAL COORDINATION AND SPATIAL COORDINATION
+%% BLOCK 3 - SPATIAL COORDINATION AND OPTIONAL HISTORICAL JRQA
 
 clearvars -except CFG
 
@@ -612,7 +650,7 @@ nsubs   = 2;
 list_dyads = CFG.common.list_dyads;
 srate = 250;
 
-% This full-experiment script always consumes the new BLOCK 1 outputs.
+% Recovered and original dyads share the same retained-trial list.
 validation_flag = false;
 assert(isfolder(CFG.block1.output_path), ...
     'BLOCK 1 output folder is missing: %s',CFG.block1.output_path);
@@ -650,6 +688,21 @@ end
 
 disp(['BLOCK 3: Component #' num2str(which_comp)])
 
+% The legacy spatial summaries already contain the corrected magnitude-pattern
+% correlations. Reuse these 33 dyads unchanged, never their temporal outputs.
+legacy_spatial = [];
+legacy_spatial_file = fullfile(CFG.common.reuse_results_path, ...
+    '03_Coordination',['Component_' num2str(which_comp)], ...
+    ['FREQNESS_COORDINATION_SUMMARY_Comp#' num2str(which_comp) '.mat']);
+if ~isempty(CFG.common.reuse_results_path) && isfile(legacy_spatial_file) && ...
+        ~CFG.block3.overwrite_flag
+    legacy_spatial = load(legacy_spatial_file,'MIRROR','list_dyads','which_comp','meter');
+    assert(legacy_spatial.which_comp == which_comp && isequal(legacy_spatial.meter,meter) && ...
+        isequal(legacy_spatial.list_dyads,setdiff(1:35,[13 32])), ...
+        'Unexpected legacy spatial summary; inspect before reuse.');
+end
+
+if CFG.block3.compute_jrqa
 % Optimize JRQA parameters (if requested)
 if attune_flag ==1
 
@@ -670,6 +723,10 @@ if attune_flag ==1
                 input_file = fullfile(CFG.block1.output_path,sprintf( ...
                     'FREQNESS_CORE_D%d_C%d_T%d.mat', ...
                     dyadi,condi,triali));
+                if ~isfile(input_file) && ~isempty(CFG.common.reuse_core_path)
+                    input_file = fullfile(CFG.common.reuse_core_path,sprintf( ...
+                        'FREQNESS_CORE_D%d_C%d_T%d.mat',dyadi,condi,triali));
+                end
                 assert(isfile(input_file),'Missing BLOCK 1 output: %s',input_file);
                 S = load(input_file,'GED','beat_frex');
                 GED = S.GED;
@@ -686,7 +743,7 @@ if attune_flag ==1
                         % Assign timeseries
                         gedTs = GED.ts(which_comp,:,idx_frex(subi,metri),subi); % assign component corresponding to the frequency of interest
 
-                        % Apply Butterworth filter for aliasing correction
+                        % Historical 100 Hz low-pass (not adequate anti-aliasing)
                         gedTs = filtfilt(b_butt, a_butt, gedTs); % Zero-phase filtering
 
                         % Downsample
@@ -738,6 +795,8 @@ else
 
 end
 
+end % Optional historical JRQA parameters
+
 % Pre-allocate group-level output
 [MIRROR,RR,DET] = deal(nan(ndyads,nconds,nmeters,ntrials));
 
@@ -746,6 +805,44 @@ for condi = 1:nconds
     for dyadi = list_dyads
         disp(['Condition#' num2str(condi) ' - Dyad #' num2str(dyadi)])
         for triali = 1:CFG.common.trial_counts(dyadi,condi)
+
+            id_trial = CFG.common.trial_indices{dyadi,condi}(triali);
+            spatial_file = fullfile(component_output_path,sprintf( ...
+                'FREQNESS_SPATIAL_D%d_C%d_T%d.mat',dyadi,condi,triali));
+            if isfile(spatial_file) && ~CFG.block3.overwrite_flag
+                S = load(spatial_file,'FREQmirror','id_trial','which_comp','meter');
+                assert(S.id_trial == id_trial && S.which_comp == which_comp && ...
+                    isequal(S.meter,meter),'Saved spatial settings/trial differ: %s',spatial_file);
+                FREQmirror = S.FREQmirror;
+            else
+                if ~isempty(legacy_spatial) && ismember(dyadi,legacy_spatial.list_dyads)
+                    assert(CFG.common.trial_counts(dyadi,condi) == 8);
+                    FREQmirror = reshape(legacy_spatial.MIRROR(dyadi,condi,:,triali),1,[]);
+                    input_file = legacy_spatial_file;
+                else
+                    core_name = sprintf('FREQNESS_CORE_D%d_C%d_T%d.mat',dyadi,condi,triali);
+                    input_file = fullfile(CFG.block1.output_path,core_name);
+                    if ~isfile(input_file) && ~isempty(CFG.common.reuse_core_path)
+                        input_file = fullfile(CFG.common.reuse_core_path,core_name);
+                    end
+                    assert(isfile(input_file),'Missing core output: %s',input_file);
+                    S = load(input_file,'beat_frex','id_trial');
+                    assert(S.id_trial == id_trial);
+                    GED = struct('pats',h5read(input_file,'/GED/pats'), ...
+                        'frex',h5read(input_file,'/GED/frex'));
+                    relative_frex = GED.frex./reshape(S.beat_frex,1,[]);
+                    assert(max(abs(relative_frex-(1:32)'/8),[],'all') < 1e-12, ...
+                        'Partners must share the beat-relative grid.');
+                    FREQmirror = FREQNESS_SpaceCoord_Mocap(GED,S.beat_frex, ...
+                        'metric_levels',meter,'component',which_comp);
+                end
+                save(spatial_file,'FREQmirror','which_comp','meter', ...
+                    'dyadi','condi','triali','id_trial','input_file');
+            end
+            assert(all(isfinite(FREQmirror)) && all(abs(FREQmirror)<1), ...
+                'Undefined/perfect spatial correlation; inspect %s.',spatial_file);
+            MIRROR(dyadi,condi,:,triali) = reshape(FREQmirror,1,1,nmeters);
+            if ~CFG.block3.compute_jrqa, continue; end
 
             coordination_file = fullfile(component_output_path,sprintf( ...
                 'FREQNESS_COORDINATION_D%d_C%d_T%d.mat', ...
@@ -787,6 +884,10 @@ for condi = 1:nconds
             input_file = fullfile(CFG.block1.output_path,sprintf( ...
                 'FREQNESS_CORE_D%d_C%d_T%d.mat', ...
                 dyadi,condi,triali));
+            if ~isfile(input_file) && ~isempty(CFG.common.reuse_core_path)
+                input_file = fullfile(CFG.common.reuse_core_path,sprintf( ...
+                    'FREQNESS_CORE_D%d_C%d_T%d.mat',dyadi,condi,triali));
+            end
             assert(isfile(input_file),'Missing BLOCK 1 output: %s',input_file);
             S = load(input_file,'GED','beat_frex');
             GED = S.GED;
@@ -796,7 +897,7 @@ for condi = 1:nconds
             gedTs = squeeze(GED.ts(which_comp,:,:,:)); % [original_time x nfrex x nsubs]
             for subi = 1:nsubs
                 for frexi = 1:size(gedTs,2)
-                    gedTs(:,frexi,subi) = filtfilt(b_butt, a_butt, gedTs(:,frexi,subi));  % Butterworth filter for aliasing correction
+                    gedTs(:,frexi,subi) = filtfilt(b_butt, a_butt, gedTs(:,frexi,subi)); % Historical low-pass
                 end
             end
             gedTs = gedTs(1:dwn:end,:,:);  % Downsampling both subs
@@ -835,11 +936,25 @@ for condi = 1:nconds
     end
 end
 
-% Save one compact component-level summary for visualization and statistics.
+% Spatial summaries are independent of the optional historical JRQA run.
+spatial_summary_file = fullfile(component_output_path, ...
+    ['FREQNESS_SPATIAL_SUMMARY_Comp#' num2str(which_comp) '.mat']);
+if ~isfile(spatial_summary_file) || CFG.block3.overwrite_flag
+    save(spatial_summary_file,'MIRROR','which_comp','meter','list_dyads', ...
+        'nconds','ntrials','nmeters','CFG','-v7.3');
+else
+    S = load(spatial_summary_file,'MIRROR','list_dyads','CFG');
+    assert(isequaln(S.MIRROR,MIRROR) && isequal(S.list_dyads,list_dyads) && ...
+        isequal(S.CFG.common.trial_indices,CFG.common.trial_indices), ...
+        'Existing spatial summary differs; use a new folder or explicitly overwrite.');
+end
+
+if CFG.block3.compute_jrqa
 coordination_summary_file = fullfile(component_output_path, ...
     ['FREQNESS_COORDINATION_SUMMARY_Comp#' num2str(which_comp) '.mat']);
 save(coordination_summary_file,'MIRROR','RR','DET','which_comp', ...
     'meter','list_dyads','nconds','ntrials','nmeters','CFG','-v7.3')
+end
 
 end
 
@@ -898,6 +1013,11 @@ end
 summary_file = fullfile(component_path,'FREQNESS_METRIC_SUMMARY.mat');
 if ~isfile(summary_file) || CFG.block4.overwrite_flag
     save(summary_file,'prominence','CFG');
+else
+    S = load(summary_file,'prominence','CFG');
+    assert(isequaln(S.prominence,prominence) && ...
+        isequal(S.CFG.common.trial_indices,CFG.common.trial_indices), ...
+        'Existing prominence summary has different data/trials.');
 end
 % Export independently: no JRQA, phase-space or visualization block is required.
 prominence_avg = mean(prominence,3,'omitnan');
@@ -921,6 +1041,11 @@ assert(all(isfinite(Prominence) & Prominence > 0));
 export_file = fullfile(component_path,'OUT2R_MetricProminence.csv');
 if ~isfile(export_file) || CFG.block4.overwrite_flag
     writetable(table(Dyad,Visual,Music,Level,Prominence),export_file);
+else
+    S = readtable(export_file,'TextType','string');
+    assert(isequal(S(:,1:4),table(Dyad,Visual,Music,Level)) && ...
+        max(abs(S.Prominence-Prominence)) < 1e-12, ...
+        'Existing prominence export has different dyads/data.');
 end
 
 %% BLOCK 5 - LANDSCAPE SIMILARITY
@@ -978,6 +1103,11 @@ end
 summary_file = fullfile(component_path,'FREQNESS_SIMILARITY_SUMMARY.mat');
 if ~isfile(summary_file) || CFG.block5.overwrite_flag
     save(summary_file,'similarity','CFG');
+else
+    S = load(summary_file,'similarity','CFG');
+    assert(isequaln(S.similarity,similarity) && ...
+        isequal(S.CFG.common.trial_indices,CFG.common.trial_indices), ...
+        'Existing similarity summary has different data/trials.');
 end
 % Average trial correlations in Fisher-z space, retaining signed similarity.
 similarity_z = mean(atanh(similarity),3,'omitnan');
@@ -1001,6 +1131,11 @@ assert(all(isfinite(FisherZ)));
 export_file = fullfile(component_path,'OUT2R_LandscapeSimilarity.csv');
 if ~isfile(export_file) || CFG.block5.overwrite_flag
     writetable(table(Dyad,Visual,Music,Outcome,FisherZ),export_file);
+else
+    S = readtable(export_file,'TextType','string');
+    assert(isequal(S(:,1:4),table(Dyad,Visual,Music,Outcome)) && ...
+        max(abs(S.FisherZ-FisherZ)) < 1e-12, ...
+        'Existing similarity export has different dyads/data.');
 end
 
 %% BLOCK 6 - PHASE-SPACE RQA (MANUSCRIPT TEMPORAL COORDINATION)
@@ -1083,6 +1218,104 @@ PhaseRQA.lmin             = CFG.block6.lmin;
 PhaseRQA.vmin             = CFG.block6.vmin;
 PhaseRQA.figure           = validation_flag;
 PhaseRQA.animate          = false;
+
+phase_summary_file = fullfile(component_output_path, ...
+    ['FREQNESS_PHASERQA_SUMMARY_Comp#' num2str(which_comp) '.mat']);
+% Imported summaries contain only RR/DET, not fabricated auxiliary metrics.
+% They are self-contained and can be reused without the original comparison.
+if isfile(phase_summary_file) && ~CFG.block6.overwrite_flag
+    saved_phase = load(phase_summary_file);
+    if isfield(saved_phase,'reuse_source')
+        assert(isequaln(rmfield(saved_phase.PhaseRQA,'output'),PhaseRQA) && ...
+            isequal(saved_phase.list_dyads,list_dyads) && ...
+            isequal(saved_phase.CFG.common.trial_indices,CFG.common.trial_indices) && ...
+            isequal(saved_phase.CFG.common.trial_counts,CFG.common.trial_counts) && ...
+            strcmp(saved_phase.CFG.common.filter_output_tag,CFG.common.filter_output_tag), ...
+            'Reused phase-space summary settings/trials differ; select a new output folder.');
+        for metri = {'RR','DET'}
+            this_metric = saved_phase.PhaseRQA.output.(metri{1});
+            assert(isequal(size(this_metric,1:4),[ndyads nconds nmeters ntrials]) && ...
+                nnz(isfinite(this_metric)) == sum(CFG.common.trial_counts(list_dyads,:),'all')*nmeters, ...
+                'Reused phase-space summary has incomplete RR/DET coverage.');
+            for dyadi = list_dyads
+                for condi = 1:nconds
+                    retained = this_metric(dyadi,condi,:,1:CFG.common.trial_counts(dyadi,condi));
+                    assert(all(isfinite(retained) & retained >= 0 & retained <= 1,'all'), ...
+                        'Reused phase-space summary has invalid retained RR/DET values.');
+                end
+            end
+        end
+        fprintf('BLOCK 6: reusing saved RR/DET summary, Component %d; no RQA computation.\n',which_comp);
+        continue
+    end
+end
+
+if ~isfile(phase_summary_file) && ~CFG.block6.overwrite_flag && ...
+        ~isempty(CFG.block6.reuse_rqa_path)
+    reference = load(fullfile(CFG.block6.reuse_rqa_path,'Summary.mat'));
+    setting_fields = {'srate','lowpass_hz','filter_order','metric_levels', ...
+        'duration','threshold','standardize','lmin','theiler_window'};
+    assert(all(cellfun(@(name) isequaln(reference.settings.(name), ...
+        CFG.block6.(name)),setting_fields)) && ...
+        strcmp(PhaseRQA.threshold_method,'max_fraction') && ...
+        strcmp(reference.CFG.common.filter_output_tag,CFG.common.filter_output_tag) && ...
+        isequal(reference.CFG.common.list_dyads,list_dyads) && ...
+        isequal(reference.CFG.common.trial_indices,CFG.common.trial_indices) && ...
+        isequal(reference.CFG.common.trial_counts,CFG.common.trial_counts), ...
+        'Reference phase-space settings/trials differ; disable reuse or select matching inputs.');
+    idx_component = find(reference.settings.components == which_comp);
+    idx_factor = find(reference.settings.factors == dwn);
+    assert(isscalar(idx_component) && isscalar(idx_factor), ...
+        'Reference phase-space component/downsampling factor is unavailable.');
+    [RR_phase,DET_phase] = deal(nan(ndyads,nconds,nmeters,ntrials));
+    for condi = 1:nconds
+        for dyadi = list_dyads
+            for triali = 1:CFG.common.trial_counts(dyadi,condi)
+                source_file = fullfile(CFG.block6.reuse_rqa_path,sprintf( ...
+                    'D%d_C%d_T%d.mat',dyadi,condi,triali));
+                source = load(source_file);
+                id_trial = CFG.common.trial_indices{dyadi,condi}(triali);
+                assert(isequaln(source.settings,reference.settings) && source.id_trial == id_trial, ...
+                    'Reference phase-space settings/trial differ: %s',source_file);
+                core_name = sprintf('FREQNESS_CORE_D%d_C%d_T%d.mat',dyadi,condi,triali);
+                input_file = fullfile(CFG.block1.output_path,core_name);
+                if ~isfile(input_file), input_file = fullfile(CFG.block6.reuse_core_path,core_name); end
+                % Read only core metadata, never its time series or recurrence matrix.
+                core = load(input_file,'id_trial','beat_frex');
+                [~,source_core_name,source_core_ext] = fileparts(source.source_file);
+                core_frex = h5read(input_file,'/GED/frex');
+                core_fwhm = h5read(input_file,'/GED/fwhm');
+                expected_fwhm = FREQNESS_ComputeLegacyFilterWidths_Mocap(core_frex,CFG.common.filter_type);
+                core_info = h5info(input_file,'/GED/ts');
+                reduced_length = numel(1:dwn:core_info.Dataspace.Size(2));
+                expected_samples = diff(round(duration*reduced_length))+1;
+                assert(core.id_trial == id_trial && strcmp([source_core_name source_core_ext],core_name) && ...
+                    max(abs(core_fwhm-expected_fwhm),[],'all') < 1e-12 && ...
+                    max(abs(source.selected_frequencies-reshape(core.beat_frex,[],1)*meter),[],'all') < 1e-10 && ...
+                    source.sample_counts(idx_factor) == expected_samples, ...
+                    'Reference phase-space core/frequencies/sample count differ: %s',source_file);
+                this_RR = source.RR(idx_component,:,idx_factor);
+                this_DET = source.DET(idx_component,:,idx_factor);
+                assert(numel(this_RR) == nmeters && numel(this_DET) == nmeters && ...
+                    all(isfinite([this_RR this_DET]) & [this_RR this_DET] >= 0 & [this_RR this_DET] <= 1), ...
+                    'Reference phase-space RR/DET are incomplete or invalid: %s',source_file);
+                assert(isequal(this_RR,reshape(reference.RR(dyadi,condi,triali,idx_component,:,idx_factor),1,[])) && ...
+                    isequal(this_DET,reshape(reference.DET(dyadi,condi,triali,idx_component,:,idx_factor),1,[])), ...
+                    'Reference phase-space trial and summary values differ: %s',source_file);
+                RR_phase(dyadi,condi,:,triali) = reshape(this_RR,1,1,nmeters);
+                DET_phase(dyadi,condi,:,triali) = reshape(this_DET,1,1,nmeters);
+            end
+        end
+    end
+    PhaseRQA.output.RR = RR_phase;
+    PhaseRQA.output.DET = DET_phase;
+    reuse_source = struct('path',CFG.block6.reuse_rqa_path, ...
+        'settings',reference.settings,'metrics',{{'RR','DET'}});
+    save(phase_summary_file,'PhaseRQA','which_comp','meter','list_dyads', ...
+        'nconds','ntrials','nmeters','CFG','reuse_source','-v7.3')
+    fprintf('BLOCK 6: imported validated RR/DET, Component %d; no RQA computation.\n',which_comp);
+    continue
+end
 
 % Pre-allocate one group-level variable for each RQA output
 [RR_phase,L_phase,DET_phase,ENTR_phase,TT_phase,LAM_phase, ...
@@ -1279,12 +1512,25 @@ for componenti = 1:numel(coordination_components)
     which_comp = coordination_components(componenti);
     coordination_summary_file = fullfile(CFG.block3.output_path, ...
         ['Component_' num2str(which_comp)], ...
-        ['FREQNESS_COORDINATION_SUMMARY_Comp#' ...
+        ['FREQNESS_SPATIAL_SUMMARY_Comp#' ...
         num2str(which_comp) '.mat']);
     assert(isfile(coordination_summary_file), ...
         'Missing BLOCK 3 summary: %s',coordination_summary_file);
-    coordination_results{componenti} = load(coordination_summary_file, ...
-        'MIRROR','RR','DET','which_comp');
+    S = load(coordination_summary_file,'MIRROR','which_comp','list_dyads','CFG');
+    assert(isequal(S.list_dyads,CFG.common.list_dyads) && ...
+        isequal(S.CFG.common.trial_indices,CFG.common.trial_indices), ...
+        'Spatial group summary does not cover the configured dyads/trials.');
+    coordination_results{componenti} = S;
+    if CFG.block3.compute_jrqa
+        S = load(fullfile(CFG.block3.output_path,['Component_' num2str(which_comp)], ...
+            ['FREQNESS_COORDINATION_SUMMARY_Comp#' num2str(which_comp) '.mat']), ...
+            'RR','DET','list_dyads','CFG');
+        assert(isequal(S.list_dyads,CFG.common.list_dyads) && ...
+            isequal(S.CFG.common.trial_indices,CFG.common.trial_indices), ...
+            'Historical JRQA group summary has different dyads/trials.');
+        coordination_results{componenti}.RR = S.RR;
+        coordination_results{componenti}.DET = S.DET;
+    end
 end
 
 phase_components = CFG.block6.components;
@@ -1296,7 +1542,11 @@ for componenti = 1:numel(phase_components)
         ['FREQNESS_PHASERQA_SUMMARY_Comp#' num2str(which_comp) '.mat']);
     assert(isfile(phase_summary_file), ...
         'Missing BLOCK 6 summary: %s',phase_summary_file);
-    phase_results{componenti} = load(phase_summary_file,'PhaseRQA');
+    S = load(phase_summary_file,'PhaseRQA','list_dyads','CFG');
+    assert(isequal(S.list_dyads,CFG.common.list_dyads) && ...
+        isequal(S.CFG.common.trial_indices,CFG.common.trial_indices), ...
+        'Phase-space group summary does not cover the configured dyads/trials.');
+    phase_results{componenti} = S;
 end
 
 % Select method: 'GED' or 'PCA'
@@ -1308,9 +1558,14 @@ idx_XYZ = 1; % 1 = '', all axes included
 close all
 
 % Import group-level data
+S = load(fullfile(path_data, ...
+    ['FREQNESS_GroupNetworkSummary' prefix{idx_XYZ} '.mat']),'list_dyads','CFG');
+assert(isequal(S.list_dyads,CFG.common.list_dyads) && ...
+    isequal(S.CFG.common.trial_indices,CFG.common.trial_indices), ...
+    'Network group summary does not cover the configured dyads/trials.');
 load(fullfile(path_data, ...
     ['FREQNESS_GroupNetworkSummary' prefix{idx_XYZ} '.mat']), ...
-    'all_evals','all_pats','all_frex_norm','ED','list_dyads', ...
+    'all_evals','all_pats','all_frex_norm','ED', ...
     'marker_reference')
 markData = marker_reference;
 nmarks = size(markData,1);
@@ -1737,8 +1992,12 @@ FREQNESS_Visualizer_Mocap(GED_figure,[],Patterns_figure);
 
 % GROUP-LEVEL COORDINATION VISUALIZATION
 
-coordination_fields = {'MIRROR','RR','DET'};
-coordination_labels = {'Spatial correlation','Recurrence rate','Determinism'};
+coordination_fields = {'MIRROR'};
+coordination_labels = {'Spatial correlation'};
+if CFG.block3.compute_jrqa
+    coordination_fields = [coordination_fields {'RR','DET'}];
+    coordination_labels = [coordination_labels {'Recurrence rate','Determinism'}];
+end
 for componenti = 1:numel(coordination_results)
     which_comp = coordination_results{componenti}.which_comp;
     for metrici = 1:numel(coordination_fields)
@@ -1778,6 +2037,10 @@ phase_metric_labels = {'Recurrence rate','Average diagonal length', ...
 
 for componenti = 1:numel(phase_results)
     for metrici = 1:numel(phase_metric_fields)
+        % Validated RR/DET imports do not contain the six auxiliary metrics.
+        if ~isfield(phase_results{componenti}.PhaseRQA.output,phase_metric_fields{metrici})
+            continue
+        end
         phase_metric = phase_results{componenti}.PhaseRQA.output.( ...
             phase_metric_fields{metrici});
         avg_phase_metric = squeeze(mean(phase_metric(list_dyads,:,:,:),4,'omitnan'));
@@ -1825,10 +2088,61 @@ close all
 
 % This block is independent of the group-visualization workspace. It loads
 % each component summary and exports the manuscript phase-space workbooks.
-% Historical JRQA/spatial export is optional and never required for RQA.
+% Spatial export is independent of JRQA and phase-space RQA.
 visual_labels = ["No", "No", "Yes", "Yes"];
 music_labels = ["Diff", "Same", "Diff", "Same"];
 
+% Primary: mean raw trial r. Sensitivity: mean atanh(trial r), NOT atanh(mean r).
+spatial_statistics_path = fullfile(CFG.block8.output_path,'SpatialCoordination');
+if ~isfolder(spatial_statistics_path), mkdir(spatial_statistics_path); end
+for which_comp = CFG.block3.components
+    S = load(fullfile(CFG.block3.output_path,['Component_' num2str(which_comp)], ...
+        ['FREQNESS_SPATIAL_SUMMARY_Comp#' num2str(which_comp) '.mat']), ...
+        'MIRROR','list_dyads','CFG');
+    assert(isequal(S.list_dyads,CFG.common.list_dyads) && ...
+        isequal(S.CFG.common.trial_indices,CFG.common.trial_indices), ...
+        'Spatial summary does not cover the configured dyads/trials.');
+    for dyadi = S.list_dyads
+        for condi = 1:4
+            trial_values = S.MIRROR(dyadi,condi,:,1:CFG.common.trial_counts(dyadi,condi));
+            assert(all(isfinite(trial_values),'all') && all(abs(trial_values)<1,'all'), ...
+                'Missing/invalid retained spatial trials for D%d C%d.',dyadi,condi);
+        end
+    end
+    avg_MIRROR = mean(S.MIRROR,4,'omitnan');
+    avg_FisherZ = mean(atanh(S.MIRROR),4,'omitnan');
+    [Dyad,Mirror,FisherZ] = deal(zeros(numel(S.list_dyads)*16,1));
+    [Visual,Music,Meter] = deal(strings(size(Dyad)));
+    rowi = 0;
+    for dyadi = S.list_dyads
+        for condi = 1:4
+            for metri = 1:4
+                rowi = rowi+1;
+                Dyad(rowi) = dyadi; Visual(rowi) = visual_labels(condi);
+                Music(rowi) = music_labels(condi); Meter(rowi) = "M" + metri;
+                Mirror(rowi) = avg_MIRROR(dyadi,condi,metri);
+                FisherZ(rowi) = avg_FisherZ(dyadi,condi,metri);
+            end
+        end
+    end
+    T = table(Dyad,Visual,Music,Meter,Mirror,FisherZ);
+    statistics_file = fullfile(spatial_statistics_path, ...
+        ['OUT2R_Comp#' num2str(which_comp) '.xlsx']);
+    if ~isfile(statistics_file) || CFG.block8.overwrite_flag
+        writetable(T,statistics_file);
+    else
+        saved_table = readtable(statistics_file,'TextType','string');
+        assert(isequal(saved_table(:,1:4),T(:,1:4)) && ...
+            max(abs(saved_table{:,5:6}-T{:,5:6}),[],'all') < 1e-12, ...
+            'Existing spatial export differs: %s',statistics_file);
+    end
+    fprintf('Spatial export: %d dyads, Component %d, %s\n', ...
+        numel(S.list_dyads),which_comp,statistics_file);
+end
+
+%% Optional historical JRQA export
+visual_labels = ["No", "No", "Yes", "Yes"];
+music_labels = ["Diff", "Same", "Diff", "Same"];
 if CFG.block8.export_jrqa
 components = CFG.block3.components;
 for componenti = 1:numel(components)
@@ -1845,7 +2159,10 @@ for componenti = 1:numel(components)
 
     S = load(coordination_summary_file, ...
         'MIRROR','RR','DET','meter','list_dyads', ...
-        'nconds','ntrials','nmeters');
+        'nconds','ntrials','nmeters','CFG');
+    assert(isequal(S.list_dyads,CFG.common.list_dyads) && ...
+        isequal(S.CFG.common.trial_indices,CFG.common.trial_indices), ...
+        'Historical JRQA summary does not cover the configured dyads/trials.');
 
     % Average the available trial-level dyadic measures before statistical
     % modelling, retaining one observation per dyad/condition/metric level.
@@ -1895,8 +2212,11 @@ for componenti = 1:numel(components)
 end
 end
 
+%% Manuscript phase-space export
 % Export manuscript phase-space RR and DET to their configuration-tagged
 % folder. Earlier JRQA and phase-space workbooks remain unchanged.
+visual_labels = ["No", "No", "Yes", "Yes"];
+music_labels = ["Diff", "Same", "Diff", "Same"];
 phase_statistics_path = fullfile( ...
     CFG.block8.output_path,CFG.block6.output_tag);
 if ~isfolder(phase_statistics_path)

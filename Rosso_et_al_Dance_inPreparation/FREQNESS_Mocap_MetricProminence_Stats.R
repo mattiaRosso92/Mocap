@@ -14,6 +14,7 @@ if(dir.exists(output_path)) stop("Output folder exists; choose a new folder to p
 data <- read.csv(input_file)
 labels <- c(Global="Global",M1="Beat / 4",M2="Beat / 2",M3="Beat",M4="2 x beat")
 stopifnot(all(c("Dyad","Visual","Music","Level","Prominence") %in% names(data)),
+  setequal(data$Dyad,1:35),nrow(data)==35*4*5,
   setequal(unique(data$Level),names(labels)),all(is.finite(data$Prominence)),
   all(data$Prominence>0),all(data$Visual %in% c("No","Yes")),
   all(data$Music %in% c("Diff","Same")),

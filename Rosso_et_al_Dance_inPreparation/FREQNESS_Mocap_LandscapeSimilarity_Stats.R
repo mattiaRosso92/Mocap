@@ -14,6 +14,7 @@ if(dir.exists(output_path)) stop("Output folder exists; choose a new folder to p
 data <- read.csv(input_file)
 labels <- c(Component="Component landscape",Entropy="H2 entropy landscape")
 stopifnot(all(c("Dyad","Visual","Music","Outcome","FisherZ") %in% names(data)),
+  setequal(data$Dyad,1:35),nrow(data)==35*4*2,
   setequal(unique(data$Outcome),names(labels)),all(is.finite(data$FisherZ)),
   all(data$Visual %in% c("No","Yes")),all(data$Music %in% c("Diff","Same")),
   !anyDuplicated(data[c("Dyad","Visual","Music","Outcome")]))

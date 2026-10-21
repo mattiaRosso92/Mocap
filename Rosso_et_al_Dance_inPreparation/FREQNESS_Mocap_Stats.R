@@ -62,6 +62,16 @@ statistics_input_path <- file.path(results_root, "06_Statistics_R")
 # only for explicitly requested comparisons.
 run_established_methods <- FALSE
 analysis_methods <- list(
+  SpatialRaw = list(
+    input_path = file.path(results_root, study_results_folder,
+      "06_Statistics_R", "SpatialCoordination"),
+    output_subfolder = file.path(study_results_folder, "SpatialCoordination", "Raw")
+  ),
+  SpatialFisher = list(
+    input_path = file.path(results_root, study_results_folder,
+      "06_Statistics_R", "SpatialCoordination"),
+    output_subfolder = file.path(study_results_folder, "SpatialCoordination", "Fisher")
+  ),
   PhaseSpaceRQACorrected = list(
     input_path = file.path(
       results_root, study_results_folder, "06_Statistics_R", phase_output_tag
@@ -112,10 +122,10 @@ if (run_established_methods) {
   )
 }
 
-# Fit the primary method by default, retaining completed sensitivity outputs.
+# Fit spatial/temporal primary methods and Fisher sensitivity by default.
 # Set a comma-separated list to fit other methods, or an empty string for all.
 requested_methods <- Sys.getenv(
-  "FREQNESS_STATS_METHODS", unset = "PhaseSpaceRQACorrected"
+  "FREQNESS_STATS_METHODS", unset = "SpatialRaw,SpatialFisher,PhaseSpaceRQACorrected"
 )
 if (nzchar(requested_methods)) {
   requested_methods <- trimws(strsplit(requested_methods, ",")[[1]])
@@ -237,27 +247,35 @@ analyse_component <- function(
   if (length(missing_columns) > 0) {
     stop("Missing required columns: ", paste(missing_columns, collapse = ", "))
   }
-  if (method == "PhaseSpaceRQACorrected") {
+  spatial_method <- method %in% c("SpatialRaw", "SpatialFisher")
+  if (method == "PhaseSpaceRQACorrected" || spatial_method) {
     # One complete observation per dyad x condition x meter; no silent row
     # exclusion or fallback to the old 33-dyad export.
     stopifnot(
-      all(c("RR", "DET") %in% names(data)),
       nrow(data) == 35 * 4 * 4,
       setequal(data$Dyad, 1:35),
       setequal(data$Visual, c("No", "Yes")),
       setequal(data$Music, c("Diff", "Same")),
       setequal(data$Meter, names(configured_metric_levels)),
       !anyNA(data[required_columns]),
-      !anyDuplicated(data[required_columns]),
-      all(is.finite(data$RR) & data$RR > 0 & data$RR <= 1),
-      all(is.finite(data$DET) & data$DET >= 0 & data$DET <= 1)
+      !anyDuplicated(data[required_columns])
     )
+    if (spatial_method) {
+      stopifnot(all(c("Mirror", "FisherZ") %in% names(data)),
+        all(is.finite(data$Mirror) & abs(data$Mirror) < 1),
+        all(is.finite(data$FisherZ)))
+    } else {
+      stopifnot(all(c("RR", "DET") %in% names(data)),
+        all(is.finite(data$RR) & data$RR > 0 & data$RR <= 1),
+        all(is.finite(data$DET) & data$DET >= 0 & data$DET <= 1))
+    }
   }
 
   dependent_variables <- setdiff(names(data), required_columns)
   dependent_variables <- dependent_variables[
     vapply(data[dependent_variables], is.numeric, logical(1))
   ]
+  if (spatial_method) dependent_variables <- "Mirror"
   if (length(dependent_variables) == 0) {
     stop("No numeric dependent variables were found in ", input_file)
   }
@@ -296,6 +314,11 @@ analyse_component <- function(
     # Figures and descriptive statistics always remain on the original scale.
     model_data <- data
     transformation <- "none"
+    if (method == "SpatialFisher") {
+      # MATLAB transforms each trial before averaging; do not transform twice.
+      model_data$Mirror <- data$FisherZ
+      transformation <- "Fisher atanh at trial level, then averaged"
+    }
     log_transform <- dv %in% c("RR", "DET") &&
       !(method %in% c("PhaseSpaceRQACorrected", "PhaseSpaceRQANonStandardized") &&
         dv == "DET")
@@ -480,6 +503,21 @@ analyse_component <- function(
       paste("Component", component, dv, "all meters"),
       file.path(full_model_output, "Factorial_Residual_Diagnostics.png")
     )
+    if (spatial_method) {
+      model_residuals <- residuals(factorial_model)
+      standardized <- (model_residuals - mean(model_residuals)) / sd(model_residuals)
+      cell_sd <- tapply(model_residuals,
+        interaction(model_data$Visual, model_data$Music, model_data$Meter), sd)
+      write.csv(data.frame(Dyad = model_data$Dyad, Visual = model_data$Visual,
+        Music = model_data$Music, Meter = model_data$Meter,
+        Fitted = fitted(factorial_model), Residual = model_residuals),
+        file.path(full_model_output, "Factorial_Residuals.csv"), row.names = FALSE)
+      write.csv(data.frame(Skew = mean(standardized^3),
+        ExcessKurtosis = mean(standardized^4)-3,
+        CellResidualSDRatio = max(cell_sd)/min(cell_sd),
+        Singular = isSingular(factorial_model)),
+        file.path(full_model_output, "Factorial_Residual_Shape.csv"), row.names = FALSE)
+    }
 
     # Supplementary linear/quadratic/cubic model comparison -----------------
     linear_model <- lmer(
@@ -543,13 +581,17 @@ analyse_component <- function(
       paste("Input:", input_file),
       paste("Dependent variables:", paste(dependent_variables, collapse = ", ")),
       paste("Metric levels:", paste(meter_display, collapse = ", ")),
-      if (method %in% c("PhaseSpaceRQACorrected", "PhaseSpaceRQANonStandardized")) {
+      if (spatial_method) {
+        "35 dyads; retained trial counts may differ; equal-weight dyad/condition/meter averages"
+      } else if (method %in% c("PhaseSpaceRQACorrected", "PhaseSpaceRQANonStandardized")) {
         "Inferential models: natural-log RR; untransformed DET (diagnostic selection)"
       } else {
         "RR and DET: natural-log transformed for inferential models"
       },
       if ("Mirror" %in% dependent_variables) {
-        "Mirroring: analyzed on its original scale"
+        if (method == "SpatialFisher") {
+          "Mirroring sensitivity: trial-level Fisher atanh, then averaged within dyad/condition/meter"
+        } else "Mirroring: analyzed on its original scale"
       },
       "Descriptive statistics and plots: original scale for all measures",
       if (method == "PhaseSpaceRQACorrected") {
@@ -582,11 +624,11 @@ for (method in names(analysis_methods)) {
   } else {
     file.path(output_root, method_settings$output_subfolder)
   }
-  if (method == "PhaseSpaceRQACorrected" && !overwrite_flag &&
+  if (method %in% c("PhaseSpaceRQACorrected", "SpatialRaw", "SpatialFisher") && !overwrite_flag &&
       dir.exists(method_output_root) &&
       length(list.files(method_output_root, all.files = TRUE, no.. = TRUE)) > 0) {
     stop(
-      "Corrected phase-space statistics already exist: ", method_output_root,
+      "Statistics already exist: ", method_output_root,
       ". Use a new output_subfolder or explicitly set overwrite_flag = TRUE."
     )
   }
@@ -608,7 +650,7 @@ for (method in names(analysis_methods)) {
   components <- sort(unique(as.integer(sub(
     "^OUT2R_Comp#([0-9]+)\\.xlsx$", "\\1", component_workbooks
   ))))
-  if (method == "PhaseSpaceRQACorrected") {
+  if (method %in% c("PhaseSpaceRQACorrected", "SpatialRaw", "SpatialFisher")) {
     stopifnot(identical(components, 1:2))
   }
 

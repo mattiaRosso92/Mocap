@@ -20,6 +20,9 @@ dist/
 # Local Codex build, preview, and validation artifacts
 .codex/
 
+# Private manuscript drafts, not toolbox source
+paper_drafts/
+
 # Local analysis output
 FREQNESS_Output/
 
