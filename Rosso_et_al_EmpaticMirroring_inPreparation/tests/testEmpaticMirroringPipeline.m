@@ -145,6 +145,87 @@ end
 end
 
 
+function testRQAAntialiasingPrecedesIntegerDecimation(testCase)
+
+pipelineText = testCase.TestData.pipelineText;
+requiredStatements = { ...
+    'rqa_target_srate = 24;', ...
+    'rqa_antialias_filter_order = 4;', ...
+    'rqa_antialias_cutoff_hz = 9.6;', ...
+    'rqa_preprocessing_version = "gap_aware_antialias_v2";', ...
+    'rqa_sampling_ratio = srate/rqa_target_srate;', ...
+    'rqa_antialias_cutoff_hz < rqa_target_nyquist_hz', ...
+    'rqa_antialias_cutoff_hz/(srate/2)', ...
+    'filtered(indices,:) = filtfilt(b_butt,a_butt,double(selected(indices,:)));', ...
+    'sample_indices = 1:dwn:ntime;', ...
+    '''preprocessing_version'',rqa_preprocessing_version', ...
+    '''antialias_policy'',"zero_phase_lowpass_before_integer_decimation"', ...
+    '''Version'',rqa_preprocessing_version', ...
+    '''LowpassCutoffHz'',rqa_antialias_cutoff_hz'};
+
+for statementi = 1:numel(requiredStatements)
+    verifyTrue(testCase,contains(pipelineText,requiredStatements{statementi}), ...
+        sprintf('Missing RQA anti-aliasing safeguard: %s', ...
+        requiredStatements{statementi}));
+end
+verifyFalse(testCase,contains(pipelineText,'rqa_lp_cutoff_norm ='));
+
+rqaStart = strfind(pipelineText,'%% BLOCK 3 - INTERACTION ANALYSES');
+rqaEnd = strfind(pipelineText, ...
+    'BLOCK 3B-3C: spatial coordination and landscape similarity');
+verifyNumElements(testCase,rqaStart,1);
+verifyNumElements(testCase,rqaEnd,1);
+rqaText = pipelineText(rqaStart:rqaEnd-1);
+filterLocation = strfind(rqaText, ...
+    'filtered(indices,:) = filtfilt(b_butt,a_butt,double(selected(indices,:)));');
+decimationLocation = strfind(rqaText,'sample_indices = 1:dwn:ntime;');
+verifyNumElements(testCase,filterLocation,1);
+verifyNumElements(testCase,decimationLocation,1);
+verifyLessThan(testCase,filterLocation,decimationLocation);
+
+inputSrate = 120;
+targetSrate = 24;
+cutoffHz = 9.6;
+downsampleFactor = inputSrate/targetSrate;
+[b,a] = butter(4,cutoffHz/(inputSrate/2),'low');
+time = (0:inputSrate*30-1)'/inputSrate;
+signal = sin(2*pi*2*time)+sin(2*pi*20*time);
+filtered = filtfilt(b,a,signal);
+downsampled = filtered(1:downsampleFactor:end);
+downsampledTime = time(1:downsampleFactor:end);
+mask = downsampledTime >= 3 & downsampledTime < 27;
+downsampled = downsampled(mask);
+downsampledTime = downsampledTime(mask);
+passbandAmplitude = 2/numel(downsampled)*abs(sum(downsampled.* ...
+    exp(-1i*2*pi*2*downsampledTime)));
+aliasedAmplitude = 2/numel(downsampled)*abs(sum(downsampled.* ...
+    exp(-1i*2*pi*4*downsampledTime)));
+verifyGreaterThan(testCase,passbandAmplitude,.9);
+verifyLessThan(testCase,aliasedAmplitude,.01);
+verifyLessThan(testCase,aliasedAmplitude/passbandAmplitude,.01);
+
+end
+
+
+function testRQARejectsIncompatibleCachedPreprocessing(testCase)
+
+pipelineText = testCase.TestData.pipelineText;
+requiredStatements = { ...
+    'required_fields = {''preprocessing_version'',''inputSrate''', ...
+    'metadata_compatible = isfield(saved,''FREQrqa'')', ...
+    'string(saved.analysis_info.preprocessing_version)', ...
+    'saved.analysis_info.antialias_cutoff_hz', ...
+    'FREQNESS:EmpaticMirroring:StaleRQAOutput', ...
+    'if reuse_existing'};
+
+for statementi = 1:numel(requiredStatements)
+    verifyTrue(testCase,contains(pipelineText,requiredStatements{statementi}), ...
+        sprintf('Missing RQA cache safeguard: %s',requiredStatements{statementi}));
+end
+
+end
+
+
 function testFilterCalibrationOutputsAreSeparated(testCase)
 
 pipelineText = testCase.TestData.pipelineText;
