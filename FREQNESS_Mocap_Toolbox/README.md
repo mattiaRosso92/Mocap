@@ -41,6 +41,10 @@ Its frequency and component inputs can be scalars shared by the whole group
 or participant-specific vectors; component 1 is used for all participants
 when no component is supplied.
 
+`FREQNESS_SpaceCoord_Mocap` returns raw spatial correlations by default.
+Use `'Fisher',true` to return `atanh(r)` in the same single output array;
+`'Fisher',false` preserves raw values. Perfect correlations map to +/-Inf.
+
 Validated `FREQNESS_TimeCoord_Mocap` supports `'standardize',true` (default)
 or `false`. Standardization subtracts each retained participant series' mean
 and divides by its sample standard deviation after filtering, downsampling,

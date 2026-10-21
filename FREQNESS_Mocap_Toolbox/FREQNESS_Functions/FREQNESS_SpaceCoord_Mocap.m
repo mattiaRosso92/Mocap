@@ -31,11 +31,17 @@ function FREQmirror = FREQNESS_SpaceCoord_Mocap(FREQ,target_frex,varargin)
 %      - 'component'     : Network component to analyze. Default: 1.
 %      - 'metric_levels' : Harmonics or subharmonics of target_frex.
 %                          Default: 1.
+%      - 'Fisher'        : Logical scalar. If true, return Fisher-z values
+%                          atanh(r) instead of raw correlations. Default: false.
 %
 % ------------------------------------------------------------------------
 %  OUTPUT ARGUMENT:
 % ------------------------------------------------------------------------
-%  - FREQmirror : Spatial correlation coefficient for every metric level.
+%  - FREQmirror : Row vector with one spatial correlation per metric level,
+%                 or its Fisher-z transform when 'Fisher' is true. The output
+%                 shape is unchanged; no additional output is returned.
+%                 Perfect correlations (+/-1) transform to +/-Inf; undefined
+%                 correlations remain NaN.
 %
 % ------------------------------------------------------------------------
 %  AUTHORS:
@@ -52,13 +58,17 @@ function FREQmirror = FREQNESS_SpaceCoord_Mocap(FREQ,target_frex,varargin)
 
 %% Handle optional arguments
 
-opts = struct('component',1,'metric_levels',1);
+opts = struct('component',1,'metric_levels',1,'fisher',false);
 opts = parse_name_value_pairs(opts,varargin{:});
 which_comp = opts.component;
 meter = opts.metric_levels;
 
 
 %% Validate inputs
+
+if ~(islogical(opts.fisher) && isscalar(opts.fisher))
+    error('Fisher must be one logical scalar.');
+end
 
 if ~isstruct(FREQ) || ~isfield(FREQ,'pats') || isempty(FREQ.pats) || ...
         ~isfield(FREQ,'frex') || isempty(FREQ.frex)
@@ -137,6 +147,9 @@ for metri = 1:nmeters
 
 end
 
+if opts.fisher
+    FREQmirror = atanh(FREQmirror);
+end
 
 end
 
