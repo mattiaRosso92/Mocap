@@ -29,7 +29,6 @@ belong in the study directories at the repository root.
 The third-order analysis layer is specific to the MoCap framework. It operates
 across corresponding participant-level FREQ-NESS outputs using separate
 functions for network-landscape similarity (`FREQNESS_LandscapeSimilarity`),
-phase-space temporal coordination (`FREQNESS_PhaseSpaceRQA_Mocap`), JRQA
 temporal coordination (`FREQNESS_TimeCoord_Mocap`), and spatial coordination
 (`FREQNESS_SpaceCoord_Mocap`). Landscape similarity correlates both a selected
 component's eigenvalue trajectory and the H2 entropy landscape between
@@ -45,13 +44,56 @@ when no component is supplied.
 Use `'Fisher',true` to return `atanh(r)` in the same single output array;
 `'Fisher',false` preserves raw values. Perfect correlations map to +/-Inf.
 
-Validated `FREQNESS_TimeCoord_Mocap` supports `'standardize',true` (default)
-or `false`. Standardization subtracts each retained participant series' mean
-and divides by its sample standard deviation after filtering, downsampling,
-and cropping, before embedding. Saved `Preprocessing` records the flag, mean,
-and standard deviation. Use `false` for radii expressed in original signal
-units. Legacy calls preserve their existing preprocessing. The general
-MainPipeline exposes this option as `timecoord_standardize`.
+### Temporal coordination
+
+`FREQNESS_TimeCoord_Mocap` is the single recommended entry point for both
+temporal methods. Phase-space RQA is the default; JRQA is selected explicitly:
+
+```matlab
+FREQcoord = FREQNESS_TimeCoord_Mocap(FREQ,target_frex);
+FREQcoord = FREQNESS_TimeCoord_Mocap(FREQ,target_frex,'standardize',true);
+FREQcoord = FREQNESS_TimeCoord_Mocap(FREQ,[f1 f2], ...
+    'method','jrqa','jrqa',JRQA);
+```
+
+The methods live in `FREQNESS_Functions/private/compute_phase_space_rqa.m`
+and `compute_joint_rqa.m`. Their existing preprocessing order, threshold
+definitions, gap handling, metrics, and visualizations are preserved.
+Outputs retain their existing fields and add `Method`. Phase-space outputs
+also record `Standardized`; JRQA records it in `Preprocessing.Standardized`.
+
+**Normalization is off by default**, including in `FREQNESS_JRQAParameters_Mocap`,
+`FREQNESS_PreprocessTimeCoord_Mocap`, and the surrogate workflow. Use
+`'standardize',true` to subtract each retained participant series' mean and
+divide by its sample standard deviation. Phase-space RQA uses only valid
+samples for normalization. JRQA does this after filtering, downsampling and
+cropping, before embedding; its saved `Preprocessing` records the mean and SD.
+The general MainPipeline shows both methods with normalization disabled.
+
+JRQA requires a final parameter structure with scalar `m` and `tau`; tuning
+is not performed automatically. Use `FREQNESS_JRQAParameters_Mocap` separately,
+then select or pool estimates according to the study design. Tuning and
+analysis must use matching preprocessing and normalization. New JRQA calls
+default to `implementation='validated'`; legacy JRQA remains explicitly
+available and retains its historical CRP normalization rules, which the
+`standardize` flag does not override. It is for historical reproduction only.
+
+The methods have distinct options: phase-space RQA supports two or more
+participants, participant-specific components, marked bad samples, and
+phase-space plots/animation. JRQA currently requires two participants, a
+shared component, and no marked gaps. `fixed_rr` targets the group-state RP
+for phase-space RQA but each participant's marginal RP for JRQA. The same
+threshold value therefore does not imply the same joint RR. Phase-space
+`downsample` is a sample stride only; anti-alias filtering remains upstream.
+JRQA accepts `target_srate` and `lowpass_cutoff` through its preprocessing helper.
+
+**Temporary study compatibility:** `FREQNESS_PhaseSpaceRQA_Mocap` still calls
+the same private phase-space implementation. The old
+`FREQNESS_TimeCoord_Mocap(FREQ,JRQA,target_frex,...)` signature still selects
+JRQA, defaulting to its historical legacy implementation unless explicitly
+overridden. Both are retained until study callers are migrated; neither
+duplicates an algorithm. Normalization defaults to false in every call form:
+reproducing previously normalized runs requires explicit `standardize=true`.
 
 For repeated-condition JRQA, a study may pool radius estimates and pass the
 same scalar `'threshold'` with `'threshold_method','radius'` to each call.
@@ -137,7 +179,7 @@ Every affected timepoint remains in the shared `FREQ.bad_segments` vector and
 is excluded from broadband and narrowband covariance matrices. Participant-
 specific indices and reconstruction masks are retained in
 `FREQ.bad_segments_by_participant` and `FREQ.gap_info`. Phase-space RQA honors
-the shared mask. The JRQA-based `FREQNESS_TimeCoord_Mocap` explicitly rejects
+the shared mask. The JRQA method of `FREQNESS_TimeCoord_Mocap` explicitly rejects
 gappy inputs because that implementation cannot safely exclude samples. When
 raw `Patterns.markerData` containing NaNs is supplied for visualization, the
 visualizer calls the same interpolation function using the reconstruction
@@ -158,8 +200,8 @@ of the Dance reference study's Figure 2.
   `FREQNESS_AnalyticSignal.m` are required by
   `FREQNESS_NetworkEstimation_Mocap`. The helper is the toolbox's internal
   FFT-based equivalent of `hilbert.m`, avoiding that external dependency.
-- `RPparam.m` and the included minimal JRQA dependency subset from the CRP
-  Toolbox are required by `FREQNESS_TimeCoord_Mocap`.
+- `RPparam.m` and `jrqa.m` from the included CRP subset are needed only for
+  legacy JRQA. Parameter tuning uses `mutual.m`, `false_nearest.m`, and `pss.m`.
 - `dl.m`, `tt.m`, and `entropy.m` from that same subset are required by
   `FREQNESS_RQA_Mocap`, used by phase-space RQA and validated JRQA. They are
   byte-identical to the versions distributed with BROADNESS.

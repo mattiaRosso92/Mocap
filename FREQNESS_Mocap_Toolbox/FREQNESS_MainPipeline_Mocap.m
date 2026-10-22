@@ -11,8 +11,8 @@
 %  3) Metric prominence of a selected bodily network
 %  4) Network-landscape and bodily-pattern visualization
 %  5) Network-landscape similarity across participants
-%  6) Phase-space temporal coordination across participants (alternative)
-%  7) JRQA temporal coordination across participants
+%  6) Temporal coordination: phase-space RQA (default method)
+%  7) Temporal coordination: optional JRQA example
 %  8) Spatial coordination across participants
 %
 %  Place each dataset in a separate folder inside FREQNESS_Data. A dataset
@@ -159,7 +159,7 @@ landscape_similarity_frequency_range = [];
 
 
 % ------------------------------------------------------------------------
-% BLOCK #6: FREQNESS_PhaseSpaceRQA_Mocap
+% BLOCK #6: FREQNESS_TimeCoord_Mocap — phase-space RQA
 % ------------------------------------------------------------------------
 
 % target_frex may be one frequency reused for all participants or one value
@@ -173,7 +173,7 @@ phaserqa_metric_levels = [0.25 0.5 1 2];
 phaserqa_component = 1;
 phaserqa_duration = [0.15 0.85];
 phaserqa_downsample = 1;
-phaserqa_standardize = true;
+phaserqa_standardize = false;
 phaserqa_threshold_method = 'max_fraction';
 phaserqa_threshold = 0.1;
 phaserqa_theiler_window = 0;
@@ -186,7 +186,7 @@ phaserqa_animation_pause = 0.01;
 
 
 % ------------------------------------------------------------------------
-% BLOCK #7: FREQNESS_TimeCoord_Mocap
+% BLOCK #7: FREQNESS_TimeCoord_Mocap — JRQA
 % ------------------------------------------------------------------------
 
 % Estimate embedding parameters with FREQNESS_JRQAParameters_Mocap before
@@ -201,7 +201,7 @@ timecoord_implementation = 'validated';
 timecoord_target_srate = srate;
 timecoord_lowpass_cutoff = [];
 timecoord_filter_order = 4;
-timecoord_standardize = true;
+timecoord_standardize = false;
 timecoord_threshold_method = 'radius';
 timecoord_threshold = [];
 timecoord_theiler_window = 0;
@@ -408,13 +408,14 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #6: FREQNESS_PhaseSpaceRQA_Mocap
+    % BLOCK #6: FREQNESS_TimeCoord_Mocap — phase-space RQA
     % =====================================================================
 
     if run_phase_rqa
 
-        FREQrqa{datai} = FREQNESS_PhaseSpaceRQA_Mocap( ...
+        FREQrqa{datai} = FREQNESS_TimeCoord_Mocap( ...
             FREQ{datai},this_target_frex, ...
+            'method','phase_space', ...
             'metric_levels',phaserqa_metric_levels, ...
             'component',phaserqa_component, ...
             'duration',phaserqa_duration, ...
@@ -435,7 +436,7 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #7: FREQNESS_TimeCoord_Mocap
+    % BLOCK #7: FREQNESS_TimeCoord_Mocap — JRQA
     % =====================================================================
 
     if run_time_coord
@@ -478,7 +479,7 @@ for datai = 1:ndatasets
                 'random_seed',timecoord_random_seed);
         else
             FREQjrqa{datai} = FREQNESS_TimeCoord_Mocap( ...
-                FREQ{datai},JRQA,this_target_frex, ...
+                FREQ{datai},this_target_frex,'method','jrqa','jrqa',JRQA, ...
                 timecoord_arguments{:});
         end
 

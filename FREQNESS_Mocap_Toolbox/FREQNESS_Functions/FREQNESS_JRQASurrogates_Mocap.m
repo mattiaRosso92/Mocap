@@ -10,7 +10,8 @@ function [FREQjrqa,Surrogates] = FREQNESS_JRQASurrogates_Mocap( ...
 %  preserving its recurrence geometry and marginal recurrence rate while
 %  changing its alignment with the first partner.
 %
-%  Inputs follow FREQNESS_TimeCoord_Mocap. All name-value pairs other than
+%  Inputs are FREQ, the final JRQA parameter structure, and target_frex.
+%  Standardization is optional and defaults to false. Name-value pairs other than
 %  'n_surrogates', 'minimum_shift', and 'random_seed' are forwarded to its
 %  validated implementation.
 %
@@ -47,7 +48,8 @@ end
 %% Compute the observed validated recurrence plots
 
 FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
-    FREQ,JRQA,target_frex,timecoord_arguments{:}, ...
+    FREQ,target_frex,timecoord_arguments{:}, ...
+    'method','jrqa','jrqa',JRQA, ...
     'implementation','validated','store_matrices',true);
 
 
@@ -132,6 +134,8 @@ for argi = 1:2:numel(varargin)
     name = lower(char(varargin{argi}));
     if isfield(opts,name)
         opts.(name) = varargin{argi+1};
+    elseif ismember(name,{'method','jrqa'})
+        error('JRQA surrogates use the positional JRQA parameters and method jrqa.');
     elseif ismember(name,{'implementation','store_matrices'})
         % These are controlled by this wrapper to guarantee valid surrogates.
         continue

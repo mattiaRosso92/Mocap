@@ -20,7 +20,7 @@ function [processed_ts,preprocessing] = ...
 %  - 'lowpass_cutoff' : Low-pass cutoff in Hz. Default: no filtering.
 %  - 'filter_order'   : Butterworth filter order. Default: 4.
 %  - 'duration'       : Proportional interval within [0 1]. Default: full.
-%  - 'standardize'    : Z-score each series after selection. Default: true.
+%  - 'standardize'    : Z-score each series after selection. Default: false.
 %
 % ------------------------------------------------------------------------
 %  OUTPUT ARGUMENTS:
@@ -43,7 +43,7 @@ function [processed_ts,preprocessing] = ...
 %% Handle optional arguments
 
 opts = struct('target_srate',srate,'lowpass_cutoff',[], ...
-    'filter_order',4,'duration',[],'standardize',true);
+    'filter_order',4,'duration',[],'standardize',false);
 opts = parse_name_value_pairs(opts,varargin{:});
 
 

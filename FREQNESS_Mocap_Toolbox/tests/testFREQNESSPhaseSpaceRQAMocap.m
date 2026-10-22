@@ -21,8 +21,8 @@ function testNoBadSegmentsPreserveRQADefinitions(testCase)
 
 FREQ = syntheticFREQ(80);
 threshold = .35;
-FREQrqa = FREQNESS_PhaseSpaceRQA_Mocap(FREQ,1, ...
-    'threshold',threshold,'store_matrices',true);
+FREQrqa = FREQNESS_TimeCoord_Mocap(FREQ,1, ...
+    'threshold',threshold,'store_matrices',true,'standardize',true);
 
 phaseSpace = [squeeze(FREQ.ts(1,:,1,1))' ...
     squeeze(FREQ.ts(1,:,1,2))'];
@@ -55,7 +55,7 @@ badSegments = 91:105;
 data = randn(6,360,2);
 FREQ = FREQNESS_NetworkEstimation_Mocap(data,2,120, ...
     'fwidth',.3,'ncomps',1,'bad_segments',badSegments);
-FREQrqa = FREQNESS_PhaseSpaceRQA_Mocap(FREQ,2);
+FREQrqa = FREQNESS_TimeCoord_Mocap(FREQ,2);
 
 verifyEqual(testCase,FREQrqa.BadSegments,badSegments);
 verifyFalse(testCase,any(FREQrqa.ValidSampleMask(badSegments)));
@@ -75,8 +75,8 @@ FREQ1.ts(:,badSegments,:,:) = 1e8;
 FREQ2.ts(:,badSegments,:,:) = -1e12;
 
 arguments = {'threshold',.35,'store_matrices',true};
-first = FREQNESS_PhaseSpaceRQA_Mocap(FREQ1,1,arguments{:});
-second = FREQNESS_PhaseSpaceRQA_Mocap(FREQ2,1,arguments{:});
+first = FREQNESS_TimeCoord_Mocap(FREQ1,1,arguments{:});
+second = FREQNESS_TimeCoord_Mocap(FREQ2,1,arguments{:});
 
 metricFields = {'RR','L','DET','ENTR','TT','LAM','Vmax','DIV'};
 for fieldi = 1:numel(metricFields)
@@ -105,7 +105,7 @@ function testStoredAndAdditionalBadSegmentsAreCombinedAndMapped(testCase)
 
 FREQ = syntheticFREQ(30);
 FREQ.bad_segments = [8 20 8];
-FREQrqa = FREQNESS_PhaseSpaceRQA_Mocap(FREQ,1, ...
+FREQrqa = FREQNESS_TimeCoord_Mocap(FREQ,1, ...
     'duration',[.2 .8],'downsample',2, ...
     'bad_segments',[14 20 14],'store_matrices',true);
 
@@ -125,7 +125,7 @@ function testTheilerAndBadSegmentsDefineEligiblePairs(testCase)
 FREQ = syntheticFREQ(40);
 FREQ.bad_segments = [10 11 28];
 theilerWindow = 2;
-FREQrqa = FREQNESS_PhaseSpaceRQA_Mocap(FREQ,1, ...
+FREQrqa = FREQNESS_TimeCoord_Mocap(FREQ,1, ...
     'threshold_method','fixed_rr','threshold',.2, ...
     'theiler_window',theilerWindow,'store_matrices',true);
 
@@ -146,14 +146,14 @@ end
 function testBadSegmentValidation(testCase)
 
 FREQ = syntheticFREQ(30);
-verifyFailureMessage(testCase,@() FREQNESS_PhaseSpaceRQA_Mocap( ...
+verifyFailureMessage(testCase,@() FREQNESS_TimeCoord_Mocap( ...
     FREQ,1,'bad_segments',1.5), ...
     'bad_segments must contain finite integer sample indices.');
-verifyFailureMessage(testCase,@() FREQNESS_PhaseSpaceRQA_Mocap( ...
+verifyFailureMessage(testCase,@() FREQNESS_TimeCoord_Mocap( ...
     FREQ,1,'bad_segments',31), ...
     'bad_segments contains indices outside FREQ.ts.');
 FREQ.bad_segments = NaN;
-verifyFailureMessage(testCase,@() FREQNESS_PhaseSpaceRQA_Mocap(FREQ,1), ...
+verifyFailureMessage(testCase,@() FREQNESS_TimeCoord_Mocap(FREQ,1), ...
     'FREQ.bad_segments must contain finite integer sample indices.');
 
 end

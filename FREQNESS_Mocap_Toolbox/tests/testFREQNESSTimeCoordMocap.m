@@ -22,8 +22,9 @@ function testValidatedRadiusJRQAPreservesOutputContract(testCase)
 FREQ = syntheticFREQ(600);
 JRQA = struct('m',2,'tau',4,'ps',0.5);
 
-% Call with the documented positional argument order.
-output = FREQNESS_TimeCoord_Mocap(FREQ,JRQA,[1 1], ...
+% Select JRQA explicitly through the unified temporal interface.
+output = FREQNESS_TimeCoord_Mocap(FREQ,[1 1], ...
+    'method','jrqa','jrqa',JRQA, ...
     'implementation','validated','threshold_method','radius', ...
     'store_matrices',true);
 
@@ -51,7 +52,8 @@ FREQ = syntheticFREQ(500);
 JRQA = struct('m',3,'tau',5);
 targetRR = 0.1;
 theilerWindow = (JRQA.m-1)*JRQA.tau;
-output = FREQNESS_TimeCoord_Mocap(FREQ,JRQA,[1 1], ...
+output = FREQNESS_TimeCoord_Mocap(FREQ,[1 1], ...
+    'method','jrqa','jrqa',JRQA, ...
     'implementation','validated','threshold_method','fixed_rr', ...
     'threshold',targetRR,'theiler_window',theilerWindow, ...
     'store_matrices',true);
@@ -73,7 +75,8 @@ function testAdaptiveMaximumRadiusUsesFinalEmbedding(testCase)
 
 FREQ = syntheticFREQ(600);
 JRQA = struct('m',3,'tau',5,'RadiusFraction',0.10);
-output = FREQNESS_TimeCoord_Mocap(FREQ,JRQA,[1 1], ...
+output = FREQNESS_TimeCoord_Mocap(FREQ,[1 1], ...
+    'method','jrqa','jrqa',JRQA, ...
     'implementation','validated', ...
     'threshold_method','adaptive_max_radius', ...
     'store_matrices',true);
@@ -106,12 +109,13 @@ scaled_freq = FREQ;
 scaled_freq.ts(1,:,1,1) = 3*FREQ.ts(1,:,1,1)+12;
 scaled_freq.ts(1,:,1,2) = 7*FREQ.ts(1,:,1,2)-5;
 JRQA = struct('m',3,'tau',4,'ps',0.8);
-arguments = {'implementation','validated','store_matrices',true};
-baseline = FREQNESS_TimeCoord_Mocap(FREQ,JRQA,[1 1],arguments{:});
+arguments = {'method','jrqa','jrqa',JRQA, ...
+    'implementation','validated','store_matrices',true};
+baseline = FREQNESS_TimeCoord_Mocap(FREQ,[1 1],arguments{:},'standardize',true);
 normalized = FREQNESS_TimeCoord_Mocap( ...
-    scaled_freq,JRQA,[1 1],arguments{:},'standardize',true);
+    scaled_freq,[1 1],arguments{:},'standardize',true);
 raw = FREQNESS_TimeCoord_Mocap( ...
-    scaled_freq,JRQA,[1 1],arguments{:},'standardize',false);
+    scaled_freq,[1 1],arguments{:},'standardize',false);
 
 verifyTrue(testCase,normalized.Preprocessing.Standardized);
 verifyFalse(testCase,raw.Preprocessing.Standardized);
@@ -136,7 +140,8 @@ srate = 250;
 time = (0:2499)'/srate;
 signal = sin(2*pi*2*time)+sin(2*pi*40*time);
 [processed,info] = FREQNESS_PreprocessTimeCoord_Mocap(signal,srate, ...
-    'target_srate',25,'lowpass_cutoff',10,'duration',[.15 .85]);
+    'target_srate',25,'lowpass_cutoff',10,'duration',[.15 .85], ...
+    'standardize',true);
 
 verifyEqual(testCase,info.NormalizedLowpassCutoff,10/(srate/2), ...
     'AbsTol',eps);
@@ -208,7 +213,8 @@ FREQ.bad_segments = 20:25;
 JRQA = struct('m',2,'tau',1);
 
 verifyError(testCase,@() FREQNESS_TimeCoord_Mocap( ...
-    FREQ,JRQA,[1 1]),'FREQNESS:TimeCoord:GapsUnsupported');
+    FREQ,[1 1],'method','jrqa','jrqa',JRQA), ...
+    'FREQNESS:TimeCoord:GapsUnsupported');
 
 end
 
@@ -237,7 +243,8 @@ FREQ.frex = 1;
 JRQA = struct('m',2,'tau',1);
 
 verifyFailureMessage(testCase,@() FREQNESS_TimeCoord_Mocap( ...
-    FREQ,JRQA,[1 1]),'FREQ.ts must be a real finite numeric array.');
+    FREQ,[1 1],'method','jrqa','jrqa',JRQA), ...
+    'FREQ.ts must be a real finite numeric array.');
 
 end
 
