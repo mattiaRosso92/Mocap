@@ -49,7 +49,7 @@ end
 
 FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
     FREQ,target_frex,timecoord_arguments{:}, ...
-    'method','jrqa','jrqa',JRQA, ...
+    'method','jrqa','parameters',JRQA, ...
     'implementation','validated','store_matrices',true);
 
 
@@ -134,7 +134,7 @@ for argi = 1:2:numel(varargin)
     name = lower(char(varargin{argi}));
     if isfield(opts,name)
         opts.(name) = varargin{argi+1};
-    elseif ismember(name,{'method','jrqa'})
+    elseif ismember(name,{'method','parameters'})
         error('JRQA surrogates use the positional JRQA parameters and method jrqa.');
     elseif ismember(name,{'implementation','store_matrices'})
         % These are controlled by this wrapper to guarantee valid surrogates.

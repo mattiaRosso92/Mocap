@@ -38,6 +38,7 @@ function [FREQcoord,figures] = FREQNESS_TimeCoord_Mocap( ...
 %                       JRQA filtering/decimation; labels phase-space time.
 %
 %  Phase-space options (two or more participants):
+%  No 'parameters' structure is needed; use the options below directly.
 %  - 'threshold_method': 'max_fraction' (default) or 'fixed_rr'.
 %  - 'threshold'       : Fraction of maximum group-state distance, or target
 %                        group-state RR. Default 0.1.
@@ -50,7 +51,7 @@ function [FREQcoord,figures] = FREQNESS_TimeCoord_Mocap( ...
 %  - 'animation_pause': Seconds per animation frame. Default 0.01.
 %
 %  JRQA options (exactly two participants, no marked gaps):
-%  - 'jrqa'            : Required scalar structure with final scalar m and
+%  - 'parameters'      : Required scalar structure with final scalar m and
 %                        tau. Estimate parameters separately with
 %                        FREQNESS_JRQAParameters_Mocap; pooling across trials
 %                        or conditions is a study decision, not automatic.
@@ -83,7 +84,7 @@ function [FREQcoord,figures] = FREQNESS_TimeCoord_Mocap( ...
 %    FREQcoord = FREQNESS_TimeCoord_Mocap(FREQ,target_frex);
 %    FREQcoord = FREQNESS_TimeCoord_Mocap(FREQ,target_frex,'standardize',true);
 %    FREQcoord = FREQNESS_TimeCoord_Mocap(FREQ,[f1 f2], ...
-%        'method','jrqa','jrqa',JRQA);
+%        'method','jrqa','parameters',JRQA);
 %
 %  TEMPORARY STUDY COMPATIBILITY:
 %  The former (FREQ,JRQA,target_frex,...) signature still selects JRQA and
@@ -110,14 +111,14 @@ function [FREQcoord,figures] = FREQNESS_TimeCoord_Mocap( ...
 %% Separate method selection from method-specific options
 
 narginchk(2,Inf)
-opts = struct('method','phase_space','jrqa',[]);
+opts = struct('method','phase_space','parameters',[]);
 legacy_call = isstruct(target_frex);
 if legacy_call
     if isempty(varargin)
         error('The former JRQA signature requires target_frex after JRQA.');
     end
     opts.method = 'jrqa';
-    opts.jrqa = target_frex;
+    opts.parameters = target_frex;
     target_frex = varargin{1};
     varargin = [{'implementation','legacy'} varargin(2:end)];
 end
@@ -133,7 +134,7 @@ for argi = 1:2:numel(varargin)
     end
     name = lower(char(varargin{argi}));
     if isfield(opts,name)
-        if legacy_call && strcmp(name,'jrqa')
+        if legacy_call && strcmp(name,'parameters')
             error('Supply JRQA either positionally or by name, not both.');
         end
         opts.(name) = varargin{argi+1};
@@ -155,20 +156,20 @@ end
 
 switch method
     case 'phase_space'
-        if ~isempty(opts.jrqa)
-            error('The jrqa parameter option is only valid for method ''jrqa''.');
+        if ~isempty(opts.parameters)
+            error('The parameters option is only valid for method ''jrqa''.');
         end
         [FREQcoord,figures] = compute_phase_space_rqa( ...
             FREQ,target_frex,method_arguments{:});
     case 'jrqa'
-        if ~isstruct(opts.jrqa) || ~isscalar(opts.jrqa) || ...
-                ~isfield(opts.jrqa,'m') || ~isfield(opts.jrqa,'tau')
+        if ~isstruct(opts.parameters) || ~isscalar(opts.parameters) || ...
+                ~isfield(opts.parameters,'m') || ~isfield(opts.parameters,'tau')
             error('FREQNESS:TimeCoord:MissingJRQA', ...
-                ['JRQA requires a scalar ''jrqa'' structure with final m and ' ...
+                ['JRQA requires a scalar ''parameters'' structure with final m and ' ...
                 'tau. Estimate and select parameters before calling TimeCoord.']);
         end
         FREQcoord = compute_joint_rqa( ...
-            FREQ,opts.jrqa,target_frex,method_arguments{:});
+            FREQ,opts.parameters,target_frex,method_arguments{:});
         figures = struct('phase_space',gobjects(0), ...
             'distance_matrix',gobjects(0),'recurrence_plot',gobjects(0), ...
             'animation',gobjects(0));

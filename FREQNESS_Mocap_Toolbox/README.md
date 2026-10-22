@@ -53,8 +53,12 @@ temporal methods. Phase-space RQA is the default; JRQA is selected explicitly:
 FREQcoord = FREQNESS_TimeCoord_Mocap(FREQ,target_frex);
 FREQcoord = FREQNESS_TimeCoord_Mocap(FREQ,target_frex,'standardize',true);
 FREQcoord = FREQNESS_TimeCoord_Mocap(FREQ,[f1 f2], ...
-    'method','jrqa','jrqa',JRQA);
+    'method','jrqa','parameters',JRQA);
 ```
+
+`'parameters',JRQA` is required only for JRQA. Phase-space RQA needs no
+parameter structure; omit this argument and set options such as `'threshold'`
+directly when needed.
 
 The methods live in `FREQNESS_Functions/private/compute_phase_space_rqa.m`
 and `compute_joint_rqa.m`. Their existing preprocessing order, threshold
