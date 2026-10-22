@@ -30,22 +30,15 @@ phaseSpace = (phaseSpace-mean(phaseSpace,1))./std(phaseSpace,0,1);
 distanceMatrix = euclideanDistanceMatrix(phaseSpace);
 recurrencePlot = distanceMatrix < max(distanceMatrix(:))*threshold;
 
-verifyEqual(testCase,FREQrqa.RR, ...
-    FREQNESS_RQA_RecurrenceRate_Mocap(recurrencePlot),'AbsTol',eps);
-verifyEqual(testCase,FREQrqa.L, ...
-    FREQNESS_RQA_MeanDiagonalLength_Mocap(recurrencePlot,2));
-verifyEqual(testCase,FREQrqa.DET, ...
-    FREQNESS_RQA_Determinism_Mocap(recurrencePlot,2));
-verifyEqual(testCase,FREQrqa.ENTR, ...
-    FREQNESS_RQA_Entropy_Mocap(recurrencePlot,2));
-verifyEqual(testCase,FREQrqa.TT, ...
-    FREQNESS_RQA_TrappingTime_Mocap(recurrencePlot,2));
-verifyEqual(testCase,FREQrqa.LAM, ...
-    FREQNESS_RQA_Laminarity_Mocap(recurrencePlot,2));
-verifyEqual(testCase,FREQrqa.Vmax, ...
-    FREQNESS_RQA_MaxVerticalLine_Mocap(recurrencePlot,2));
-verifyEqual(testCase,FREQrqa.DIV, ...
-    FREQNESS_RQA_Divergence_Mocap(recurrencePlot,2));
+RQA = FREQNESS_RQA_Mocap(recurrencePlot);
+verifyEqual(testCase,FREQrqa.RR,RQA.rr,'AbsTol',eps);
+verifyEqual(testCase,FREQrqa.L,RQA.l);
+verifyEqual(testCase,FREQrqa.DET,RQA.det);
+verifyEqual(testCase,FREQrqa.ENTR,RQA.entr);
+verifyEqual(testCase,FREQrqa.TT,RQA.tt);
+verifyEqual(testCase,FREQrqa.LAM,RQA.lam);
+verifyEqual(testCase,FREQrqa.Vmax,RQA.vmax);
+verifyEqual(testCase,FREQrqa.DIV,RQA.div);
 verifyEqual(testCase,FREQrqa.ValidSampleCount,80);
 verifyEqual(testCase,FREQrqa.ExcludedSampleCount,0);
 verifyEqual(testCase,FREQrqa.EligiblePairCount,80^2);

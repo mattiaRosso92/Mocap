@@ -296,13 +296,14 @@ for subi = 1:nsubs
 end
 
 joint_rp = all(participant_rp,3);
+RQA = FREQNESS_RQA_Mocap(joint_rp,opts.lmin,opts.vmin);
 output.RR = sum(joint_rp,'all')/nnz(eligible_pair_mask);
-output.DET = FREQNESS_RQA_Determinism_Mocap(joint_rp,opts.lmin);
-output.L = FREQNESS_RQA_MeanDiagonalLength_Mocap(joint_rp,opts.lmin);
-output.ENTR = FREQNESS_RQA_Entropy_Mocap(joint_rp,opts.lmin);
-output.LAM = FREQNESS_RQA_Laminarity_Mocap(joint_rp,opts.vmin);
-output.TT = FREQNESS_RQA_TrappingTime_Mocap(joint_rp,opts.vmin);
-output.Vmax = FREQNESS_RQA_MaxVerticalLine_Mocap(joint_rp,opts.vmin);
+output.DET = RQA.det;
+output.L = RQA.l;
+output.ENTR = RQA.entr;
+output.LAM = RQA.lam;
+output.TT = RQA.tt;
+output.Vmax = RQA.vmax;
 output.Lmax = maximum_diagonal_length(joint_rp,opts.lmin);
 [output.T1,output.T2] = recurrence_times(joint_rp);
 

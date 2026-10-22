@@ -59,13 +59,23 @@ Pooling across trials or conditions belongs in the study pipeline. The
 toolbox does not assume a particular experimental design. Keep normalization,
 embedding, distance, and preprocessing settings consistent when pooling.
 
-The phase-space RQA metrics are independently implemented and callable as:
-`FREQNESS_RQA_RecurrenceRate_Mocap`,
-`FREQNESS_RQA_MeanDiagonalLength_Mocap`,
-`FREQNESS_RQA_Determinism_Mocap`, `FREQNESS_RQA_Entropy_Mocap`,
-`FREQNESS_RQA_TrappingTime_Mocap`, `FREQNESS_RQA_Laminarity_Mocap`,
-`FREQNESS_RQA_MaxVerticalLine_Mocap`, and
-`FREQNESS_RQA_Divergence_Mocap`.
+The recurrence metrics are consolidated in one function:
+
+```matlab
+RQA = FREQNESS_RQA_Mocap(recurrence_plot,2,2);
+```
+
+The optional second and third arguments are the minimum diagonal and vertical
+line lengths; each defaults to 2. The single output structure contains `rr`,
+`det`, `l`, `entr`, `lam`, `tt`, `vmax`, and `div`. The existing metric
+definitions are preserved, with diagonal and vertical lengths extracted only
+once each. This replaces the eight individual `FREQNESS_RQA_*_Mocap` metric
+functions; direct callers should use the corresponding field instead.
+
+JRQA and phase-space coordination functions keep their existing output fields
+(`RR`, `DET`, etc.) and eligible-pair RR denominators. The standalone `RQA.rr`
+uses all matrix entries as its denominator; callers with excluded pairs must
+retain their eligible-pair denominator instead.
 
 `FREQNESS_EffectDim_Mocap` is the MoCap counterpart of the MEEG
 `FREQNESS_EntropyLandscape` function. It computes quadratic Rényi entropy and
@@ -151,7 +161,7 @@ of the Dance reference study's Figure 2.
 - `RPparam.m` and the included minimal JRQA dependency subset from the CRP
   Toolbox are required by `FREQNESS_TimeCoord_Mocap`.
 - `dl.m`, `tt.m`, and `entropy.m` from that same subset are required by
-  `FREQNESS_PhaseSpaceRQA_Mocap` and its metric functions. They are
+  `FREQNESS_RQA_Mocap`, used by phase-space RQA and validated JRQA. They are
   byte-identical to the versions distributed with BROADNESS.
 
 Place third-party functions, together with their upstream licence and

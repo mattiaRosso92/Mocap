@@ -293,23 +293,17 @@ for leveli = 1:nlevels
         distance_matrix,opts.threshold_method,opts.threshold, ...
         opts.theiler_window,valid_sample_mask);
 
+    RQA = FREQNESS_RQA_Mocap(recurrence_plot,opts.lmin,opts.vmin);
     % Excluded pairs are absent from both numerator and denominator.
     FREQrqa(leveli).RR = sum(recurrence_plot(eligible_pair_mask))/ ...
         nnz(eligible_pair_mask);
-    FREQrqa(leveli).L = ...
-        FREQNESS_RQA_MeanDiagonalLength_Mocap(recurrence_plot,opts.lmin);
-    FREQrqa(leveli).DET = ...
-        FREQNESS_RQA_Determinism_Mocap(recurrence_plot,opts.lmin);
-    FREQrqa(leveli).ENTR = ...
-        FREQNESS_RQA_Entropy_Mocap(recurrence_plot,opts.lmin);
-    FREQrqa(leveli).TT = ...
-        FREQNESS_RQA_TrappingTime_Mocap(recurrence_plot,opts.vmin);
-    FREQrqa(leveli).LAM = ...
-        FREQNESS_RQA_Laminarity_Mocap(recurrence_plot,opts.vmin);
-    FREQrqa(leveli).Vmax = ...
-        FREQNESS_RQA_MaxVerticalLine_Mocap(recurrence_plot,opts.vmin);
-    FREQrqa(leveli).DIV = ...
-        FREQNESS_RQA_Divergence_Mocap(recurrence_plot,opts.lmin);
+    FREQrqa(leveli).L = RQA.l;
+    FREQrqa(leveli).DET = RQA.det;
+    FREQrqa(leveli).ENTR = RQA.entr;
+    FREQrqa(leveli).TT = RQA.tt;
+    FREQrqa(leveli).LAM = RQA.lam;
+    FREQrqa(leveli).Vmax = RQA.vmax;
+    FREQrqa(leveli).DIV = RQA.div;
 
     FREQrqa(leveli).PhaseSpace = phase_space;
     FREQrqa(leveli).SelectedFrequencies = selected_frex(:,leveli)';
