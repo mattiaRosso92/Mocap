@@ -11,6 +11,15 @@ outputs remain separate. Corrected JRQA is run
 by `FREQNESS_DyadicDance_JRQA_Validation.m`, which consumes the completed core
 outputs without modifying them or either earlier temporal analysis.
 
+Both workflows use `FREQNESS_TimeCoord_Mocap`: Block 6 explicitly selects
+`'method','phase_space'` without a parameter structure; optional historical
+JRQA in Block 3 selects `'method','jrqa','parameters',JRQA` with
+`'implementation','legacy'`. The separate JRQA validation keeps
+`'implementation','validated'` and its explicit normalization setting.
+Startup resolves the toolbox's Analysis, Visualization, and Supporting
+subfolders. This interface migration does not change study settings,
+saved variable names, output locations, or cache/overwrite checks.
+
 ## Recovered-dyad Dance pipeline
 
 The main Dance script includes all 35 dyads. It preserves dyad 13's recorded
