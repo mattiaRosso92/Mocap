@@ -15,8 +15,12 @@ belong in the study directories at the repository root.
 - `FREQNESS_MetricProminence_Mocap`: component prominence at every available
   or requested harmonic and subharmonic of a supplied or inferred anchor
   frequency, normalized by the nonmetric network landscape.
-- `FREQNESS_Functions`: MATLAB implementations of the core, second-order, and
-  third-order analyses.
+- `FREQNESS_Functions/Analysis`: core, second-order, and third-order analyses,
+  including recurrence metrics and the temporary phase-space entry point.
+  TimeCoord implementations remain internal in `Analysis/private`.
+- `FREQNESS_Functions/Visualization`: `FREQNESS_Visualizer_Mocap` only.
+- `FREQNESS_Functions/Supporting`: signal processing, filter widths, gap
+  interpolation, JRQA parameter estimation, and surrogate helpers.
 - `FREQNESS_ExampleScripts`: dataset-independent examples demonstrating the
   public toolbox workflow.
 - `FREQNESS_Data`: small distributable example or reference data. Raw and
@@ -25,6 +29,13 @@ belong in the study directories at the repository root.
   by their source, version, and licence information when redistribution is
   permitted.
 - `python`: the future Python package and its tests.
+
+Startup adds all public function subfolders automatically; MainPipeline uses
+Startup, so function calls do not change. For manual path setup, use
+`addpath(genpath(fullfile(path_toolbox,'FREQNESS_Functions')))` alongside
+`FREQNESS_ExternalFunctions`. Adding only the parent `FREQNESS_Functions`
+folder is no longer sufficient. MATLAB's `genpath` excludes `private` folders;
+do not add those folders explicitly.
 
 The third-order analysis layer is specific to the MoCap framework. It operates
 across corresponding participant-level FREQ-NESS outputs using separate
@@ -60,7 +71,7 @@ FREQcoord = FREQNESS_TimeCoord_Mocap(FREQ,[f1 f2], ...
 parameter structure; omit this argument and set options such as `'threshold'`
 directly when needed.
 
-The methods live in `FREQNESS_Functions/private/compute_phase_space_rqa.m`
+The methods live in `FREQNESS_Functions/Analysis/private/compute_phase_space_rqa.m`
 and `compute_joint_rqa.m`. Their existing preprocessing order, threshold
 definitions, gap handling, metrics, and visualizations are preserved.
 Outputs retain their existing fields and add `Method`. Phase-space outputs
@@ -212,4 +223,4 @@ of the Dance reference study's Figure 2.
 
 Place third-party functions, together with their upstream licence and
 documentation, in `FREQNESS_ExternalFunctions`. FREQ-NESS-owned helpers such
-as `FREQNESS_AnalyticSignal.m` belong in `FREQNESS_Functions`.
+as `FREQNESS_AnalyticSignal.m` belong in `FREQNESS_Functions/Supporting`.

@@ -15,6 +15,10 @@ FREQNESS_Mocap_Toolbox/
   FREQNESS_Startup_Mocap.m     Toolbox initialization and dataset loading
   FREQNESS_MainPipeline_Mocap.m General block-based MATLAB workflow
   FREQNESS_Functions/          Reusable MATLAB toolbox functions
+    Analysis/                 Network and coordination analyses
+      private/                Internal temporal-coordination implementations
+    Visualization/            Visualizer only
+    Supporting/               Signal-processing and analysis helpers
   FREQNESS_ExampleScripts/     Dataset-independent usage examples
   FREQNESS_Data/               Small example or reference data only
   FREQNESS_ExternalFunctions/  Documented third-party MATLAB dependencies

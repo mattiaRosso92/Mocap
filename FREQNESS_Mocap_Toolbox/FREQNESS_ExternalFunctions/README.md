@@ -10,7 +10,7 @@ Currently required:
 - `filterFGx.m` for frequency-domain Gaussian filtering during network
   estimation;
 - `FREQNESS_AnalyticSignal.m`, required by the current `filterFGx.m` version,
-  is an internal FREQ-NESS helper included in `FREQNESS_Functions` rather
+  is an internal FREQ-NESS helper included in `FREQNESS_Functions/Supporting` rather
   than a third-party dependency;
 - `RPparam.m` and a minimal JRQA dependency subset from the CRP Toolbox for
   recurrence-based temporal coordination.

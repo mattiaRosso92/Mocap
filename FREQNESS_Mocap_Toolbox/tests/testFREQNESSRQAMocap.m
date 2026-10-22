@@ -10,7 +10,7 @@ function setupOnce(testCase)
 
 testRoot = fileparts(mfilename('fullpath'));
 toolboxRoot = fileparts(testRoot);
-addpath(fullfile(toolboxRoot,'FREQNESS_Functions'));
+addpath(genpath(fullfile(toolboxRoot,'FREQNESS_Functions')));
 addpath(fullfile(toolboxRoot,'FREQNESS_ExternalFunctions'));
 testCase.TestData.recurrencePlot = logical([ ...
     1 1 0 0 0 1 0 0; 1 1 1 0 0 0 1 0; 0 1 1 1 0 0 0 1; ...

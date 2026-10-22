@@ -10,7 +10,7 @@ function setupOnce(testCase)
 
 test_root = fileparts(mfilename('fullpath'));
 toolbox_root = fileparts(test_root);
-addpath(fullfile(toolbox_root,'FREQNESS_Functions'));
+addpath(genpath(fullfile(toolbox_root,'FREQNESS_Functions')));
 addpath(fullfile(toolbox_root,'FREQNESS_ExternalFunctions'));
 testCase.TestData.FREQ = synthetic_freq(120,2);
 testCase.TestData.JRQA = struct('m',2,'tau',3,'ps',.8);

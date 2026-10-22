@@ -51,7 +51,8 @@ path_home = fileparts(mfilename('fullpath'));
 %% Add toolbox directories
 
 addpath(path_home);
-addpath(fullfile(path_home, 'FREQNESS_Functions'));
+% Include Analysis, Visualization and Supporting; genpath excludes private.
+addpath(genpath(fullfile(path_home, 'FREQNESS_Functions')));
 addpath(fullfile(path_home, 'FREQNESS_ExternalFunctions'));
 addpath(fullfile(path_home, 'FREQNESS_ExampleScripts'));
 addpath(fullfile(path_home, 'FREQNESS_Data'));
@@ -81,7 +82,7 @@ for funi = 1:numel(required_internal)
     if exist(required_internal{funi}, 'file') ~= 2
         warning('FREQNESS:MissingInternalFunction', ...
             ['Required FREQ-NESS helper %s was not found. Restore it in ' ...
-            'FREQNESS_Functions before running network estimation.'], ...
+            'FREQNESS_Functions/Supporting before running network estimation.'], ...
             required_internal{funi});
     end
 end
