@@ -1,4 +1,4 @@
-function tests = DyadiDance_TimeCoordIntegrationTest
+function tests = DyadicDance_TimeCoordIntegrationTest
 %TESTFREQNESSDANCETIMECOORDINTEGRATION Study calls preserve temporal outputs.
 
 tests = functiontests(localfunctions);
@@ -13,11 +13,11 @@ path_toolbox = fullfile(repo,'FREQNESS_Mocap_Toolbox');
 addpath(genpath(fullfile(path_toolbox,'FREQNESS_Functions')));
 addpath(fullfile(path_toolbox,'FREQNESS_ExternalFunctions'));
 code = fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation', ...
-    'DyadiDance_MainPipeline.m'));
+    'DyadicDance_MainPipeline.m'));
 code = [fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation', ...
-    'Supporting','DyadiDance_Configuration.m')) newline code];
+    'Supporting','DyadicDance_Configuration.m')) newline code];
 validation_code = fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation', ...
-    'Historical','JRQA','DyadiDance_JRQA_Validation.m'));
+    'Historical','JRQA','DyadicDance_JRQA_Validation.m'));
 testCase.TestData.phase_call = study_call(code,'FREQrqa');
 testCase.TestData.validated_call = study_call(validation_code,'FREQjrqa');
 
@@ -89,9 +89,9 @@ function testHistoricalJRQAIsReadOnly(testCase)
 
 repo = fileparts(fileparts(mfilename('fullpath')));
 code = fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation', ...
-    'DyadiDance_MainPipeline.m'));
+    'DyadicDance_MainPipeline.m'));
 code = [fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation', ...
-    'Supporting','DyadiDance_Configuration.m')) newline code];
+    'Supporting','DyadicDance_Configuration.m')) newline code];
 verifyFalse(testCase,contains(code,'RPparam('));
 verifyFalse(testCase,contains(code,'FREQNESS_DyadicDance_LegacyJRQA('));
 verifyFalse(testCase,contains(code,'compute_jrqa'));

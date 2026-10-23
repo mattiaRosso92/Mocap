@@ -1,7 +1,7 @@
 # Run from the repository root. Real-data checks skip when local inputs are absent.
 suppressPackageStartupMessages({library(readxl);library(dplyr);library(ggplot2);library(lme4);library(lmerTest)})
 repo <- normalizePath(getwd())
-script <- file.path(repo,"Rosso_et_al_Dance_inPreparation","DyadiDance_Stats.R")
+script <- file.path(repo,"Rosso_et_al_Dance_inPreparation","DyadicDance_Stats.R")
 env <- new.env(parent=globalenv())
 for(e in parse(script)) {
   if(is.call(e) && identical(e[[1]],as.name("<-")) &&

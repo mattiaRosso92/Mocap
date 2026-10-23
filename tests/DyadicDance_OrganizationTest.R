@@ -4,7 +4,7 @@ repo <- normalizePath(getwd())
 study <- file.path(repo,"Rosso_et_al_Dance_inPreparation")
 files <- list.files(study,pattern="[.]R$",recursive=TRUE,full.names=TRUE)
 for(file in files) parse(file)
-stopifnot(all(startsWith(basename(files),"DyadiDance_")))
+stopifnot(all(startsWith(basename(files),"DyadicDance_")))
 root <- file.path(repo,"Dance_Data","FREQNESS_Results_Rosso_et_al_inPreparation",
   "legacy_logarithmic_recovered_dyads")
 phase_tag <- "PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0"
@@ -13,9 +13,9 @@ required <- c(file.path(root,"06_Statistics_R",phase_tag,"OUT2R_Comp#1.xlsx"),
 if(!all(file.exists(required))) {
   message("SKIP full entry-point regression: local 35-dyad exports absent")
 } else {
-  output <- tempfile("dyadidance-organization-",tmpdir=Sys.getenv("TMPDIR","/tmp"))
+  output <- tempfile("dyadicdance-organization-",tmpdir=Sys.getenv("TMPDIR","/tmp"))
   dir.create(output)
-  script <- file.path(study,"DyadiDance_Stats.R")
+  script <- file.path(study,"DyadicDance_Stats.R")
   env <- new.env(parent=globalenv())
   env$commandArgs <- function(...) paste0("--file=",script)
   for(expression in parse(script)) {
@@ -44,7 +44,7 @@ if(!all(file.exists(required))) {
     block <- if(kind=="MetricProminence") "04_MetricProminence" else "05_LandscapeSimilarity"
     input <- file.path(root,block,"Component_1",paste0("OUT2R_",kind,".csv"))
     target <- file.path(output,kind)
-    script <- file.path(study,"Supplementary",paste0("DyadiDance_",kind,"_Stats.R"))
+    script <- file.path(study,"Supplementary",paste0("DyadicDance_",kind,"_Stats.R"))
     status <- system2(file.path(R.home("bin"),"Rscript"),shQuote(c(script,input,target)))
     stopifnot(status==0)
     table <- if(kind=="MetricProminence") "Tests_Holm_FiveLevels.csv" else "Tests_Holm_TwoOutcomes.csv"
@@ -54,7 +54,7 @@ if(!all(file.exists(required))) {
     message("PASS unchanged supplementary models: ",kind)
   }
   target <- file.path(output,"SpatialComparison")
-  script <- file.path(study,"Supplementary","DyadiDance_SpatialComparison.R")
+  script <- file.path(study,"Supplementary","DyadicDance_SpatialComparison.R")
   stopifnot(system2(file.path(R.home("bin"),"Rscript"),shQuote(c(script,target)))==0)
   data <- read.csv(file.path(target,"Omnibus_Comparison.csv"))
   stopifnot(setequal(data$Method,c("Raw","Fisher")),nrow(data)==28)

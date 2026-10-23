@@ -4,7 +4,7 @@
 % Blocks 4/5 can also run after configuration alone when core files exist.
 % Blocks 4/5 keep their original formulas and output paths. S1 writes only new
 % controls; Block 7 reproduces publication panels. Run the R scripts afterwards
-% and assemble the Word supplement with DyadiDance_SupplementDocument.py.
+% and assemble the Word supplement with DyadicDance_SupplementDocument.py.
 clear
 close all
 clc
@@ -16,7 +16,7 @@ if isempty(script_file)
     script_file = matlab.desktop.editor.getActiveFilename;
 end
 path_study = fileparts(fileparts(script_file));
-run(fullfile(path_study,'Supporting','DyadiDance_Configuration.m'));
+run(fullfile(path_study,'Supporting','DyadicDance_Configuration.m'));
 addpath(fullfile(path_study,'Supplementary'));
 % New controls are isolated from all primary/legacy outputs and cover all
 % 35 dyads. The excluded empty recording stays excluded.
@@ -232,7 +232,7 @@ for dyadi = CFG.common.list_dyads
         for triali = 1:CFG.common.trial_counts(dyadi,condi)
             id_trial = CFG.common.trial_indices{dyadi,condi}(triali);
             output_file = fullfile(control_path,sprintf( ...
-                'DyadiDance_CONTROLS_D%d_C%d_T%d.mat',dyadi,condi,triali));
+                'DyadicDance_CONTROLS_D%d_C%d_T%d.mat',dyadi,condi,triali));
             if isfile(output_file) && ~CFG.supplementary.overwrite_flag
                 S = load(output_file,'id_trial','settings');
                 assert(S.id_trial==id_trial && isequaln(S.settings,settings), ...
@@ -253,7 +253,7 @@ for dyadi = CFG.common.list_dyads
             frex = (1:32)'/8.*beat_frex;
             fwidth = FREQNESS_ComputeLegacyFilterWidths_Mocap(frex,'logarithmic');
             tic
-            CONTROL = DyadiDance_ControlEstimation(markData,frex,250,fwidth,settings);
+            CONTROL = DyadicDance_ControlEstimation(markData,frex,250,fwidth,settings);
             computation_seconds = toc;
             core_name = sprintf('FREQNESS_CORE_D%d_C%d_T%d.mat',dyadi,condi,triali);
             input_file = fullfile(CFG.block1.output_path,core_name);
@@ -322,7 +322,7 @@ for dyadi = 1:35
         this_pats = nan(66,4,32,2,3,ntrials);
         for triali = 1:ntrials
             input_file = fullfile(CFG.supplementary.output_path,'Controls', ...
-                sprintf('DyadiDance_CONTROLS_D%d_C%d_T%d.mat',dyadi,condi,triali));
+                sprintf('DyadicDance_CONTROLS_D%d_C%d_T%d.mat',dyadi,condi,triali));
             assert(isfile(input_file),'Missing supplementary control: %s',input_file);
             S = load(input_file,'CONTROL','id_trial','baseline_error','settings');
             assert(S.id_trial==CFG.common.trial_indices{dyadi,condi}(triali));
@@ -338,7 +338,7 @@ for dyadi = 1:35
 end
 assert(all(isfinite(control_evals),'all') && all(isfinite(control_ED),'all'));
 assert(max(abs(control_evals(:,:,:,:,3)-evals_avg),[],'all')<1e-7);
-summary_file = fullfile(CFG.supplementary.output_path,'DyadiDance_ControlSummary.mat');
+summary_file = fullfile(CFG.supplementary.output_path,'DyadicDance_ControlSummary.mat');
 if ~isfile(summary_file) || CFG.supplementary.overwrite_flag
     save(summary_file,'control_evals','control_ED','axis_pats','baseline_error','CFG');
 else
@@ -539,7 +539,7 @@ REPORT.control_labels = {'GED_bw025','GED_bw050','GED_bw100','GED_bw200','GED_bw
 REPORT.control_first_component = reshape(mean(control_evals(:,1,1,:,:),1),32,15);
 REPORT.control_ED = reshape(mean(control_ED(:,1,:,:),1),32,15);
 REPORT.pattern_correlation_range = [min(pattern_r_mean) max(pattern_r_mean)];
-report_file = fullfile(CFG.supplementary.output_path,'DyadiDance_FigureSummary.json');
+report_file = fullfile(CFG.supplementary.output_path,'DyadicDance_FigureSummary.json');
 if ~isfile(report_file) || CFG.supplementary.overwrite_flag
     fid = fopen(report_file,'w'); assert(fid~=-1);
     fprintf(fid,'%s',jsonencode(REPORT,'PrettyPrint',true)); fclose(fid);

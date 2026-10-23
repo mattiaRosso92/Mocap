@@ -38,14 +38,14 @@ if (length(file_argument) == 1) {
   script_file <- normalizePath(sub("^--file=", "", file_argument))
 } else {
   script_candidates <- c(
-    file.path(getwd(), "DyadiDance_Stats.R"),
+    file.path(getwd(), "DyadicDance_Stats.R"),
     file.path(
-      getwd(), "Rosso_et_al_Dance_inPreparation", "DyadiDance_Stats.R"
+      getwd(), "Rosso_et_al_Dance_inPreparation", "DyadicDance_Stats.R"
     )
   )
   script_file <- script_candidates[file.exists(script_candidates)][1]
   if (is.na(script_file)) {
-    stop("Could not locate DyadiDance_Stats.R.")
+    stop("Could not locate DyadicDance_Stats.R.")
   }
   script_file <- normalizePath(script_file)
 }
@@ -590,7 +590,7 @@ for (method in names(analysis_methods)) {
       "No ", method, " component workbooks were found in ",
       method_input_path,
       ". Run the corresponding MATLAB statistical export block first " ,
-      "(BLOCK 8 in DyadiDance_MainPipeline.m)."
+      "(BLOCK 8 in DyadicDance_MainPipeline.m)."
     )
   }
   components <- sort(unique(as.integer(sub(

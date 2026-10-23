@@ -17,24 +17,24 @@ Authors: Mattia Rosso, Felix Bigand, Leonardo Bonetti.
 
 | File | Role |
 | --- | --- |
-| [DyadiDance_MainPipeline.m](DyadiDance_MainPipeline.m) | Main MATLAB analyses and exports |
-| [DyadiDance_Stats.R](DyadiDance_Stats.R) | Main RR/DET and spatial models; also the 35-dyad Fisher sensitivity and extended model tables |
-| [Supplementary/DyadiDance_Supplementary.m](Supplementary/DyadiDance_Supplementary.m) | Metric prominence, landscape similarity and supplementary figures |
-| [Supplementary/DyadiDance_MetricProminence_Stats.R](Supplementary/DyadiDance_MetricProminence_Stats.R) | Global + four metric-level prominence models |
-| [Supplementary/DyadiDance_LandscapeSimilarity_Stats.R](Supplementary/DyadiDance_LandscapeSimilarity_Stats.R) | Component-landscape and H2-landscape similarity models |
-| [Supplementary/DyadiDance_SpatialComparison.R](Supplementary/DyadiDance_SpatialComparison.R) | Raw/Fisher comparison using only the final 35 dyads |
-| [Supporting/DyadiDance_Configuration.m](Supporting/DyadiDance_Configuration.m) | One shared configuration and trial/song mapping |
-| [Supporting/DyadiDance_GroupFigures.m](Supporting/DyadiDance_GroupFigures.m) | Shared unchanged figure calculations, selected as Main or Supplementary |
-| [Examples/DyadiDance_Example.m](Examples/DyadiDance_Example.m) | Single-recording toolbox demonstration, not a cohort analysis |
+| [DyadicDance_MainPipeline.m](DyadicDance_MainPipeline.m) | Main MATLAB analyses and exports |
+| [DyadicDance_Stats.R](DyadicDance_Stats.R) | Main RR/DET and spatial models; also the 35-dyad Fisher sensitivity and extended model tables |
+| [Supplementary/DyadicDance_Supplementary.m](Supplementary/DyadicDance_Supplementary.m) | Metric prominence, landscape similarity and supplementary figures |
+| [Supplementary/DyadicDance_MetricProminence_Stats.R](Supplementary/DyadicDance_MetricProminence_Stats.R) | Global + four metric-level prominence models |
+| [Supplementary/DyadicDance_LandscapeSimilarity_Stats.R](Supplementary/DyadicDance_LandscapeSimilarity_Stats.R) | Component-landscape and H2-landscape similarity models |
+| [Supplementary/DyadicDance_SpatialComparison.R](Supplementary/DyadicDance_SpatialComparison.R) | Raw/Fisher comparison using only the final 35 dyads |
+| [Supporting/DyadicDance_Configuration.m](Supporting/DyadicDance_Configuration.m) | One shared configuration and trial/song mapping |
+| [Supporting/DyadicDance_GroupFigures.m](Supporting/DyadicDance_GroupFigures.m) | Shared unchanged figure calculations, selected as Main or Supplementary |
+| [Examples/DyadicDance_Example.m](Examples/DyadicDance_Example.m) | Single-recording toolbox demonstration, not a cohort analysis |
 
-All Dance source filenames use `DyadiDance_*`. Toolbox functions retain
+All Dance source filenames use `DyadicDance_*`. Toolbox functions retain
 `FREQNESS_*`. Existing MAT/XLSX/CSV filenames, variable names and output
 directories are intentionally unchanged so completed results remain reusable.
 The toolbox, Empatic and Orchestra analyses are not reorganized here.
 
 ## Run order and stable block IDs
 
-Open `DyadiDance_MainPipeline.m` in MATLAB and run Block 0 before any later
+Open `DyadicDance_MainPipeline.m` in MATLAB and run Block 0 before any later
 block. The shared settings script is also readable/editable directly; both
 entry points use the same settings. Run the complete main pipeline for a
 fresh replication, or resume the required blocks using completed outputs.
@@ -56,7 +56,7 @@ Block IDs and `CFG.block*` keys are deliberately preserved, including IDs
 meaning of existing saved configurations. Output folder numbers are likewise
 historical identifiers, not a new numbering scheme.
 
-Run `Supplementary/DyadiDance_Supplementary.m` after the main MATLAB pipeline.
+Run `Supplementary/DyadicDance_Supplementary.m` after the main MATLAB pipeline.
 Its Blocks 4/5 need only the shared configuration and existing core estimates;
 its figure block also needs the saved group/spatial/phase-space summaries.
 It does not rerun core estimation or temporal RQA.
@@ -64,10 +64,10 @@ It does not rerun core estimation or temporal RQA.
 Then, from the repository root, run:
 
 ```sh
-Rscript Rosso_et_al_Dance_inPreparation/DyadiDance_Stats.R
-Rscript Rosso_et_al_Dance_inPreparation/Supplementary/DyadiDance_MetricProminence_Stats.R
-Rscript Rosso_et_al_Dance_inPreparation/Supplementary/DyadiDance_LandscapeSimilarity_Stats.R
-Rscript Rosso_et_al_Dance_inPreparation/Supplementary/DyadiDance_SpatialComparison.R
+Rscript Rosso_et_al_Dance_inPreparation/DyadicDance_Stats.R
+Rscript Rosso_et_al_Dance_inPreparation/Supplementary/DyadicDance_MetricProminence_Stats.R
+Rscript Rosso_et_al_Dance_inPreparation/Supplementary/DyadicDance_LandscapeSimilarity_Stats.R
+Rscript Rosso_et_al_Dance_inPreparation/Supplementary/DyadicDance_SpatialComparison.R
 ```
 
 R requires readxl, dplyr, ggplot2, lme4 and lmerTest. The primary R entry point
@@ -145,18 +145,18 @@ exports are absent. They do not rerun full core estimation or RQA.
 
 | Test file | Coverage |
 | --- | --- |
-| [DyadiDance_OrganizationTest.m](../tests/DyadiDance_OrganizationTest.m) | Publication/historical separation; all 35 dyads and 1119 trials; supplementary cache reuse without writes |
-| [DyadiDance_PhasePipelineTest.m](../tests/DyadiDance_PhasePipelineTest.m) | Preserved manuscript settings, filtering/cropping and isolated output paths |
-| [DyadiDance_PhaseReuseTest.m](../tests/DyadiDance_PhaseReuseTest.m) | Validated RR/DET import, export, resume and incompatible-cache rejection |
-| [DyadiDance_SpatialPipelineTest.m](../tests/DyadiDance_SpatialPipelineTest.m) | Spatial-only computation and trial-level raw/Fisher exports |
-| [DyadiDance_TimeCoordIntegrationTest.m](../tests/DyadiDance_TimeCoordIntegrationTest.m) | Unified toolbox interface and historical-only JRQA calls |
+| [DyadicDance_OrganizationTest.m](../tests/DyadicDance_OrganizationTest.m) | Publication/historical separation; all 35 dyads and 1119 trials; supplementary cache reuse without writes |
+| [DyadicDance_PhasePipelineTest.m](../tests/DyadicDance_PhasePipelineTest.m) | Preserved manuscript settings, filtering/cropping and isolated output paths |
+| [DyadicDance_PhaseReuseTest.m](../tests/DyadicDance_PhaseReuseTest.m) | Validated RR/DET import, export, resume and incompatible-cache rejection |
+| [DyadicDance_SpatialPipelineTest.m](../tests/DyadicDance_SpatialPipelineTest.m) | Spatial-only computation and trial-level raw/Fisher exports |
+| [DyadicDance_TimeCoordIntegrationTest.m](../tests/DyadicDance_TimeCoordIntegrationTest.m) | Unified toolbox interface and historical-only JRQA calls |
 | [testFREQNESSStudyFilterCalibration.m](../tests/testFREQNESSStudyFilterCalibration.m) | Shared cross-study test; only the Dance source locations changed |
-| [DyadiDance_TestStats.R](../tests/DyadiDance_TestStats.R) | Invalid-cohort rejection and corrected phase-space statistical regression |
-| [DyadiDance_OrganizationTest.R](../tests/DyadiDance_OrganizationTest.R) | Complete final R entry points and unchanged saved main/supplementary model tables |
+| [DyadicDance_TestStats.R](../tests/DyadicDance_TestStats.R) | Invalid-cohort rejection and corrected phase-space statistical regression |
+| [DyadicDance_OrganizationTest.R](../tests/DyadicDance_OrganizationTest.R) | Complete final R entry points and unchanged saved main/supplementary model tables |
 
 ```sh
-Rscript tests/DyadiDance_TestStats.R
-Rscript tests/DyadiDance_OrganizationTest.R
+Rscript tests/DyadicDance_TestStats.R
+Rscript tests/DyadicDance_OrganizationTest.R
 ```
 
 Validated on 2026-10-23: all 16 MATLAB tests passed; all R scripts parsed;

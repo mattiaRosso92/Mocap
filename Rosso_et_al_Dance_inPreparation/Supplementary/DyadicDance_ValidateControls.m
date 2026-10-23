@@ -1,4 +1,4 @@
-function DyadiDance_ValidateControls
+function DyadicDance_ValidateControls
 % Deterministic numerical regression of the study-only compact controls.
 % Run after FREQNESS_Startup_Mocap. No study data or outputs are modified.
 rng(47);
@@ -10,14 +10,14 @@ fwidth = repmat(linspace(.03,.2,6)',1,2).*[1 1.1];
 settings = struct('width_multipliers',[.25 .5 1 2 4],'ncomps',4,'regularisation',.01);
 for gapi = 1:2
     if gapi==2, data(2,201:204,1) = NaN; end
-    CONTROL = DyadiDance_ControlEstimation(data,frex,srate,fwidth,settings);
+    CONTROL = DyadicDance_ControlEstimation(data,frex,srate,fwidth,settings);
     for widthi = 1:5
         this_width = fwidth*settings.width_multipliers(widthi);
         FREQ = FREQNESS_NetworkEstimation_Mocap(data,frex,srate, ...
             'fwidth',this_width,'ncomps',4);
         assert(max(abs(FREQ.evals-CONTROL.evals(:,:,:,widthi)),[],'all')<1e-8);
         if gapi==1
-            PCA = DyadiDance_NetworkEstimationPCA(data,frex,srate, ...
+            PCA = DyadicDance_NetworkEstimationPCA(data,frex,srate, ...
                 'fwidth',this_width,'ncomps',4);
             assert(max(abs(PCA.evals-CONTROL.evals(:,:,:,5+widthi)),[],'all')<1e-8);
         end

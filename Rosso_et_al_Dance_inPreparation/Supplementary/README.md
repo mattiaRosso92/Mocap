@@ -5,7 +5,7 @@ pipeline. No 33-versus-35 comparison or JRQA analysis belongs here.
 
 ## Implemented material
 
-- `DyadiDance_Supplementary.m`, Block 4: metric prominence. Individual ratios
+- `DyadicDance_Supplementary.m`, Block 4: metric prominence. Individual ratios
   are averaged across partners and then trials. This is dyad-mean individual
   prominence, not interpersonal coupling. Global uses all available metric
   levels; separate levels are beat/4, beat/2, beat and 2x beat. On the current
@@ -22,47 +22,47 @@ pipeline. No 33-versus-35 comparison or JRQA analysis belongs here.
   component-1/component-2 correlations, coordination in both components,
   metric prominence and landscape similarity. Aesthetics and panel assembly
   are coded here. Existing main figures are unchanged.
-- `DyadiDance_MetricProminence_Stats.R`: five log-prominence Visual x Music
+- `DyadicDance_MetricProminence_Stats.R`: five log-prominence Visual x Music
   models with random dyad intercept and Holm correction across five outcomes
   per effect; five original-scale condition plots.
-- `DyadiDance_LandscapeSimilarity_Stats.R`: two Fisher-z Visual x Music models
+- `DyadicDance_LandscapeSimilarity_Stats.R`: two Fisher-z Visual x Music models
   with random dyad intercept and Holm correction across outcomes per effect;
   plots back-transform z means and SEM bounds.
-- `DyadiDance_SpatialComparison.R`: final 35-dyad raw/Fisher spatial
-  comparisons and diagnostics only. Run the main `DyadiDance_Stats.R` first,
+- `DyadicDance_SpatialComparison.R`: final 35-dyad raw/Fisher spatial
+  comparisons and diagnostics only. Run the main `DyadicDance_Stats.R` first,
   which produces both inputs. Existing comparison outputs are never overwritten.
-- The main `DyadiDance_Stats.R` also generates extended polynomial
+- The main `DyadicDance_Stats.R` also generates extended polynomial
   comparisons, ANOVA tables and residual diagnostics for the supplement.
   There is one implementation of those models, not a duplicate fitting script.
 
 ## Study-only control implementation
 
-- `DyadiDance_NetworkEstimationPCA.m` is the supplied PCA reference, renamed
+- `DyadicDance_NetworkEstimationPCA.m` is the supplied PCA reference, renamed
   to distinguish study code from the toolbox. It now accepts partner-specific
   width matrices and retains all eigenvalues for ED. Its narrowband PCA
   calculation is unchanged. It is **not** a new public toolbox function.
-- `DyadiDance_ControlEstimation.m` computes only eigenvalues and axis patterns.
+- `DyadicDance_ControlEstimation.m` computes only eigenvalues and axis patterns.
   GED and PCA share the same covariance. For gap-free inputs, Parseval's
   identity yields the same centered covariance directly from the filtered
   spectrum; only exactly-zero bins are skipped. No spectral cutoff is added.
   Gapped trials use time-domain covariance and the toolbox interpolation
   policy. Axis zeroing precedes gap detection. Velocity is the first
   difference times 250, excluding differences adjacent to reconstructed samples.
-- `DyadiDance_ValidateControls.m` compares these controls against the public
+- `DyadicDance_ValidateControls.m` compares these controls against the public
   GED and supplied PCA references for all five widths, participant-specific
   widths, zeroed axes, gaps and velocity; it also checks complete-spectrum ED.
 
 ## Run and reproduce
 
 1. Run the main pipeline to populate/reuse the final 35-dyad summaries.
-2. Run `DyadiDance_Supplementary.m`. Existing prominence/similarity outputs
+2. Run `DyadicDance_Supplementary.m`. Existing prominence/similarity outputs
    and matching control files are reused. New controls, figures and their
    provenance are written only under `Supplementary_35` in the recovered-dyad
    results root. No primary core, coordination or RQA file is overwritten.
-3. Run `DyadiDance_Stats.R` in the study root and the prominence/similarity R
+3. Run `DyadicDance_Stats.R` in the study root and the prominence/similarity R
    scripts here. Existing completed results may be reused; the two latter
    scripts require a new output directory if explicitly rerun.
-4. Run `python DyadiDance_SupplementDocument.py` with `python-docx` and Pillow
+4. Run `python DyadicDance_SupplementDocument.py` with `python-docx` and Pillow
    installed. It builds the Word supplement and figure/statistics ZIPs from
    the permanent figures and canonical R results. Use `--name NewName.docx`
    for a revised document; the builder does not overwrite an existing one.

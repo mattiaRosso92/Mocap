@@ -1,15 +1,15 @@
-# Historical Dance analysis: DyadiDance_Recovered35_Legacy_Stats.R
+# Historical Dance analysis: DyadicDance_Recovered35_Legacy_Stats.R
 # Not the default manuscript workflow. See Historical/README.md.
 # Run from the repository root (or set FREQNESS_REPO); equations are preserved.
 repo <- normalizePath(Sys.getenv('FREQNESS_REPO', unset = getwd()), mustWork = TRUE)
-stopifnot(file.exists(file.path(repo, 'Rosso_et_al_Dance_inPreparation/Historical/DyadiDance_StatisticalModels_Historical.R')))
+stopifnot(file.exists(file.path(repo, 'Rosso_et_al_Dance_inPreparation/Historical/DyadicDance_StatisticalModels_Historical.R')))
 setwd(repo)
 
 suppressPackageStartupMessages({library(readxl);library(dplyr);library(ggplot2);library(lme4);library(lmerTest)})
 bonferroni_tests <- 4
 bonferroni_alpha <- .05/4
 configured_metric_levels <- c(M1=.25,M2=.5,M3=1,M4=2)
-expressions <- parse(file.path(repo,'Rosso_et_al_Dance_inPreparation/Historical/DyadiDance_StatisticalModels_Historical.R'))
+expressions <- parse(file.path(repo,'Rosso_et_al_Dance_inPreparation/Historical/DyadicDance_StatisticalModels_Historical.R'))
 for(e in expressions) if(is.call(e) && identical(e[[1]],as.name('<-')) &&
   is.call(e[[3]]) && identical(e[[3]][[1]],as.name('function'))) eval(e)
 base <- file.path(repo,'Dance_Data/FREQNESS_Results_Rosso_et_al_inPreparation')

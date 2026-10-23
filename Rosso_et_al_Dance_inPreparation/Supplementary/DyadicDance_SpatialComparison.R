@@ -70,7 +70,7 @@ plot <- ggplot(q,aes(Theoretical,Residual))+
     x="Normal-theory quantile",y="Standardized residual")
 ggsave(file.path(output_path,"Residual_QQ.png"),plot,width=9,height=6,dpi=170,bg="white")
 writeLines(c("Raw primary: mean trial r; Fisher sensitivity: mean atanh(trial r).",
-  "Models are fitted by DyadiDance_Stats.R; this script only compares saved results.",
+  "Models are fitted by DyadicDance_Stats.R; this script only compares saved results.",
   "Full factorial: Visual * Music * Meter + (1 | Dyad); Type III Satterthwaite tests.",
   "Post-hoc: Visual * Music + (1 | Dyad), Bonferroni across four meters per term/component.",
   "Raw plots: mean +/- SEM. Fisher plots: z mean +/- SEM, then back-transform each bound.",

@@ -2,7 +2,7 @@
 # Not the default manuscript workflow. See Historical/README.md.
 # Run from the repository root (or set FREQNESS_REPO); equations are preserved.
 repo <- normalizePath(Sys.getenv('FREQNESS_REPO', unset = getwd()), mustWork = TRUE)
-stopifnot(file.exists(file.path(repo, 'Rosso_et_al_Dance_inPreparation/Historical/DyadiDance_StatisticalModels_Historical.R')))
+stopifnot(file.exists(file.path(repo, 'Rosso_et_al_Dance_inPreparation/Historical/DyadicDance_StatisticalModels_Historical.R')))
 setwd(repo)
 
 suppressPackageStartupMessages({library(readxl);library(lme4);library(lmerTest)})

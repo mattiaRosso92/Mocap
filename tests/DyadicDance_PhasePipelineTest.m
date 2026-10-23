@@ -1,4 +1,4 @@
-function tests = DyadiDance_PhasePipelineTest
+function tests = DyadicDance_PhasePipelineTest
 %TESTFREQNESSDANCEPHASEPIPELINE Selected study settings and sampling contract.
 tests = functiontests(localfunctions);
 end
@@ -6,9 +6,9 @@ end
 function setupOnce(testCase)
 repo = fileparts(fileparts(mfilename('fullpath')));
 code = fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation', ...
-    'DyadiDance_MainPipeline.m'));
+    'DyadicDance_MainPipeline.m'));
 code = [fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation', ...
-    'Supporting','DyadiDance_Configuration.m')) newline code];
+    'Supporting','DyadicDance_Configuration.m')) newline code];
 CFG.common = struct('data_path',tempdir,'results_path',tempdir, ...
     'filter_output_tag','legacy_logarithmic','reuse_core_path',tempdir);
 first = strfind(code,'% Manuscript phase-space RQA:');
@@ -17,7 +17,7 @@ eval(code(first:last-1)); % Evaluate the actual settings, without running a stud
 testCase.TestData.CFG = CFG;
 testCase.TestData.code = code;
 testCase.TestData.r_code = fileread(fullfile(repo, ...
-    'Rosso_et_al_Dance_inPreparation','DyadiDance_Stats.R'));
+    'Rosso_et_al_Dance_inPreparation','DyadicDance_Stats.R'));
 end
 
 function testManuscriptDefaults(testCase)

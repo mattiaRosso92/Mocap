@@ -1,4 +1,4 @@
-function tests = DyadiDance_PhaseReuseTest
+function tests = DyadicDance_PhaseReuseTest
 % Saved RR/DET import/resume regression; never calculate recurrence matrices.
 tests = functiontests(localfunctions);
 end
@@ -79,9 +79,9 @@ end
 
 function [CFG,code,reference] = fixture
 repo = fileparts(fileparts(mfilename('fullpath')));
-code = fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation','DyadiDance_MainPipeline.m'));
+code = fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation','DyadicDance_MainPipeline.m'));
 code = [fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation', ...
-    'Supporting','DyadiDance_Configuration.m')) newline code];
+    'Supporting','DyadicDance_Configuration.m')) newline code];
 folder = tempname; mkdir(folder);
 CFG.common = struct('data_path',fullfile(repo,'Dance_Data'),'results_path',folder, ...
     'filter_output_tag','legacy_logarithmic','filter_width_calibration','legacy', ...

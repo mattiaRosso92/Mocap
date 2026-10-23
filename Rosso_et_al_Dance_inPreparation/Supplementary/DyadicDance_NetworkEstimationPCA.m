@@ -1,4 +1,4 @@
-function [PCA] = DyadiDance_NetworkEstimationPCA(data, frex, srate, varargin)
+function [PCA] = DyadicDance_NetworkEstimationPCA(data, frex, srate, varargin)
 % ========================================================================
 %  FREQUENCY-RESOLVED NETWORK ESTIMATION TOOLBOX - MOCAP version
 %

@@ -1,4 +1,4 @@
-function tests = DyadiDance_SpatialPipelineTest
+function tests = DyadicDance_SpatialPipelineTest
 % Spatial recovery/export regression using the actual study blocks.
 tests = functiontests(localfunctions);
 end
@@ -6,9 +6,9 @@ end
 function setupOnce(testCase)
 repo = fileparts(fileparts(mfilename('fullpath')));
 testCase.TestData.code = fileread(fullfile(repo, ...
-    'Rosso_et_al_Dance_inPreparation','DyadiDance_MainPipeline.m'));
+    'Rosso_et_al_Dance_inPreparation','DyadicDance_MainPipeline.m'));
 testCase.TestData.code = [fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation', ...
-    'Supporting','DyadiDance_Configuration.m')) newline testCase.TestData.code];
+    'Supporting','DyadicDance_Configuration.m')) newline testCase.TestData.code];
 folder = tempname;
 mkdir(folder);
 testCase.TestData.folder = folder;

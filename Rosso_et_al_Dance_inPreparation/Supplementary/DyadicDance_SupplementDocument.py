@@ -1,6 +1,6 @@
 """Assemble the Word supplement from permanent MATLAB figures and saved R tables.
 
-Run after DyadiDance_Supplementary.m and the study R scripts. Requires
+Run after DyadicDance_Supplementary.m and the study R scripts. Requires
 python-docx and Pillow. Outputs remain in ignored Dance_Data; sources and the
 main manuscript are never edited. An existing document is not overwritten.
 Authors: Mattia Rosso, Felix Bigand, Leonardo Bonetti
@@ -28,14 +28,14 @@ figures = output / 'Figures'
 stats = repo / 'Dance_Data/FREQNESS_Mocap_Stats_Results/legacy_logarithmic_recovered_dyads'
 phase_tag = 'PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0'
 parser = argparse.ArgumentParser()
-parser.add_argument('--name', default='DyadiDance_Supplementary_Material.docx')
+parser.add_argument('--name', default='DyadicDance_Supplementary_Material.docx')
 parser.add_argument('--template', type=Path,
                     default=repo/'paper_drafts/TEMP_FREQNESS_Mocap_v3.docx')
 args = parser.parse_args()
 destination = output / args.name
 if destination.exists():
     raise SystemExit('Document exists. Use --name with a new filename to preserve it.')
-report = json.loads((output / 'DyadiDance_FigureSummary.json').read_text())
+report = json.loads((output / 'DyadicDance_FigureSummary.json').read_text())
 assert report['ndyads'] == 35 and report['ntrials'] == 1119
 assert report['maximum_baseline_error'] < 1e-7
 

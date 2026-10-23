@@ -3,7 +3,7 @@
 % https://doi.org/10.48557/UR2GBG (IIT Dataverse; verified 2026-10-23).
 % Authors: Mattia Rosso, Felix Bigand, Leonardo Bonetti
 % Main: position-based GED, ED, spatial coordination and corrected phase-space RQA.
-% Supplementary/DyadiDance_Supplementary.m contains the additional analyses.
+% Supplementary/DyadicDance_Supplementary.m contains the additional analyses.
 % Existing CFG.block* IDs and numerical output names are retained for cache compatibility.
 
 clear
@@ -17,7 +17,7 @@ if isempty(script_file)
     script_file = matlab.desktop.editor.getActiveFilename;
 end
 path_study = fileparts(script_file);
-run(fullfile(path_study,'Supporting','DyadiDance_Configuration.m'));
+run(fullfile(path_study,'Supporting','DyadicDance_Configuration.m'));
 
 %% BLOCK 1 - NETWORK ESTIMATION
  
@@ -455,7 +455,7 @@ end
 
 end
 
-%% BLOCKS 4 AND 5 - RUN SEPARATELY IN DyadiDance_Supplementary.m
+%% BLOCKS 4 AND 5 - RUN SEPARATELY IN DyadicDance_Supplementary.m
 % Metric prominence and landscape similarity are supplementary analyses.
 
 %% BLOCK 6 - PHASE-SPACE RQA (MANUSCRIPT TEMPORAL COORDINATION)
@@ -799,7 +799,7 @@ end
 
 figure_scope = 'Main';
 run(fullfile(fileparts(CFG.common.data_path),'Rosso_et_al_Dance_inPreparation', ...
-    'Supporting','DyadiDance_GroupFigures.m'));
+    'Supporting','DyadicDance_GroupFigures.m'));
 
 %% BLOCK 8 - R-READY STATISTICAL EXPORT
 

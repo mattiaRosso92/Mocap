@@ -1,10 +1,10 @@
-function CONTROL = DyadiDance_ControlEstimation(data,frex,srate,fwidth,settings)
+function CONTROL = DyadicDance_ControlEstimation(data,frex,srate,fwidth,settings)
 % Study-only compact GED/PCA controls; no change to the public toolbox.
 % Inputs: coordinates x time x partners; frequencies/widths x partners.
 % Outputs: all 66 eigenvalues x frequencies x partners x control; axis-only
 % patterns retain four components. No component time series are constructed.
 % GED uses the toolbox covariances/shrinkage; PCA uses eig(covS), exactly as
-% in the supplied DyadiDance_NetworkEstimationPCA reference. Eigenvalues are
+% in the supplied DyadicDance_NetworkEstimationPCA reference. Eigenvalues are
 % normalized separately within each participant, frequency and control.
 % Authors: Mattia Rosso, Felix Bigand, Leonardo Bonetti
 
