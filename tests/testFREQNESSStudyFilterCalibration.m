@@ -1,5 +1,5 @@
 function tests = testFREQNESSStudyFilterCalibration
-%TESTFREQNESSSTUDYFILTERCALIBRATION Study-level FWHM provenance safeguards.
+%TESTFREQNESSSTUDYFILTERCALIBRATION Study filter provenance and toolbox paths.
 
 tests = functiontests(localfunctions);
 
@@ -73,5 +73,35 @@ for studyi = 1:numel(texts)
         '''filterWidthCalibration'''));
     verifyTrue(testCase,contains(texts{studyi},'''fwidth'''));
 end
+
+end
+
+
+function testOrchestraSetupResolvesOrganizedToolboxFunctions(testCase)
+
+code = testCase.TestData.orchestra;
+path_repo = fileparts(fileparts(mfilename('fullpath')));
+path_toolbox = fullfile(path_repo,'FREQNESS_Mocap_Toolbox');
+original_path = path;
+cleanup = onCleanup(@() path(original_path));
+active_paths = strsplit(original_path,pathsep);
+toolbox_paths = strcmp(active_paths,path_toolbox) | ...
+    startsWith(active_paths,[path_toolbox filesep]);
+if any(toolbox_paths); rmpath(active_paths{toolbox_paths}); end
+
+% Execute path setup only, without importing data or saving study outputs.
+first = strfind(code,'addpath(path_toolbox)');
+last = strfind(code,'%% Prepare data');
+eval(code(first:last-1));
+function_calls = regexp(code,'(FREQNESS_\w+)\s*\(','tokens');
+assertNumElements(testCase,function_calls,4);
+for functioni = 1:numel(function_calls)
+    function_name = function_calls{functioni}{1};
+    file = dir(fullfile(path_toolbox,'FREQNESS_Functions','**',[function_name '.m']));
+    assertNumElements(testCase,file,1);
+    verifyEqual(testCase,which(function_name),fullfile(file.folder,file.name));
+end
+verifyFalse(testCase,ismember(fullfile(path_toolbox,'FREQNESS_Functions', ...
+    'Analysis','private'),strsplit(path,pathsep)));
 
 end
