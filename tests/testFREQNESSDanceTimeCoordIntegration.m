@@ -17,7 +17,6 @@ code = fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation', ...
 validation_code = fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation', ...
     'FREQNESS_DyadicDance_JRQA_Validation.m'));
 testCase.TestData.phase_call = study_call(code,'FREQrqa');
-testCase.TestData.legacy_call = study_call(code,'FREQjrqa');
 testCase.TestData.validated_call = study_call(validation_code,'FREQjrqa');
 
 % Evaluate configuration only, without creating or accessing study outputs.
@@ -54,7 +53,7 @@ testCase.TestData.beat_frex = beat_frex;
 end
 
 
-function testManuscriptPhaseCallMatchesFormerEntryPoint(testCase)
+function testManuscriptPhaseCallPreservesSettings(testCase)
 
 PhaseRQA = testCase.TestData.PhaseRQA;
 PhaseRQA.animate = false;
@@ -69,7 +68,8 @@ for which_comp = 1:2
     PhaseRQA.component = which_comp;
     GED = prepare_series(testCase.TestData.GED,which_comp, ...
         PhaseRQA.lowpass_hz/(PhaseRQA.srate/2),PhaseRQA.downsample);
-    expected = FREQNESS_PhaseSpaceRQA_Mocap(GED,this_target_frex, ...
+    expected = FREQNESS_TimeCoord_Mocap(GED,this_target_frex, ...
+        'method','phase_space', ...
         'metric_levels',meter,'component',PhaseRQA.component, ...
         'duration',duration,'standardize',PhaseRQA.standardize, ...
         'threshold_method',PhaseRQA.threshold_method,'threshold',PhaseRQA.threshold, ...
@@ -83,22 +83,18 @@ end
 end
 
 
-function testHistoricalJRQACallPreservesLegacyImplementation(testCase)
+function testHistoricalJRQAIsReadOnly(testCase)
 
-beat_frex = testCase.TestData.beat_frex;
-meter = [.25 .5 1 2];
-duration = [.15 .85];
-JRQA = struct('m',2,'tau',10,'ps',.1);
-verifyTrue(testCase,contains(testCase.TestData.legacy_call, ...
-    '''implementation'',''legacy'''));
-for which_comp = 1:2
-    GED = prepare_series(testCase.TestData.GED,which_comp,.8,10);
-    expected = FREQNESS_TimeCoord_Mocap(GED,JRQA,beat_frex, ...
-        'metric_levels',meter,'component',which_comp,'duration',duration);
-    eval(testCase.TestData.legacy_call);
-    verifyEqual(testCase,FREQjrqa,expected);
-    verifyEqual(testCase,{FREQjrqa.Implementation},repmat({'legacy'},1,4));
-end
+repo = fileparts(fileparts(mfilename('fullpath')));
+code = fileread(fullfile(repo,'Rosso_et_al_Dance_inPreparation', ...
+    'FREQNESS_DyadicDance_Mocap.m'));
+verifyFalse(testCase,contains(code,'RPparam('));
+verifyFalse(testCase,contains(code,'FREQNESS_DyadicDance_LegacyJRQA('));
+verifyFalse(testCase,contains(code,'compute_jrqa'));
+verifyTrue(testCase,contains(code,'CFG.block3.reuse_legacy_jrqa = false;'));
+verifyTrue(testCase,contains(code,'%% Optional historical JRQA export'));
+verifyFalse(testCase,isfile(fullfile(repo,'FREQNESS_Mocap_Toolbox', ...
+    'FREQNESS_ExternalFunctions','RPparam.m')));
 
 end
 
@@ -115,9 +111,10 @@ for which_comp = 1:2
     for methodi = 1:numel(methods)
         specification.threshold_method = methods{methodi};
         this_threshold = thresholds(methodi);
-        expected = FREQNESS_TimeCoord_Mocap(S.GED,specification.JRQA,S.beat_frex, ...
+        expected = FREQNESS_TimeCoord_Mocap(S.GED,S.beat_frex, ...
+            'method','jrqa','parameters',specification.JRQA, ...
             'metric_levels',CFG.metric_levels,'component',which_comp, ...
-            'duration',CFG.duration,'implementation','validated', ...
+            'duration',CFG.duration, ...
             'srate',CFG.original_srate,'target_srate',CFG.target_srate, ...
             'lowpass_cutoff',CFG.lowpass_cutoff,'filter_order',CFG.filter_order, ...
             'standardize',CFG.standardize, ...

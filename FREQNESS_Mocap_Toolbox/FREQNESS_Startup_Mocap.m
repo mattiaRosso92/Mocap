@@ -67,7 +67,7 @@ fprintf('Base directory: %s\n\n', path_home);
 required_external = {'filterFGx'};
 required_internal = {'FREQNESS_AnalyticSignal', ...
     'FREQNESS_InterpolateGaps_Mocap'};
-optional_external = {'RPparam','jrqa','dl','tt','entropy'};
+optional_external = {'dl','tt','entropy'};
 
 for funi = 1:numel(required_external)
     if exist(required_external{funi}, 'file') ~= 2

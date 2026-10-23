@@ -12,27 +12,28 @@ Currently required:
 - `FREQNESS_AnalyticSignal.m`, required by the current `filterFGx.m` version,
   is an internal FREQ-NESS helper included in `FREQNESS_Functions/Supporting` rather
   than a third-party dependency;
-- `RPparam.m` and a minimal JRQA dependency subset from the CRP Toolbox for
-  recurrence-based temporal coordination.
+- `mutual.m`, `false_nearest.m`, and `pss.m` for corrected JRQA parameter tuning;
 - `dl.m`, `tt.m`, and `entropy.m` from the same CRP Toolbox subset for the
-  phase-space RQA metrics. These three files are byte-identical to the files
+  phase-space and corrected JRQA metrics. These three files are byte-identical to the files
   used by `BROADNESS_PhaseSpace_RQA`.
 
 ## Included CRP Toolbox subset
 
-The temporal-coordination implementation uses the JRQA code distributed with
+The retained dependency subset includes JRQA code distributed with
 the CRP Toolbox by Norbert Marwan under the GNU General Public License, version
 2 or later. The included `jrqa.m` identifies itself as revision 2.11 dated
 2016-03-03.
 
-Only the runtime files exercised by non-interactive JRQA calls are included:
+The original non-interactive CRP subset contains:
 
 - `jrqa.m`, `crp2.m`, `dl.m`, `entropy.m`, and `tt.m`;
 - `private/check_stop.m`, `private/init_properties.m`,
   `private/is_crp_plugin.m`, and `private/splash_gpl.m`.
 
-The phase-space implementation calls only `dl.m`, `tt.m`, and `entropy.m`;
-it does not require `jrqa.m`, `RPparam.m`, or the CRP private helpers.
+Both toolbox RQA implementations use `dl.m`, `tt.m`, and `entropy.m` for
+recurrence metrics; neither calls `jrqa.m` or the CRP private helpers. The
+obsolete local `RPparam.m` tuning routine and historical study recomputation
+have been removed. The upstream CRP files are not a selectable toolbox method.
 
 The complete CRP Toolbox is not bundled. The local change in
 `private/splash_gpl.m` allows it to locate the colocated `jrqa.m` when the

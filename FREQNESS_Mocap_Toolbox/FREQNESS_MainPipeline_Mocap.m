@@ -26,7 +26,6 @@
 %    required for phase-space RQA.
 %  - The included CRP Toolbox subset supplies mutual information, false
 %    nearest neighbours, and recurrence-line metrics for validated JRQA.
-%    RPparam.m and jrqa.m are retained only for legacy-compatible calls.
 %
 % ------------------------------------------------------------------------
 %  AUTHORS:
@@ -191,13 +190,12 @@ phaserqa_animation_pause = 0.01;
 
 % Estimate embedding parameters with FREQNESS_JRQAParameters_Mocap before
 % fixing them across comparable datasets. Radius-threshold analyses also
-% require JRQA.ps. The legacy implementation remains available explicitly.
+% require JRQA.ps. Only the corrected JRQA implementation is available.
 JRQA = struct('m',[],'tau',[],'ps',[]);
 
 timecoord_metric_levels = [0.25 0.5 1 2];
 timecoord_component = 1;
 timecoord_duration = [0.15 0.85];
-timecoord_implementation = 'validated';
 timecoord_target_srate = srate;
 timecoord_lowpass_cutoff = [];
 timecoord_filter_order = 4;
@@ -444,8 +442,7 @@ for datai = 1:ndatasets
         if isempty(JRQA.m) || isempty(JRQA.tau)
             error('JRQA.m and JRQA.tau must be defined for temporal coordination.');
         end
-        if strcmpi(timecoord_implementation,'validated') && ...
-                strcmpi(timecoord_threshold_method,'radius') && ...
+        if strcmpi(timecoord_threshold_method,'radius') && ...
                 isempty(timecoord_threshold) && isempty(JRQA.ps)
             error(['Validated radius JRQA requires JRQA.ps or an explicit ' ...
                 'timecoord_threshold.']);
@@ -455,7 +452,6 @@ for datai = 1:ndatasets
             'metric_levels',timecoord_metric_levels, ...
             'component',timecoord_component, ...
             'duration',timecoord_duration, ...
-            'implementation',timecoord_implementation, ...
             'srate',srate, ...
             'target_srate',timecoord_target_srate, ...
             'lowpass_cutoff',timecoord_lowpass_cutoff, ...
@@ -467,9 +463,6 @@ for datai = 1:ndatasets
             'lmin',timecoord_lmin,'vmin',timecoord_vmin};
 
         if timecoord_n_surrogates > 0
-            if ~strcmpi(timecoord_implementation,'validated')
-                error('Circular-shift surrogates require validated JRQA.');
-            end
             [FREQjrqa{datai},JRQASurrogates{datai}] = ...
                 FREQNESS_JRQASurrogates_Mocap( ...
                 FREQ{datai},JRQA,this_target_frex, ...

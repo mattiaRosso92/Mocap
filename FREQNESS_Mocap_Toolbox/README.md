@@ -16,7 +16,7 @@ belong in the study directories at the repository root.
   or requested harmonic and subharmonic of a supplied or inferred anchor
   frequency, normalized by the nonmetric network landscape.
 - `FREQNESS_Functions/Analysis`: core, second-order, and third-order analyses,
-  including recurrence metrics and the temporary phase-space entry point.
+  including recurrence metrics and the unified temporal-coordination interface.
   TimeCoord implementations remain internal in `Analysis/private`.
 - `FREQNESS_Functions/Visualization`: `FREQNESS_Visualizer_Mocap` only.
 - `FREQNESS_Functions/Supporting`: signal processing, filter widths, gap
@@ -57,7 +57,7 @@ Use `'Fisher',true` to return `atanh(r)` in the same single output array;
 
 ### Temporal coordination
 
-`FREQNESS_TimeCoord_Mocap` is the single recommended entry point for both
+`FREQNESS_TimeCoord_Mocap` is the single public entry point for both
 temporal methods. Phase-space RQA is the default; JRQA is selected explicitly:
 
 ```matlab
@@ -88,10 +88,11 @@ The general MainPipeline shows both methods with normalization disabled.
 JRQA requires a final parameter structure with scalar `m` and `tau`; tuning
 is not performed automatically. Use `FREQNESS_JRQAParameters_Mocap` separately,
 then select or pool estimates according to the study design. Tuning and
-analysis must use matching preprocessing and normalization. New JRQA calls
-default to `implementation='validated'`; legacy JRQA remains explicitly
-available and retains its historical CRP normalization rules, which the
-`standardize` flag does not override. It is for historical reproduction only.
+analysis must use matching preprocessing and normalization. JRQA uses only
+the corrected implementation. The obsolete `implementation` argument has been
+removed, including from the surrogate interface. The historical calculation
+and `RPparam.m` tuning routine have been removed from runnable code; saved
+historical study outputs can still be read for comparison, never recomputed.
 
 The methods have distinct options: phase-space RQA supports two or more
 participants, participant-specific components, marked bad samples, and
@@ -102,13 +103,15 @@ threshold value therefore does not imply the same joint RR. Phase-space
 `downsample` is a sample stride only; anti-alias filtering remains upstream.
 JRQA accepts `target_srate` and `lowpass_cutoff` through its preprocessing helper.
 
-**Temporary study compatibility:** `FREQNESS_PhaseSpaceRQA_Mocap` still calls
-the same private phase-space implementation. The old
-`FREQNESS_TimeCoord_Mocap(FREQ,JRQA,target_frex,...)` signature still selects
-JRQA, defaulting to its historical legacy implementation unless explicitly
-overridden. Both are retained until study callers are migrated; neither
-duplicates an algorithm. Normalization defaults to false in every call form:
-reproducing previously normalized runs requires explicit `standardize=true`.
+**Interface migration:** `FREQNESS_PhaseSpaceRQA_Mocap` and the old
+`FREQNESS_TimeCoord_Mocap(FREQ,JRQA,target_frex,...)` signature have been removed.
+Use `FREQNESS_TimeCoord_Mocap(FREQ,target_frex,...)` for phase-space RQA, or
+add `'method','jrqa','parameters',JRQA` for corrected JRQA. Do not silently
+substitute this for an old call that implicitly used legacy JRQA: that changes
+the calculation. Historical Dance comparisons now read existing outputs only.
+Remove `'implementation','validated'` from corrected calls; their numerical
+behavior is unchanged. Reproducing previously normalized runs requires explicit
+`'standardize',true`. Phase-space and corrected JRQA calculations are unchanged.
 
 For repeated-condition JRQA, a study may pool radius estimates and pass the
 same scalar `'threshold'` with `'threshold_method','radius'` to each call.
@@ -215,8 +218,9 @@ of the Dance reference study's Figure 2.
   `FREQNESS_AnalyticSignal.m` are required by
   `FREQNESS_NetworkEstimation_Mocap`. The helper is the toolbox's internal
   FFT-based equivalent of `hilbert.m`, avoiding that external dependency.
-- `RPparam.m` and `jrqa.m` from the included CRP subset are needed only for
-  legacy JRQA. Parameter tuning uses `mutual.m`, `false_nearest.m`, and `pss.m`.
+- Corrected parameter tuning uses `mutual.m`, `false_nearest.m`, and `pss.m`.
+  The obsolete `RPparam.m` has been removed. Toolbox temporal coordination
+  does not call the retained third-party `jrqa.m`.
 - `dl.m`, `tt.m`, and `entropy.m` from that same subset are required by
   `FREQNESS_RQA_Mocap`, used by phase-space RQA and validated JRQA. They are
   byte-identical to the versions distributed with BROADNESS.

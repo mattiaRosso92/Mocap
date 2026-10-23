@@ -50,7 +50,7 @@ end
 FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
     FREQ,target_frex,timecoord_arguments{:}, ...
     'method','jrqa','parameters',JRQA, ...
-    'implementation','validated','store_matrices',true);
+    'store_matrices',true);
 
 
 %% Circular-shift the second participant recurrence geometry
@@ -136,8 +136,8 @@ for argi = 1:2:numel(varargin)
         opts.(name) = varargin{argi+1};
     elseif ismember(name,{'method','parameters'})
         error('JRQA surrogates use the positional JRQA parameters and method jrqa.');
-    elseif ismember(name,{'implementation','store_matrices'})
-        % These are controlled by this wrapper to guarantee valid surrogates.
+    elseif strcmp(name,'store_matrices')
+        % Matrices are required for surrogate construction.
         continue
     else
         timecoord_arguments(end+1:end+2) = ...

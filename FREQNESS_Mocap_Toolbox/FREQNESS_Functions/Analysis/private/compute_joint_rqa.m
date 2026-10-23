@@ -10,7 +10,7 @@ function FREQjrqa = compute_joint_rqa( ...
 %  recurrence plot per participant in matched delay-embedding spaces and
 %  retains only simultaneous recurrence points in their Hadamard product.
 %
-%  The default validated implementation uses internally
+%  The validated implementation uses internally
 %  consistent preprocessing, embedding, distance, threshold, and Theiler
 %  settings with complete output provenance.
 %
@@ -35,18 +35,16 @@ function FREQjrqa = compute_joint_rqa( ...
 %  - 'duration'          : Proportional interval in [0 1]. Default: full.
 %  - 'component'         : Component index. Default: 1.
 %  - 'metric_levels'     : Target-frequency multipliers. Default: 1.
-%  - 'implementation'    : 'legacy' or 'validated'. Default: 'validated'.
 %  - 'srate'             : Original sampling rate. Required for filtering
 %                          or downsampling; otherwise sample units are used.
 %  - 'target_srate'      : Sampling rate after integer decimation.
 %  - 'lowpass_cutoff'    : Anti-alias low-pass cutoff in Hz.
 %  - 'filter_order'      : Butterworth order. Default: 4.
-%  - 'standardize'       : Validated implementation only. Z-score each
+%  - 'standardize'       : Z-score each
 %                          participant's retained time series independently
 %                          after filtering, decimation and duration selection,
 %                          before embedding: (x-mean(x))/std(x,0).
 %                          Default: false (retain signal units).
-%                          Legacy preprocessing remains unchanged.
 %  - 'threshold_method'  : 'radius', 'adaptive_max_radius', or 'fixed_rr'.
 %                          adaptive_max_radius calculates 10%-style
 %                          participant radii in the final embedding and
@@ -92,7 +90,7 @@ function FREQjrqa = compute_joint_rqa( ...
 %% Handle optional arguments
 
 opts = struct('duration',[],'component',1,'metric_levels',1, ...
-    'implementation','validated','srate',[],'target_srate',[], ...
+    'srate',[],'target_srate',[], ...
     'lowpass_cutoff',[],'filter_order',4,'standardize',false, ...
     'threshold_method','radius','threshold',[], ...
     'theiler_window',0,'lmin',2,'vmin',2,'store_matrices',false);
@@ -112,8 +110,6 @@ end
 validate_positive_vector(opts.metric_levels,'metric_levels')
 metric_levels = reshape(opts.metric_levels,1,[]);
 validate_duration(opts.duration)
-implementation = validatestring( ...
-    lower(char(opts.implementation)),{'legacy','validated'});
 threshold_method = validatestring( ...
     lower(char(opts.threshold_method)), ...
     {'radius','adaptive_max_radius','fixed_rr'});
@@ -141,18 +137,11 @@ else
     end
 end
 
-if strcmp(implementation,'legacy')
-    if exist('RPparam','file') ~= 2 || exist('jrqa','file') ~= 2
-        error(['RPparam.m and jrqa.m are required for the legacy ' ...
-            'implementation.']);
-    end
-else
-    required_dependencies = {'dl','tt','entropy'};
-    for dependencyi = 1:numel(required_dependencies)
-        if exist(required_dependencies{dependencyi},'file') ~= 2
-            error('%s.m is required in FREQNESS_ExternalFunctions.', ...
-                required_dependencies{dependencyi});
-        end
+required_dependencies = {'dl','tt','entropy'};
+for dependencyi = 1:numel(required_dependencies)
+    if exist(required_dependencies{dependencyi},'file') ~= 2
+        error('%s.m is required in FREQNESS_ExternalFunctions.', ...
+            required_dependencies{dependencyi});
     end
 end
 
@@ -197,56 +186,22 @@ for leveli = 1:nlevels
         'lowpass_cutoff',opts.lowpass_cutoff, ...
         'filter_order',opts.filter_order, ...
         'duration',opts.duration, ...
-        'standardize',opts.standardize && strcmp(implementation,'validated'));
+        'standardize',opts.standardize);
     if isempty(opts.srate)
         preprocessing.OriginalSamplingRate = [];
         preprocessing.TargetSamplingRate = [];
     end
 
-    if strcmp(implementation,'legacy')
-        FREQjrqa(leveli) = compute_legacy( ...
-            processed_ts,JRQA,FREQjrqa(leveli));
-    else
-        FREQjrqa(leveli) = compute_validated( ...
-            processed_ts,JRQA,threshold_method,opts,FREQjrqa(leveli));
-    end
+    FREQjrqa(leveli) = compute_validated( ...
+        processed_ts,JRQA,threshold_method,opts,FREQjrqa(leveli));
 
     FREQjrqa(leveli).SelectedFrequencies = ...
         selected_frequencies(:,leveli)';
     FREQjrqa(leveli).MetricLevel = metric_levels(leveli);
     FREQjrqa(leveli).Component = opts.component;
-    FREQjrqa(leveli).Implementation = implementation;
+    FREQjrqa(leveli).Implementation = 'validated';
     FREQjrqa(leveli).Preprocessing = preprocessing;
 end
-
-end
-
-
-%% Helper function: Legacy computation
-function output = compute_legacy(time_series,JRQA,output)
-
-ps = zeros(1,size(time_series,2));
-for subi = 1:size(time_series,2)
-    [~,~,ps(subi)] = RPparam(time_series(:,subi));
-end
-tuned_ps = max(ps);
-
-Y = jrqa(time_series(:,1),time_series(:,2), ...
-    JRQA.m,JRQA.tau,tuned_ps,[],[],[],[],'silent');
-output.RR = Y(:,1);
-output.DET = Y(:,2);
-output.L = Y(:,3);
-output.Lmax = Y(:,4);
-output.ENTR = Y(:,5);
-output.LAM = Y(:,6);
-output.TT = Y(:,7);
-output.Vmax = Y(:,8);
-output.T1 = Y(:,9);
-output.T2 = Y(:,10);
-output.Thresholds = repmat(tuned_ps,1,2);
-output.ThresholdMethod = 'legacy_max_participant_radius';
-output.EmbeddingDimension = JRQA.m;
-output.Delay = JRQA.tau;
 
 end
 

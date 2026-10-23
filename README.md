@@ -49,8 +49,8 @@ The MATLAB toolbox currently contains three levels of analysis:
    `'method','jrqa'`. Normalization is optional through `'standardize',true`.
    JRQA supports a validated route
    with explicit anti-alias filtering, delay-embedding, recurrence threshold,
-   Theiler exclusion, and complete provenance, while its former behavior is
-   retained through an explicit legacy-compatible option.
+   Theiler exclusion, and complete provenance. Historical JRQA comparisons
+   can read saved study outputs, but the obsolete computation is not available.
 
 ## Reference test case
 

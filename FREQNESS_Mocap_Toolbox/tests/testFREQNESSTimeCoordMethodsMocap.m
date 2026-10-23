@@ -76,7 +76,7 @@ JRQA = testCase.TestData.JRQA;
     'method','jrqa','parameters',JRQA,'store_matrices',true);
 explicit = FREQNESS_TimeCoord_Mocap(FREQ,[1 1], ...
     'method','jrqa','parameters',JRQA,'store_matrices',true, ...
-    'implementation','validated','standardize',false);
+    'standardize',false);
 verifyEqual(testCase,output,explicit);
 verifyEqual(testCase,output.Method,'jrqa');
 verifyEqual(testCase,output.Implementation,'validated');
@@ -134,37 +134,55 @@ verifyFailureMessage(testCase,@() FREQNESS_TimeCoord_Mocap( ...
 end
 
 
-function testPhaseSpaceStudyEntryPointIsEquivalent(testCase)
+function testPhaseSpaceMethodSelectionPreservesOptions(testCase)
 
 FREQ = testCase.TestData.FREQ;
 for standardize = [false true]
-    old_call = FREQNESS_PhaseSpaceRQA_Mocap( ...
+    default_call = FREQNESS_TimeCoord_Mocap( ...
         FREQ,1,'standardize',standardize,'store_matrices',true);
-    new_call = FREQNESS_TimeCoord_Mocap( ...
-        FREQ,1,'standardize',standardize,'store_matrices',true);
-    verifyEqual(testCase,old_call,new_call);
+    explicit_call = FREQNESS_TimeCoord_Mocap( ...
+        FREQ,1,'method','phase_space','standardize',standardize,'store_matrices',true);
+    verifyEqual(testCase,default_call,explicit_call);
+    verifyEqual(testCase,explicit_call.Standardized,standardize);
 end
 
 end
 
 
-function testJRQAStudySignatureIsEquivalent(testCase)
+function testTemporaryPhaseSpaceEntryPointIsRemoved(testCase)
+
+analysis_root = fileparts(which('FREQNESS_TimeCoord_Mocap'));
+verifyFalse(testCase,isfile(fullfile(analysis_root,'FREQNESS_PhaseSpaceRQA_Mocap.m')));
+verifyEmpty(testCase,which('FREQNESS_PhaseSpaceRQA_Mocap'));
+
+end
+
+
+function testPositionalJRQAParametersAreRejected(testCase)
 
 FREQ = testCase.TestData.FREQ;
 JRQA = testCase.TestData.JRQA;
-for standardize = [false true]
-    old_call = FREQNESS_TimeCoord_Mocap(FREQ,JRQA,[1 1], ...
-        'implementation','validated','standardize',standardize);
-    new_call = FREQNESS_TimeCoord_Mocap(FREQ,[1 1], ...
-        'method','jrqa','parameters',JRQA,'standardize',standardize);
-    verifyEqual(testCase,old_call,new_call);
+verifyFailureMessage(testCase,@() FREQNESS_TimeCoord_Mocap( ...
+    FREQ,JRQA,[1 1]),'Arguments must be given as name-value pairs.');
+verifyFailureMessage(testCase,@() FREQNESS_TimeCoord_Mocap( ...
+    FREQ,JRQA,[1 1],'implementation','validated'), ...
+    'Arguments must be given as name-value pairs.');
+
 end
-verifyFailureMessage(testCase,@() FREQNESS_TimeCoord_Mocap( ...
-    FREQ,JRQA,[1 1],'method','phase_space'), ...
-    'The former JRQA signature cannot select phase-space RQA.');
-verifyFailureMessage(testCase,@() FREQNESS_TimeCoord_Mocap( ...
-    FREQ,JRQA,[1 1],'parameters',JRQA), ...
-    'Supply JRQA either positionally or by name, not both.');
+
+
+function testImplementationSelectorIsRemovedIncludingSurrogates(testCase)
+
+FREQ = testCase.TestData.FREQ;
+JRQA = testCase.TestData.JRQA;
+for implementation = {'legacy','validated'}
+    verifyFailureMessage(testCase,@() FREQNESS_TimeCoord_Mocap(FREQ,[1 1], ...
+        'method','jrqa','parameters',JRQA,'implementation',implementation{1}), ...
+        'Unrecognized argument: implementation');
+    verifyFailureMessage(testCase,@() FREQNESS_JRQASurrogates_Mocap(FREQ,JRQA,[1 1], ...
+        'implementation',implementation{1},'n_surrogates',3), ...
+        'Unrecognized argument: implementation');
+end
 
 end
 

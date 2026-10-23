@@ -9,6 +9,7 @@ function [FREQcoord,figures] = FREQNESS_TimeCoord_Mocap( ...
 %  JRQA intersects the separate participant recurrence plots after delay
 %  embedding. The methods retain their own preprocessing and threshold rules.
 %  Raw time series are the default for phase-space and validated JRQA.
+%  JRQA uses only the corrected calculation; historical tuning is not supported.
 %
 % ------------------------------------------------------------------------
 %  INPUT ARGUMENTS:
@@ -25,8 +26,6 @@ function [FREQcoord,figures] = FREQNESS_TimeCoord_Mocap( ...
 %  - 'standardize'    : Logical flag; default false. True subtracts each
 %                       retained series' mean and divides by its sample SD.
 %                       For phase-space RQA, only valid samples contribute.
-%                       Legacy JRQA retains its historical CRP normalization
-%                       rules; this flag does not override that old route.
 %  - 'component'      : Default 1. Phase-space accepts a scalar or one index
 %                       per participant; JRQA currently accepts one scalar.
 %  - 'metric_levels'  : Positive anchor-frequency multipliers. Default 1.
@@ -55,7 +54,6 @@ function [FREQcoord,figures] = FREQNESS_TimeCoord_Mocap( ...
 %                        tau. Estimate parameters separately with
 %                        FREQNESS_JRQAParameters_Mocap; pooling across trials
 %                        or conditions is a study decision, not automatic.
-%  - 'implementation'  : 'validated' (default) or explicit 'legacy'.
 %  - 'threshold_method': 'radius' (default), 'adaptive_max_radius', 'fixed_rr'.
 %  - 'threshold'       : Radius/radii, maximum-partner radius fraction, or
 %                        target MARGINAL RR. Empty (default) uses JRQA.ps
@@ -86,14 +84,6 @@ function [FREQcoord,figures] = FREQNESS_TimeCoord_Mocap( ...
 %    FREQcoord = FREQNESS_TimeCoord_Mocap(FREQ,[f1 f2], ...
 %        'method','jrqa','parameters',JRQA);
 %
-%  TEMPORARY STUDY COMPATIBILITY:
-%  The former (FREQ,JRQA,target_frex,...) signature still selects JRQA and
-%  defaults to its legacy implementation. Explicit implementation overrides
-%  remain supported. Standardization defaults to false in all call forms;
-%  use standardize=true explicitly to reproduce previously normalized runs.
-%  New code should use the interface above. The old signature will be removed
-%  only after the study callers are migrated.
-%
 % ------------------------------------------------------------------------
 %  AUTHORS:
 % ------------------------------------------------------------------------
@@ -112,16 +102,6 @@ function [FREQcoord,figures] = FREQNESS_TimeCoord_Mocap( ...
 
 narginchk(2,Inf)
 opts = struct('method','phase_space','parameters',[]);
-legacy_call = isstruct(target_frex);
-if legacy_call
-    if isempty(varargin)
-        error('The former JRQA signature requires target_frex after JRQA.');
-    end
-    opts.method = 'jrqa';
-    opts.parameters = target_frex;
-    target_frex = varargin{1};
-    varargin = [{'implementation','legacy'} varargin(2:end)];
-end
 
 if mod(numel(varargin),2) ~= 0
     error('Arguments must be given as name-value pairs.');
@@ -134,9 +114,6 @@ for argi = 1:2:numel(varargin)
     end
     name = lower(char(varargin{argi}));
     if isfield(opts,name)
-        if legacy_call && strcmp(name,'parameters')
-            error('Supply JRQA either positionally or by name, not both.');
-        end
         opts.(name) = varargin{argi+1};
     else
         method_arguments(end+1:end+2) = varargin(argi:argi+1);
@@ -147,9 +124,6 @@ if ~(ischar(opts.method) && isrow(opts.method)) && ...
     error('method must be ''phase_space'' or ''jrqa''.');
 end
 method = validatestring(lower(char(opts.method)),{'phase_space','jrqa'});
-if legacy_call && ~strcmp(method,'jrqa')
-    error('The former JRQA signature cannot select phase-space RQA.');
-end
 
 
 %% Run the selected implementation without retuning parameters

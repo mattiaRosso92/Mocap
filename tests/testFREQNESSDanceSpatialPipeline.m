@@ -17,7 +17,7 @@ CFG.common.trial_counts = zeros(35,4);
 CFG.common.trial_counts(CFG.common.list_dyads,:) = 1;
 CFG.common.trial_indices = cell(35,4);
 CFG.block1.output_path = fullfile(folder,'core');
-CFG.block3 = struct('components',1:2,'compute_jrqa',false, ...
+CFG.block3 = struct('components',1:2,'reuse_legacy_jrqa',false, ...
     'output_path',fullfile(folder,'spatial'),'overwrite_flag',false);
 CFG.block8 = struct('output_path',fullfile(folder,'export'),'overwrite_flag',false);
 mkdir(CFG.block1.output_path); mkdir(CFG.block8.output_path);
@@ -65,10 +65,18 @@ for component = 1:2
         verifyEqual(testCase,T.FisherZ(rowi),atanh(expected),'AbsTol',1e-12);
     end
 end
+% Even with historical plotting enabled, BLOCK 3 must not replace old JRQA.
+historical_file = fullfile(CFG.block3.output_path,'Component_1', ...
+    'FREQNESS_COORDINATION_SUMMARY_Comp#1.mat');
+historical_reference = struct('RR',.1,'DET',.8);
+save(historical_file,'historical_reference');
+CFG.block3.reuse_legacy_jrqa = true;
 files = dir(fullfile(CFG.block3.output_path,'Component_*','*.mat'));
 execute_block(CFG,block3);
 after = dir(fullfile(CFG.block3.output_path,'Component_*','*.mat'));
 verifyEqual(testCase,[files.datenum],[after.datenum]);
+saved = load(historical_file,'historical_reference');
+verifyEqual(testCase,saved.historical_reference,historical_reference);
 CFG.common.trial_indices{13,1} = 99;
 rejected = false;
 try
