@@ -2,6 +2,11 @@
 
 Study-specific workspace for the orchestra application of FREQ-NESS MoCap.
 
+Setup includes the toolbox's Analysis, Visualization, and Supporting folders.
+The current script calls network estimation and visualization only; it has no
+JRQA or phase-space RQA calls to migrate. This path update does not change
+analysis settings, saved variables, output locations, or saving behavior.
+
 The pipeline uses the historical logarithmic filter widths by default and
 passes the former automatic schedule as an explicit width vector. Set
 `filter_width_calibration='physical'` for a new analysis using the toolbox's

@@ -13,7 +13,7 @@ execute_block(CFG,block6);
 profile off
 calls = profile('info');
 verifyFalse(testCase,any(contains({calls.FunctionTable.FunctionName}, ...
-    'FREQNESS_PhaseSpaceRQA_Mocap')));
+    {'FREQNESS_TimeCoord_Mocap','compute_phase_space_rqa'})));
 for component = 1:2
     files = dir(fullfile(CFG.block6.output_path,sprintf('Component_%d',component),'*.mat'));
     verifyEqual(testCase,numel(files),1); % Summary only; no trial-file duplication.

@@ -11,8 +11,8 @@
 %  3) Metric prominence of a selected bodily network
 %  4) Network-landscape and bodily-pattern visualization
 %  5) Network-landscape similarity across participants
-%  6) Phase-space temporal coordination across participants (alternative)
-%  7) JRQA temporal coordination across participants
+%  6) Temporal coordination: phase-space RQA (default method)
+%  7) Temporal coordination: optional JRQA example
 %  8) Spatial coordination across participants
 %
 %  Place each dataset in a separate folder inside FREQNESS_Data. A dataset
@@ -26,7 +26,6 @@
 %    required for phase-space RQA.
 %  - The included CRP Toolbox subset supplies mutual information, false
 %    nearest neighbours, and recurrence-line metrics for validated JRQA.
-%    RPparam.m and jrqa.m are retained only for legacy-compatible calls.
 %
 % ------------------------------------------------------------------------
 %  AUTHORS:
@@ -159,7 +158,7 @@ landscape_similarity_frequency_range = [];
 
 
 % ------------------------------------------------------------------------
-% BLOCK #6: FREQNESS_PhaseSpaceRQA_Mocap
+% BLOCK #6: FREQNESS_TimeCoord_Mocap — phase-space RQA
 % ------------------------------------------------------------------------
 
 % target_frex may be one frequency reused for all participants or one value
@@ -173,7 +172,7 @@ phaserqa_metric_levels = [0.25 0.5 1 2];
 phaserqa_component = 1;
 phaserqa_duration = [0.15 0.85];
 phaserqa_downsample = 1;
-phaserqa_standardize = true;
+phaserqa_standardize = false;
 phaserqa_threshold_method = 'max_fraction';
 phaserqa_threshold = 0.1;
 phaserqa_theiler_window = 0;
@@ -186,22 +185,21 @@ phaserqa_animation_pause = 0.01;
 
 
 % ------------------------------------------------------------------------
-% BLOCK #7: FREQNESS_TimeCoord_Mocap
+% BLOCK #7: FREQNESS_TimeCoord_Mocap — JRQA
 % ------------------------------------------------------------------------
 
 % Estimate embedding parameters with FREQNESS_JRQAParameters_Mocap before
 % fixing them across comparable datasets. Radius-threshold analyses also
-% require JRQA.ps. The legacy implementation remains available explicitly.
+% require JRQA.ps. Only the corrected JRQA implementation is available.
 JRQA = struct('m',[],'tau',[],'ps',[]);
 
 timecoord_metric_levels = [0.25 0.5 1 2];
 timecoord_component = 1;
 timecoord_duration = [0.15 0.85];
-timecoord_implementation = 'validated';
 timecoord_target_srate = srate;
 timecoord_lowpass_cutoff = [];
 timecoord_filter_order = 4;
-timecoord_standardize = true;
+timecoord_standardize = false;
 timecoord_threshold_method = 'radius';
 timecoord_threshold = [];
 timecoord_theiler_window = 0;
@@ -408,13 +406,14 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #6: FREQNESS_PhaseSpaceRQA_Mocap
+    % BLOCK #6: FREQNESS_TimeCoord_Mocap — phase-space RQA
     % =====================================================================
 
     if run_phase_rqa
 
-        FREQrqa{datai} = FREQNESS_PhaseSpaceRQA_Mocap( ...
+        FREQrqa{datai} = FREQNESS_TimeCoord_Mocap( ...
             FREQ{datai},this_target_frex, ...
+            'method','phase_space', ...
             'metric_levels',phaserqa_metric_levels, ...
             'component',phaserqa_component, ...
             'duration',phaserqa_duration, ...
@@ -435,7 +434,7 @@ for datai = 1:ndatasets
 
 
     %% ====================================================================
-    % BLOCK #7: FREQNESS_TimeCoord_Mocap
+    % BLOCK #7: FREQNESS_TimeCoord_Mocap — JRQA
     % =====================================================================
 
     if run_time_coord
@@ -443,8 +442,7 @@ for datai = 1:ndatasets
         if isempty(JRQA.m) || isempty(JRQA.tau)
             error('JRQA.m and JRQA.tau must be defined for temporal coordination.');
         end
-        if strcmpi(timecoord_implementation,'validated') && ...
-                strcmpi(timecoord_threshold_method,'radius') && ...
+        if strcmpi(timecoord_threshold_method,'radius') && ...
                 isempty(timecoord_threshold) && isempty(JRQA.ps)
             error(['Validated radius JRQA requires JRQA.ps or an explicit ' ...
                 'timecoord_threshold.']);
@@ -454,7 +452,6 @@ for datai = 1:ndatasets
             'metric_levels',timecoord_metric_levels, ...
             'component',timecoord_component, ...
             'duration',timecoord_duration, ...
-            'implementation',timecoord_implementation, ...
             'srate',srate, ...
             'target_srate',timecoord_target_srate, ...
             'lowpass_cutoff',timecoord_lowpass_cutoff, ...
@@ -466,9 +463,6 @@ for datai = 1:ndatasets
             'lmin',timecoord_lmin,'vmin',timecoord_vmin};
 
         if timecoord_n_surrogates > 0
-            if ~strcmpi(timecoord_implementation,'validated')
-                error('Circular-shift surrogates require validated JRQA.');
-            end
             [FREQjrqa{datai},JRQASurrogates{datai}] = ...
                 FREQNESS_JRQASurrogates_Mocap( ...
                 FREQ{datai},JRQA,this_target_frex, ...
@@ -478,7 +472,7 @@ for datai = 1:ndatasets
                 'random_seed',timecoord_random_seed);
         else
             FREQjrqa{datai} = FREQNESS_TimeCoord_Mocap( ...
-                FREQ{datai},JRQA,this_target_frex, ...
+                FREQ{datai},this_target_frex,'method','jrqa','parameters',JRQA, ...
                 timecoord_arguments{:});
         end
 

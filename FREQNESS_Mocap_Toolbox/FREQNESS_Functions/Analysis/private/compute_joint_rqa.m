@@ -1,4 +1,4 @@
-function FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
+function FREQjrqa = compute_joint_rqa( ...
     FREQ,JRQA,target_frex,varargin)
 
 % ========================================================================
@@ -10,8 +10,7 @@ function FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
 %  recurrence plot per participant in matched delay-embedding spaces and
 %  retains only simultaneous recurrence points in their Hadamard product.
 %
-%  Existing calls remain backward compatible through the default legacy
-%  implementation. Select 'implementation','validated' to use internally
+%  The validated implementation uses internally
 %  consistent preprocessing, embedding, distance, threshold, and Theiler
 %  settings with complete output provenance.
 %
@@ -36,18 +35,16 @@ function FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
 %  - 'duration'          : Proportional interval in [0 1]. Default: full.
 %  - 'component'         : Component index. Default: 1.
 %  - 'metric_levels'     : Target-frequency multipliers. Default: 1.
-%  - 'implementation'    : 'legacy' or 'validated'. Default: 'legacy'.
 %  - 'srate'             : Original sampling rate. Required for filtering
 %                          or downsampling; otherwise sample units are used.
 %  - 'target_srate'      : Sampling rate after integer decimation.
 %  - 'lowpass_cutoff'    : Anti-alias low-pass cutoff in Hz.
 %  - 'filter_order'      : Butterworth order. Default: 4.
-%  - 'standardize'       : Validated implementation only. Z-score each
+%  - 'standardize'       : Z-score each
 %                          participant's retained time series independently
 %                          after filtering, decimation and duration selection,
 %                          before embedding: (x-mean(x))/std(x,0).
-%                          Default: true. Set false to retain signal units.
-%                          Legacy preprocessing remains unchanged.
+%                          Default: false (retain signal units).
 %  - 'threshold_method'  : 'radius', 'adaptive_max_radius', or 'fixed_rr'.
 %                          adaptive_max_radius calculates 10%-style
 %                          participant radii in the final embedding and
@@ -93,8 +90,8 @@ function FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
 %% Handle optional arguments
 
 opts = struct('duration',[],'component',1,'metric_levels',1, ...
-    'implementation','legacy','srate',[],'target_srate',[], ...
-    'lowpass_cutoff',[],'filter_order',4,'standardize',true, ...
+    'srate',[],'target_srate',[], ...
+    'lowpass_cutoff',[],'filter_order',4,'standardize',false, ...
     'threshold_method','radius','threshold',[], ...
     'theiler_window',0,'lmin',2,'vmin',2,'store_matrices',false);
 opts = parse_name_value_pairs(opts,varargin{:});
@@ -113,8 +110,6 @@ end
 validate_positive_vector(opts.metric_levels,'metric_levels')
 metric_levels = reshape(opts.metric_levels,1,[]);
 validate_duration(opts.duration)
-implementation = validatestring( ...
-    lower(char(opts.implementation)),{'legacy','validated'});
 threshold_method = validatestring( ...
     lower(char(opts.threshold_method)), ...
     {'radius','adaptive_max_radius','fixed_rr'});
@@ -142,18 +137,11 @@ else
     end
 end
 
-if strcmp(implementation,'legacy')
-    if exist('RPparam','file') ~= 2 || exist('jrqa','file') ~= 2
-        error(['RPparam.m and jrqa.m are required for the legacy ' ...
-            'implementation.']);
-    end
-else
-    required_dependencies = {'dl','tt','entropy'};
-    for dependencyi = 1:numel(required_dependencies)
-        if exist(required_dependencies{dependencyi},'file') ~= 2
-            error('%s.m is required in FREQNESS_ExternalFunctions.', ...
-                required_dependencies{dependencyi});
-        end
+required_dependencies = {'dl','tt','entropy'};
+for dependencyi = 1:numel(required_dependencies)
+    if exist(required_dependencies{dependencyi},'file') ~= 2
+        error('%s.m is required in FREQNESS_ExternalFunctions.', ...
+            required_dependencies{dependencyi});
     end
 end
 
@@ -198,56 +186,22 @@ for leveli = 1:nlevels
         'lowpass_cutoff',opts.lowpass_cutoff, ...
         'filter_order',opts.filter_order, ...
         'duration',opts.duration, ...
-        'standardize',opts.standardize && strcmp(implementation,'validated'));
+        'standardize',opts.standardize);
     if isempty(opts.srate)
         preprocessing.OriginalSamplingRate = [];
         preprocessing.TargetSamplingRate = [];
     end
 
-    if strcmp(implementation,'legacy')
-        FREQjrqa(leveli) = compute_legacy( ...
-            processed_ts,JRQA,FREQjrqa(leveli));
-    else
-        FREQjrqa(leveli) = compute_validated( ...
-            processed_ts,JRQA,threshold_method,opts,FREQjrqa(leveli));
-    end
+    FREQjrqa(leveli) = compute_validated( ...
+        processed_ts,JRQA,threshold_method,opts,FREQjrqa(leveli));
 
     FREQjrqa(leveli).SelectedFrequencies = ...
         selected_frequencies(:,leveli)';
     FREQjrqa(leveli).MetricLevel = metric_levels(leveli);
     FREQjrqa(leveli).Component = opts.component;
-    FREQjrqa(leveli).Implementation = implementation;
+    FREQjrqa(leveli).Implementation = 'validated';
     FREQjrqa(leveli).Preprocessing = preprocessing;
 end
-
-end
-
-
-%% Helper function: Legacy computation
-function output = compute_legacy(time_series,JRQA,output)
-
-ps = zeros(1,size(time_series,2));
-for subi = 1:size(time_series,2)
-    [~,~,ps(subi)] = RPparam(time_series(:,subi));
-end
-tuned_ps = max(ps);
-
-Y = jrqa(time_series(:,1),time_series(:,2), ...
-    JRQA.m,JRQA.tau,tuned_ps,[],[],[],[],'silent');
-output.RR = Y(:,1);
-output.DET = Y(:,2);
-output.L = Y(:,3);
-output.Lmax = Y(:,4);
-output.ENTR = Y(:,5);
-output.LAM = Y(:,6);
-output.TT = Y(:,7);
-output.Vmax = Y(:,8);
-output.T1 = Y(:,9);
-output.T2 = Y(:,10);
-output.Thresholds = repmat(tuned_ps,1,2);
-output.ThresholdMethod = 'legacy_max_participant_radius';
-output.EmbeddingDimension = JRQA.m;
-output.Delay = JRQA.tau;
 
 end
 
@@ -296,13 +250,14 @@ for subi = 1:nsubs
 end
 
 joint_rp = all(participant_rp,3);
+RQA = FREQNESS_RQA_Mocap(joint_rp,opts.lmin,opts.vmin);
 output.RR = sum(joint_rp,'all')/nnz(eligible_pair_mask);
-output.DET = FREQNESS_RQA_Determinism_Mocap(joint_rp,opts.lmin);
-output.L = FREQNESS_RQA_MeanDiagonalLength_Mocap(joint_rp,opts.lmin);
-output.ENTR = FREQNESS_RQA_Entropy_Mocap(joint_rp,opts.lmin);
-output.LAM = FREQNESS_RQA_Laminarity_Mocap(joint_rp,opts.vmin);
-output.TT = FREQNESS_RQA_TrappingTime_Mocap(joint_rp,opts.vmin);
-output.Vmax = FREQNESS_RQA_MaxVerticalLine_Mocap(joint_rp,opts.vmin);
+output.DET = RQA.det;
+output.L = RQA.l;
+output.ENTR = RQA.entr;
+output.LAM = RQA.lam;
+output.TT = RQA.tt;
+output.Vmax = RQA.vmax;
 output.Lmax = maximum_diagonal_length(joint_rp,opts.lmin);
 [output.T1,output.T2] = recurrence_times(joint_rp);
 
@@ -489,7 +444,8 @@ output = struct( ...
     'EffectiveStateCount',[],'EligiblePairCount',[], ...
     'Lmin',[],'Vmin',[],'Preprocessing',[], ...
     'ParticipantRecurrencePlots',[], ...
-    'JointRecurrencePlot',[],'EligiblePairMask',[],'PhaseSpace',[]);
+    'JointRecurrencePlot',[],'EligiblePairMask',[],'PhaseSpace',[], ...
+    'Method','jrqa');
 
 end
 
@@ -507,12 +463,12 @@ if ~isnumeric(FREQ.ts) || ~isreal(FREQ.ts) || ...
 end
 if isfield(FREQ,'bad_segments') && ~isempty(FREQ.bad_segments)
     error('FREQNESS:TimeCoord:GapsUnsupported', ...
-        ['FREQNESS_TimeCoord_Mocap requires a common contiguous time grid ' ...
+        ['JRQA requires a common contiguous time grid ' ...
         'and does not support bad_segments.']);
 end
 nsubs = size(FREQ.ts,4);
 if nsubs ~= 2
-    error('FREQNESS_TimeCoord_Mocap currently requires exactly two participants.');
+    error('JRQA currently requires exactly two participants.');
 end
 valid_shared_frex = isvector(FREQ.frex) && ...
     numel(FREQ.frex) == size(FREQ.ts,3);

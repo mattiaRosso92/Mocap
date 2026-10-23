@@ -101,7 +101,7 @@ toolboxFunctions = { ...
     'FREQNESS_ComputeLegacyFilterWidths_Mocap', ...
     'FREQNESS_NetworkEstimation_Mocap', ...
     'FREQNESS_EffectDim_Mocap', ...
-    'FREQNESS_PhaseSpaceRQA_Mocap', ...
+    'FREQNESS_TimeCoord_Mocap', ...
     'FREQNESS_SpaceCoord_Mocap', ...
     'FREQNESS_LandscapeSimilarity', ...
     'FREQNESS_MetricProminence_Mocap', ...
@@ -123,6 +123,7 @@ requiredStatements = { ...
     'participant_offset = 0;', ...
     'srate_teacher = 300;', ...
     'srate_participant = 120;', ...
+    'rqa_standardize = true;', ...
     'beat_frex = 1.67*ones(1,2);', ...
     'prominence_component = 1;', ...
     'global_metric_levels = [.25 .5 1 2 3 4];', ...
@@ -140,6 +141,97 @@ requiredStatements = { ...
 for statementi = 1:numel(requiredStatements)
     verifyTrue(testCase,contains(pipelineText,requiredStatements{statementi}), ...
         sprintf('Missing configuration: %s',requiredStatements{statementi}));
+end
+
+end
+
+
+function testOrganizedToolboxPathsAndEstimatorGuard(testCase)
+
+code = testCase.TestData.pipelineText;
+path_toolbox = fullfile(fileparts(testCase.TestData.studyRoot),'FREQNESS_Mocap_Toolbox');
+original_path = path;
+cleanup = onCleanup(@() path(original_path));
+active_paths = strsplit(original_path,pathsep);
+toolbox_paths = strcmp(active_paths,path_toolbox) | ...
+    startsWith(active_paths,[path_toolbox filesep]);
+if any(toolbox_paths); rmpath(active_paths{toolbox_paths}); end
+first = strfind(code,'addpath(path_toolbox)');
+last = strfind(code,'output_paths =');
+eval(code(first:last-1));
+
+verifyEqual(testCase,which('FREQNESS_TimeCoord_Mocap'), ...
+    fullfile(path_toolbox,'FREQNESS_Functions','Analysis','FREQNESS_TimeCoord_Mocap.m'));
+verifyEqual(testCase,which('FREQNESS_Visualizer_Mocap'), ...
+    fullfile(path_toolbox,'FREQNESS_Functions','Visualization','FREQNESS_Visualizer_Mocap.m'));
+verifyEqual(testCase,which('FREQNESS_InterpolateGaps_Mocap'), ...
+    fullfile(path_toolbox,'FREQNESS_Functions','Supporting','FREQNESS_InterpolateGaps_Mocap.m'));
+
+% Execute the existing source guard without writing its QC table.
+first = strfind(code,'estimator_file =');
+last = strfind(code,'networkEstimatorContract =');
+eval(code(first:last-1));
+verifyEqual(testCase,estimator_file,which('FREQNESS_NetworkEstimation_Mocap'));
+verifyTrue(testCase,ReadyForNetworkEstimation);
+
+end
+
+
+function testTimeCoordPreservesSettingsWithGaps(testCase)
+
+code = testCase.TestData.pipelineText;
+path_toolbox = fullfile(fileparts(testCase.TestData.studyRoot),'FREQNESS_Mocap_Toolbox'); %#ok<NASGU>
+original_path = path;
+cleanup = onCleanup(@() path(original_path));
+first = strfind(code,'addpath(path_toolbox)');
+last = strfind(code,'output_paths =');
+eval(code(first:last-1));
+
+% Read only the current scientific settings, without starting the pipeline.
+last = strfind(code,'% Group figures and statistical export.');
+settings = regexp(code(1:last-1), ...
+    '(?m)^(?:srate|beat_frex|frex_vector|frex|meter|components|rqa_\w+) = [^\r\n]+','match');
+eval(strjoin(settings,newline));
+first = strfind(code,'rqa_sampling_ratio =');
+last = strfind(code,'if run_blocks(3)');
+eval(code(first:last(1)-1));
+
+% Full study duration/grid, including an interior run too short to filter.
+time = (0:33*srate-1)/srate;
+S.FREQ = struct('ts',zeros(2,numel(time),size(frex,1),2), ...
+    'frex',frex,'srate',srate, ...
+    'bad_segments',[1:5 1001:1020 1026:1030 2001:2020 3956:3960]);
+S.beat_frex = beat_frex;
+for subi = 1:2
+    for compi = components
+        for frexi = 1:size(frex,1)
+            S.FREQ.ts(compi,:,frexi,subi) = subi+compi* ...
+                sin(2*pi*frex(frexi,subi)*time+.2*subi)+.2*sin(2*pi*20*time);
+        end
+    end
+end
+first = strfind(code,'FREQ = S.FREQ; dwn =');
+last = strfind(code,'FREQrqa = FREQNESS_TimeCoord_Mocap(');
+preprocessing_code = code(first:last-1);
+call_code = regexp(code, ...
+    'FREQrqa = FREQNESS_TimeCoord_Mocap\([\s\S]*?;','match','once');
+assertTrue(testCase,contains(call_code,'''method'',''phase_space'''));
+for which_comp = components
+    eval(preprocessing_code);
+    expected = FREQNESS_TimeCoord_Mocap(FREQ,S.beat_frex, ...
+        'method','phase_space', ...
+        'metric_levels',meter,'component',which_comp,'duration',rqa_duration, ...
+        'standardize',rqa_standardize,'threshold_method',rqa_threshold_method, ...
+        'threshold',rqa_threshold,'theiler_window',rqa_theiler_window, ...
+        'lmin',rqa_lmin,'vmin',rqa_vmin,'store_matrices',rqa_store_matrices, ...
+        'figure',rqa_figure,'animate',rqa_animate,'srate',FREQ.srate);
+    eval(call_code);
+    verifyEqual(testCase,FREQrqa,expected);
+    verifyTrue(testCase,all([FREQrqa.Standardized]));
+    verifyGreaterThan(testCase,[FREQrqa.ExcludedSampleCount],zeros(1,numel(meter)));
+    verifyEqual(testCase,FREQ.srate,24);
+    verifyEqual(testCase,preprocessing_qc.LowpassCutoffHz,9.6);
+    verifyEqual(testCase,preprocessing_qc.ShortRunExcludedSampleCount,5);
 end
 
 end

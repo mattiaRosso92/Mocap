@@ -25,7 +25,7 @@ path_repo = fileparts(path_study);
 path_toolbox = fullfile(path_repo,'FREQNESS_Mocap_Toolbox');
 
 addpath(path_toolbox)
-addpath(fullfile(path_toolbox,'FREQNESS_Functions'))
+addpath(genpath(fullfile(path_toolbox,'FREQNESS_Functions')))
 addpath(fullfile(path_toolbox,'FREQNESS_ExternalFunctions'))
 
 

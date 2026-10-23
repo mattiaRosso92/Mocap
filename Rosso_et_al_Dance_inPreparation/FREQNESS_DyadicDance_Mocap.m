@@ -98,7 +98,7 @@ CFG.block3.output_path = fullfile( ...
     CFG.common.results_path,'03_Coordination');
 CFG.block3.overwrite_flag = false;
 CFG.block3.components = 1:2;
-CFG.block3.compute_jrqa = false; % Spatial always runs; historical JRQA is opt-in.
+CFG.block3.reuse_legacy_jrqa = false; % Plot saved historical JRQA only; never recompute.
 CFG.block4.output_path = fullfile(CFG.common.results_path,'04_MetricProminence');
 CFG.block4.component = 1;
 CFG.block4.metric_levels = [.25 .5 1 2];
@@ -621,7 +621,7 @@ end
 
 
 
-%% BLOCK 3 - SPATIAL COORDINATION AND OPTIONAL HISTORICAL JRQA
+%% BLOCK 3 - SPATIAL COORDINATION
 
 clearvars -except CFG
 
@@ -632,11 +632,8 @@ assert(all(components >= 1 & components <= CFG.common.ncomps & ...
     components == fix(components)), ...
     'CFG.block3.components must contain valid retained component indices.');
 
-% Choose wheteher you want to attune JRQA
-attune_flag = 0;
 
 % Restore repository-relative paths after clearing the large group arrays.
-path_home = CFG.common.data_path;
 path_repo = fileparts(CFG.common.data_path);
 path_toolbox = fullfile(path_repo,'FREQNESS_Mocap_Toolbox');
 addpath(path_toolbox)
@@ -646,9 +643,7 @@ FREQNESS_Startup_Mocap();
 ndyads = 35;
 nconds  = 4;
 ntrials = CFG.common.ntrials;
-nsubs   = 2;
 list_dyads = CFG.common.list_dyads;
-srate = 250;
 
 % Recovered and original dyads share the same retained-trial list.
 validation_flag = false;
@@ -660,21 +655,7 @@ condlabels = {'NOvis-DIFFmus','NOvis-SAMEmus', ...
 % Define metric levels of interest
 meter = [.25 .5 1 2];
 nmeters = length(meter);
-idx_frex = zeros(nsubs,nmeters);
 
-% Historical JRQA downsampling (legacy filter retained for compatibility)
-dwn = 10;
-srate = round(srate/dwn); % update sampling rate
-% Legacy low-pass Butterworth filter before downsampling (not adequate anti-aliasing).
-nyquist = round(srate/2);
-lp_order = 4;        % Filter order
-lp_cutoff_norm = .8; % Legacy cutoff: 100 Hz at the original 250 Hz sampling rate.
-[b_butt, a_butt] = butter(lp_order, lp_cutoff_norm, 'low'); % Low-pass; not adequate anti-aliasing for 25 Hz.
-%     % Visualize the filter's freqency response
-%     figure; freqz(b_butt, a_butt, 100, srate); % Frequency response
-
-% Define duration
-duration = [.15 .85];
 
 % Run each component independently so outputs can never be confused.
 for componenti = 1:numel(components)
@@ -702,103 +683,9 @@ if ~isempty(CFG.common.reuse_results_path) && isfile(legacy_spatial_file) && ...
         'Unexpected legacy spatial summary; inspect before reuse.');
 end
 
-if CFG.block3.compute_jrqa
-% Optimize JRQA parameters (if requested)
-if attune_flag ==1
-
-    % Initialize JRQA parameters
-    [tau,m,ps] = deal(nan(nsubs,ndyads,nconds,nmeters,ntrials));
-
-    % Loop over conditions
-    for condi = 1:nconds
-
-        % Select dyad and subject
-        for dyadi = list_dyads
-            disp(['Condition#' num2str(condi) ' - Dyad #' num2str(dyadi)])
-
-            % Analyse trial by trial
-            for triali = 1:CFG.common.trial_counts(dyadi,condi)
-
-                % Import GED output
-                input_file = fullfile(CFG.block1.output_path,sprintf( ...
-                    'FREQNESS_CORE_D%d_C%d_T%d.mat', ...
-                    dyadi,condi,triali));
-                if ~isfile(input_file) && ~isempty(CFG.common.reuse_core_path)
-                    input_file = fullfile(CFG.common.reuse_core_path,sprintf( ...
-                        'FREQNESS_CORE_D%d_C%d_T%d.mat',dyadi,condi,triali));
-                end
-                assert(isfile(input_file),'Missing BLOCK 1 output: %s',input_file);
-                S = load(input_file,'GED','beat_frex');
-                GED = S.GED;
-                beat_frex = S.beat_frex;
-
-                for subi = 1:nsubs
-
-                    % Loop over metric levels (hamronics of the target frequency);
-                    for metri = 1:nmeters
-
-                        % Find frequency in vector
-                        [~,idx_frex(subi,metri)] = min(abs(beat_frex(subi)*meter(metri) - GED.frex(:,subi)));
-
-                        % Assign timeseries
-                        gedTs = GED.ts(which_comp,:,idx_frex(subi,metri),subi); % assign component corresponding to the frequency of interest
-
-                        % Historical 100 Hz low-pass (not adequate anti-aliasing)
-                        gedTs = filtfilt(b_butt, a_butt, gedTs); % Zero-phase filtering
-
-                        % Downsample
-                        gedTs = gedTs(1:dwn:end);
-
-                        % Retain window of interest
-                        gedTs = gedTs( round(duration(1)*srate) : round(duration(end)*srate) );
-
-                        % Optimize embedding parameters
-                        %disp(['Optimizing embedding parameters for participant #' num2str(subi)])
-                        [tau(subi,dyadi,condi,metri,triali), m(subi,dyadi,condi,metri,triali), ps(subi,dyadi,condi,metri,triali)] = RPparam(gedTs');
-
-                    end
-
-                end
-
-            end
-
-        end
-
-    end
-
-    % Average optimal parameters (assign to input structure)
-    JRQA.tau = round(mean(tau(:),'omitnan'));
-    JRQA.m   = round(mean(m(:),'omitnan'));
-    JRQA.ps  = round(mean(ps(:),'omitnan'),1);
-
-    % Save output
-    parameter_file = fullfile(component_output_path, ...
-        ['JRQA_Parameters_Comp#' num2str(which_comp) '.mat']);
-    if ~isfile(parameter_file) || CFG.block3.overwrite_flag
-        save(parameter_file,'JRQA')
-    end
-
-else
-
-    % Import JRQA parapemeters
-    parameter_file = fullfile(component_output_path, ...
-        ['JRQA_Parameters_Comp#' num2str(which_comp) '.mat']);
-    if isfile(parameter_file)
-        load(parameter_file,'JRQA')
-    else
-        legacy_parameter_file = fullfile(path_home,'JRQA_Parameters.mat');
-        assert(isfile(legacy_parameter_file), ...
-            ['No JRQA parameters were found. Enable attune_flag or provide ' ...
-            'the legacy JRQA_Parameters.mat input.']);
-        load(legacy_parameter_file,'JRQA')
-    end
-
-end
-
-end % Optional historical JRQA parameters
 
 % Pre-allocate group-level output
-[MIRROR,RR,DET] = deal(nan(ndyads,nconds,nmeters,ntrials));
+MIRROR = nan(ndyads,nconds,nmeters,ntrials);
 
 % Run analyses
 for condi = 1:nconds
@@ -842,101 +729,12 @@ for condi = 1:nconds
             assert(all(isfinite(FREQmirror)) && all(abs(FREQmirror)<1), ...
                 'Undefined/perfect spatial correlation; inspect %s.',spatial_file);
             MIRROR(dyadi,condi,:,triali) = reshape(FREQmirror,1,1,nmeters);
-            if ~CFG.block3.compute_jrqa, continue; end
-
-            coordination_file = fullfile(component_output_path,sprintf( ...
-                'FREQNESS_COORDINATION_D%d_C%d_T%d.mat', ...
-                dyadi,condi,triali));
-            if isfile(coordination_file) && ~CFG.block3.overwrite_flag
-                S = load(coordination_file,'FREQjrqa','FREQmirror');
-                for metri = 1:nmeters
-                    MIRROR(dyadi,condi,metri,triali) = S.FREQmirror(metri);
-                    RR(dyadi,condi,metri,triali) = S.FREQjrqa(metri).RR;
-                    DET(dyadi,condi,metri,triali) = S.FREQjrqa(metri).DET;
-                end
-                continue
-            end
-
-            % Reuse the completed pre-component-folder Component 2 output.
-            % Its saved provenance is checked before it is accepted.
-            legacy_coordination_file = fullfile( ...
-                CFG.block3.output_path,sprintf( ...
-                'FREQNESS_COORDINATION_D%d_C%d_T%d.mat', ...
-                dyadi,condi,triali));
-            if which_comp == 2 && isfile(legacy_coordination_file) && ...
-                    ~CFG.block3.overwrite_flag
-                S = load(legacy_coordination_file, ...
-                    'FREQjrqa','FREQmirror','which_comp');
-                if S.which_comp == which_comp
-                    for metri = 1:nmeters
-                        MIRROR(dyadi,condi,metri,triali) = ...
-                            S.FREQmirror(metri);
-                        RR(dyadi,condi,metri,triali) = ...
-                            S.FREQjrqa(metri).RR;
-                        DET(dyadi,condi,metri,triali) = ...
-                            S.FREQjrqa(metri).DET;
-                    end
-                    continue
-                end
-            end
-
-            % Import GED output
-            input_file = fullfile(CFG.block1.output_path,sprintf( ...
-                'FREQNESS_CORE_D%d_C%d_T%d.mat', ...
-                dyadi,condi,triali));
-            if ~isfile(input_file) && ~isempty(CFG.common.reuse_core_path)
-                input_file = fullfile(CFG.common.reuse_core_path,sprintf( ...
-                    'FREQNESS_CORE_D%d_C%d_T%d.mat',dyadi,condi,triali));
-            end
-            assert(isfile(input_file),'Missing BLOCK 1 output: %s',input_file);
-            S = load(input_file,'GED','beat_frex');
-            GED = S.GED;
-            beat_frex = S.beat_frex;
-
-            % Extract and process time series
-            gedTs = squeeze(GED.ts(which_comp,:,:,:)); % [original_time x nfrex x nsubs]
-            for subi = 1:nsubs
-                for frexi = 1:size(gedTs,2)
-                    gedTs(:,frexi,subi) = filtfilt(b_butt, a_butt, gedTs(:,frexi,subi)); % Historical low-pass
-                end
-            end
-            gedTs = gedTs(1:dwn:end,:,:);  % Downsampling both subs
-            % Overwrite back into GED.ts — shrink time dimension
-            GED.ts = GED.ts(:,1:dwn:end,:,:);  % Shrink time dimension
-            for subi = 1:nsubs
-                for frexi = 1:size(gedTs,2)
-                    GED.ts(which_comp,:,frexi,subi) = gedTs(:,frexi,subi); % re-assign
-                end
-            end
-
-            % Compute temporal coordination
-            FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
-                GED,JRQA,beat_frex, ...
-                'metric_levels',meter, ...
-                'component',which_comp, ...
-                'duration',duration);
-
-            % Compute spatial coordination
-            FREQmirror = FREQNESS_SpaceCoord_Mocap( ...
-                GED,beat_frex, ...
-                'metric_levels',meter, ...
-                'component',which_comp);
-
-            % Assign to group-level variables
-            for metri = 1:nmeters
-                MIRROR(dyadi,condi,metri,triali) = FREQmirror(metri);
-                RR(dyadi,condi,metri,triali)     = FREQjrqa(metri).RR;
-                DET(dyadi,condi,metri,triali)    = FREQjrqa(metri).DET;
-            end
-
-            save(coordination_file,'FREQjrqa','FREQmirror','JRQA', ...
-                'which_comp','meter','dyadi','condi','triali','-v7.3')
 
         end
     end
 end
 
-% Spatial summaries are independent of the optional historical JRQA run.
+% Historical JRQA summaries are read-only references, never produced here.
 spatial_summary_file = fullfile(component_output_path, ...
     ['FREQNESS_SPATIAL_SUMMARY_Comp#' num2str(which_comp) '.mat']);
 if ~isfile(spatial_summary_file) || CFG.block3.overwrite_flag
@@ -949,12 +747,6 @@ else
         'Existing spatial summary differs; use a new folder or explicitly overwrite.');
 end
 
-if CFG.block3.compute_jrqa
-coordination_summary_file = fullfile(component_output_path, ...
-    ['FREQNESS_COORDINATION_SUMMARY_Comp#' num2str(which_comp) '.mat']);
-save(coordination_summary_file,'MIRROR','RR','DET','which_comp', ...
-    'meter','list_dyads','nconds','ntrials','nmeters','CFG','-v7.3')
-end
 
 end
 
@@ -1410,8 +1202,8 @@ for condi = 1:nconds
             % study variable is named GED but follows the public FREQ API.
             make_figure = PhaseRQA.figure && condi == 1 && ...
                 dyadi == list_dyads(1) && triali == 1;
-            FREQrqa = FREQNESS_PhaseSpaceRQA_Mocap( ...
-                GED,this_target_frex, ...
+            FREQrqa = FREQNESS_TimeCoord_Mocap( ...
+                GED,this_target_frex,'method','phase_space', ...
                 'metric_levels',meter, ...
                 'component',PhaseRQA.component, ...
                 'duration',duration, ...
@@ -1431,7 +1223,7 @@ for condi = 1:nconds
                 [],'all') < 1e-10, ...
                 'A requested Dance meter is absent from the core frequency grid.');
 
-            % Assign every RQA output returned by its dedicated function
+            % Assign every RQA output returned by temporal coordination
             for metri = 1:nmeters
                 RR_phase(dyadi,condi,metri,triali)   = FREQrqa(metri).RR;
                 L_phase(dyadi,condi,metri,triali)    = FREQrqa(metri).L;
@@ -1521,7 +1313,7 @@ for componenti = 1:numel(coordination_components)
         isequal(S.CFG.common.trial_indices,CFG.common.trial_indices), ...
         'Spatial group summary does not cover the configured dyads/trials.');
     coordination_results{componenti} = S;
-    if CFG.block3.compute_jrqa
+    if CFG.block3.reuse_legacy_jrqa
         S = load(fullfile(CFG.block3.output_path,['Component_' num2str(which_comp)], ...
             ['FREQNESS_COORDINATION_SUMMARY_Comp#' num2str(which_comp) '.mat']), ...
             'RR','DET','list_dyads','CFG');
@@ -1994,7 +1786,7 @@ FREQNESS_Visualizer_Mocap(GED_figure,[],Patterns_figure);
 
 coordination_fields = {'MIRROR'};
 coordination_labels = {'Spatial correlation'};
-if CFG.block3.compute_jrqa
+if CFG.block3.reuse_legacy_jrqa
     coordination_fields = [coordination_fields {'RR','DET'}];
     coordination_labels = [coordination_labels {'Recurrence rate','Determinism'}];
 end
@@ -2154,8 +1946,8 @@ for componenti = 1:numel(components)
         ['FREQNESS_COORDINATION_SUMMARY_Comp#' ...
         num2str(which_comp) '.mat']);
     assert(isfile(coordination_summary_file), ...
-        ['Missing Component %d coordination summary. Run BLOCK 3 before ' ...
-        'BLOCK 8.'],which_comp);
+        ['Missing saved historical Component %d coordination summary. ' ...
+        'Historical JRQA recomputation has been removed.'],which_comp);
 
     S = load(coordination_summary_file, ...
         'MIRROR','RR','DET','meter','list_dyads', ...

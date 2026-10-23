@@ -10,7 +10,8 @@ function [FREQjrqa,Surrogates] = FREQNESS_JRQASurrogates_Mocap( ...
 %  preserving its recurrence geometry and marginal recurrence rate while
 %  changing its alignment with the first partner.
 %
-%  Inputs follow FREQNESS_TimeCoord_Mocap. All name-value pairs other than
+%  Inputs are FREQ, the final JRQA parameter structure, and target_frex.
+%  Standardization is optional and defaults to false. Name-value pairs other than
 %  'n_surrogates', 'minimum_shift', and 'random_seed' are forwarded to its
 %  validated implementation.
 %
@@ -47,8 +48,9 @@ end
 %% Compute the observed validated recurrence plots
 
 FREQjrqa = FREQNESS_TimeCoord_Mocap( ...
-    FREQ,JRQA,target_frex,timecoord_arguments{:}, ...
-    'implementation','validated','store_matrices',true);
+    FREQ,target_frex,timecoord_arguments{:}, ...
+    'method','jrqa','parameters',JRQA, ...
+    'store_matrices',true);
 
 
 %% Circular-shift the second participant recurrence geometry
@@ -94,9 +96,9 @@ for leveli = 1:nlevels
             shifted_partner & eligible_pair_mask;
         surrogate_rr(surrogatei) = sum(surrogate_joint,'all')/ ...
             nnz(eligible_pair_mask);
-        surrogate_det(surrogatei) = ...
-            FREQNESS_RQA_Determinism_Mocap( ...
-            surrogate_joint,FREQjrqa(leveli).Lmin);
+        RQA = FREQNESS_RQA_Mocap( ...
+            surrogate_joint,FREQjrqa(leveli).Lmin,FREQjrqa(leveli).Vmin);
+        surrogate_det(surrogatei) = RQA.det;
     end
 
     Surrogates(leveli).RR = surrogate_rr;
@@ -132,8 +134,10 @@ for argi = 1:2:numel(varargin)
     name = lower(char(varargin{argi}));
     if isfield(opts,name)
         opts.(name) = varargin{argi+1};
-    elseif ismember(name,{'implementation','store_matrices'})
-        % These are controlled by this wrapper to guarantee valid surrogates.
+    elseif ismember(name,{'method','parameters'})
+        error('JRQA surrogates use the positional JRQA parameters and method jrqa.');
+    elseif strcmp(name,'store_matrices')
+        % Matrices are required for surrogate construction.
         continue
     else
         timecoord_arguments(end+1:end+2) = ...

@@ -10,7 +10,7 @@ function setupOnce(testCase)
 
 testRoot = fileparts(mfilename('fullpath'));
 toolboxRoot = fileparts(testRoot);
-addpath(fullfile(toolboxRoot,'FREQNESS_Functions'));
+addpath(genpath(fullfile(toolboxRoot,'FREQNESS_Functions')));
 testCase.TestData.toolboxRoot = toolboxRoot;
 
 end

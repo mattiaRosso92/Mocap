@@ -11,6 +11,17 @@ outputs remain separate. Corrected JRQA is run
 by `FREQNESS_DyadicDance_JRQA_Validation.m`, which consumes the completed core
 outputs without modifying them or either earlier temporal analysis.
 
+Block 6 uses `FREQNESS_TimeCoord_Mocap` with `'method','phase_space'` and no
+parameter structure. Block 3 computes spatial coordination only. Historical
+JRQA tuning and recomputation have been removed, not silently substituted with
+corrected calculations. Existing historical summaries remain read-only inputs
+for optional plots and exports. The separate corrected JRQA validation uses
+the unified interface with `'method','jrqa','parameters',JRQA` and its explicit
+normalization setting; there is no longer an `implementation` input.
+Startup resolves the toolbox's Analysis, Visualization, and Supporting
+subfolders. This interface migration does not change study settings,
+saved variable names, output locations, or cache/overwrite checks.
+
 ## Recovered-dyad Dance pipeline
 
 The main Dance script includes all 35 dyads. It preserves dyad 13's recorded
@@ -40,8 +51,11 @@ cohorts and are not additional steps in the main manuscript workflow.
 ## Spatial coordination (BLOCK 3)
 
 Spatial coordination always runs independently of temporal coordination.
-`CFG.block3.compute_jrqa=false` leaves historical JRQA opt-in; the primary
-temporal analysis remains Block 6. No reusable toolbox defaults are changed.
+`CFG.block3.reuse_legacy_jrqa=false` disables historical JRQA plots by default;
+when enabled, Block 7 only reads existing historical summaries. Likewise,
+`CFG.block8.export_jrqa` exports saved historical summaries only and stops if
+they are missing. Neither option can run old tuning or replace those summaries.
+The primary temporal analysis remains Block 6.
 Components 1 and 2 use the existing `FREQNESS_SpaceCoord_Mocap` calculation:
 Pearson correlations between partners' absolute spatial patterns at matching
 beat-relative frequencies. The legacy 33-dyad spatial values are reused

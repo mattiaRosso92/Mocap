@@ -15,6 +15,10 @@ FREQNESS_Mocap_Toolbox/
   FREQNESS_Startup_Mocap.m     Toolbox initialization and dataset loading
   FREQNESS_MainPipeline_Mocap.m General block-based MATLAB workflow
   FREQNESS_Functions/          Reusable MATLAB toolbox functions
+    Analysis/                 Network and coordination analyses
+      private/                Internal temporal-coordination implementations
+    Visualization/            Visualizer only
+    Supporting/               Signal-processing and analysis helpers
   FREQNESS_ExampleScripts/     Dataset-independent usage examples
   FREQNESS_Data/               Small example or reference data only
   FREQNESS_ExternalFunctions/  Documented third-party MATLAB dependencies
@@ -39,13 +43,14 @@ The MATLAB toolbox currently contains three levels of analysis:
 2. `FREQNESS_EffectDim_Mocap` and `FREQNESS_Visualizer_Mocap` provide
    second-order characterization of the effective dimensionality, estimated
    network landscape, and bodily activation patterns.
-3. `FREQNESS_PhaseSpaceRQA_Mocap`, `FREQNESS_TimeCoord_Mocap`, and
-   `FREQNESS_SpaceCoord_Mocap` provide third-order temporal and spatial
-   coordination analyses across multiple participants. Phase-space RQA is
-   the embedding-free temporal alternative. JRQA supports a validated route
+3. `FREQNESS_TimeCoord_Mocap` and `FREQNESS_SpaceCoord_Mocap` provide
+   third-order temporal and spatial coordination analyses. TimeCoord defaults
+   to phase-space RQA on non-standardized time series; JRQA is selected with
+   `'method','jrqa'`. Normalization is optional through `'standardize',true`.
+   JRQA supports a validated route
    with explicit anti-alias filtering, delay-embedding, recurrence threshold,
-   Theiler exclusion, and complete provenance, while its former behavior is
-   retained through an explicit legacy-compatible option.
+   Theiler exclusion, and complete provenance. Historical JRQA comparisons
+   can read saved study outputs, but the obsolete computation is not available.
 
 ## Reference test case
 
