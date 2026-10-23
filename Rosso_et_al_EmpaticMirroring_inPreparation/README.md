@@ -23,6 +23,14 @@ numbered blocks run in order and compatible outputs are reused. Set the
 environment variable `EMPATIC_MIRRORING_OVERWRITE=1` only for a deliberate
 full rebuild.
 
+Setup includes the toolbox's Analysis, Visualization, and Supporting folders.
+Block 3A uses `FREQNESS_TimeCoord_Mocap` with `'method','phase_space'`; no
+`parameters` structure is needed. The study retains explicit normalization
+(`rqa_standardize=true`), gap exclusion, 9.6 Hz filtering before decimation
+from 120 to 24 Hz, and the 10% maximum-distance threshold. This interface
+migration leaves output names, metadata, cache checks, and statistical exports
+unchanged.
+
 `filter_width_calibration='legacy'` is the study default so reruns preserve the
 historical bin-count-dependent logarithmic schedule. It passes the resulting
 31-by-2 width matrix explicitly to the toolbox. Set the calibration to
