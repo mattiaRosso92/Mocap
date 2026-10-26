@@ -10,7 +10,8 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 % ========================================================================
 %
 %  This script takes a multivariate dataset (markers × time matrix) 
-%  and produces a frequency-resolved brain network landscape.
+%  and produces a frequency-resolved bodily-network landscape using GED
+%  (narrowband versus broadband covariance) or narrowband covariance PCA.
 %
 %  The analysis scales to dyads and larger groups. To do so, concatenate
 %  the participants of the same dyads and groups along the 3rd dimension of
@@ -39,7 +40,19 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 %
 %  The following parameters can be specified using name-value pairs:
 %
+%  - 'method'          : 'ged' (default) or 'pca'. PCA decomposes the
+%                        narrowband covariance without a broadband reference.
+%
+%  - 'kinematics'      : 'position' (default) leaves input unchanged.
+%                        'velocity' differentiates the supplied POSITIONS
+%                        as diff(data,1,2)*srate before filtering, without
+%                        extra smoothing. N positions yield N-1 velocities
+%                        at interval midpoints. Gap reconstruction precedes
+%                        differentiation; differences touching excluded
+%                        positions are excluded from covariance estimation.
+%
 %  - 'duration'        : Duration of the recording to analyze (seconds).
+%                        Refers to input positions, before differentiation.
 %                        Default: full data duration.
 %
 %  - 'fwidth'          : Full-width at half-maximum (FWHM) of the frequency
@@ -55,14 +68,15 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 %                        range; 'linear' uses constant Q = 5. This option is
 %                        used only when 'fwidth' is empty.
 %
-%  - 'regularisation'  : Shrinkage factor for covariance matrix regularization.
-%                        Default: 0.01.
+%  - 'regularisation'  : GED broadband covariance shrinkage. Default: 0.01.
+%                        Not used by PCA. Both methods retain the existing
+%                        1e-6 diagonal addition to narrowband covariance.
 %
 %  - 'ncomps'          : Number of components to retain per frequency.
 %                        Default: 30.
 %
 %  - 'bad_segments'    : Vector of sample indices (e.g., 1-based timepoints)
-%                        to be excluded from the analysis.
+%                        in the INPUT positions to exclude from analysis.
 %                        These will be removed from covariance computations.
 %
 %  - 'interpolate_gaps': Detect and reconstruct NaN gaps before filtering.
@@ -84,7 +98,9 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 %      - FREQ.evals : Complete normalized eigenspectrum
 %                    [nMarkerCoordinates x nFrex x nParticipants]. This
 %                    always contains all eigenvalues, independently of
-%                    ncomps.
+%                    ncomps. Each spectrum sums to 100: GED gives relative
+%                    eigenvalue contrasts; PCA gives variance proportions
+%                    of the regularized narrowband covariance.
 %      - FREQ.evecs : Retained eigenvectors
 %                    [nMarkerCoordinates x ncomps x nFrex x nParticipants].
 %      - FREQ.pats  : Retained spatial activation patterns, with the same
@@ -98,7 +114,15 @@ function [FREQ] = FREQNESS_NetworkEstimation_Mocap(data, frex, srate, varargin)
 %      - FREQ.bad_segments : Shared excluded sample indices.
 %      - FREQ.bad_segments_by_participant : Participant-specific indices.
 %      - FREQ.gap_info : Gap-detection and reconstruction provenance.
-%                        Additional fields support second-order functions.
+%                        Masks/indices refer to INPUT positions; for velocity
+%                        this is labelled by gap_info.sample_domain. The
+%                        FREQ.bad_segments fields index OUTPUT samples.
+%      - FREQ.method, FREQ.kinematics : Selected analysis options.
+%      - FREQ.input_n_samples : Analyzed input sample count, before conversion.
+%      - FREQ.sample_offset : Output timestamp offset from the first input
+%                        sample, in seconds (0 or 0.5/srate for velocity).
+%                        Output timestamps: sample_offset+(0:nTime-1)/srate.
+%                        FREQ.duration remains nTime/srate.
 %
 % ------------------------------------------------------------------------
 %  AUTHORS:
@@ -150,7 +174,8 @@ end
 %% Handle Optional Arguments
 
 % Define default values
-opts = struct('duration', [], 'fwidth', [], 'filter', 'logarithmic', ...
+opts = struct('method','ged','kinematics','position', ...
+    'duration', [], 'fwidth', [], 'filter', 'logarithmic', ...
     'regularisation', 0.01, 'ncomps', 30, 'bad_segments',[], ...
     'interpolate_gaps',true,'maximum_interpolated_gap',0.05, ...
     'maximum_reconstructed_gap',[]);
@@ -164,6 +189,8 @@ if isempty(opts.duration)
 end
 
 % Assign values
+method         = opts.method;
+kinematics     = opts.kinematics;
 duration       = opts.duration;
 fwidth         = opts.fwidth;
 filter         = opts.filter;
@@ -173,6 +200,18 @@ idx2remove     = opts.bad_segments; % in the current version, these apply to all
 interpolate_gaps = opts.interpolate_gaps;
 
 % Validate optional inputs
+if ~(ischar(method) && isrow(method) || isstring(method) && isscalar(method)) || ...
+        ~any(strcmpi(method,{'ged','pca'}))
+    error('method must be either ''ged'' or ''pca''.');
+end
+if ~(ischar(kinematics) && isrow(kinematics) || ...
+        isstring(kinematics) && isscalar(kinematics)) || ...
+        ~any(strcmpi(kinematics,{'position','velocity'}))
+    error('kinematics must be either ''position'' or ''velocity''.');
+end
+method = lower(char(method));
+kinematics = lower(char(kinematics));
+
 if ~isempty(duration) && (~isnumeric(duration) || ~isreal(duration) || ...
         ~isscalar(duration) || ~isfinite(duration) || duration <= 0)
     error('duration must be one positive finite scalar expressed in seconds.');
@@ -219,6 +258,9 @@ end
 if pnts2keep < 2
     error('The requested duration must contain at least two samples.');
 end
+if strcmp(kinematics,'velocity') && pnts2keep < 3
+    error('Velocity estimation requires at least three input position samples.');
+end
 
 if ~isempty(idx2remove) && (~isnumeric(idx2remove) || ...
         ~isreal(idx2remove) || ~isvector(idx2remove) || ...
@@ -258,6 +300,25 @@ gap_info.affected_timepoint_count = numel(idx2remove);
 for subi = 1:nsubs
     gap_info.bad_segments_by_participant{subi} = unique( ...
         [gap_info.bad_segments_by_participant{subi} supplied_bad_segments]);
+end
+
+% Keep input-position QC intact; remap exclusions to the output time axis.
+input_n_samples = pnts2keep;
+sample_offset = 0;
+bad_segments_by_participant = gap_info.bad_segments_by_participant;
+if strcmp(kinematics,'velocity')
+    analysis_data = diff(analysis_data,1,2)*srate;
+    pnts2keep = pnts2keep-1;
+    sample_offset = 0.5/srate;
+    idx2remove = unique([idx2remove idx2remove-1]);
+    idx2remove = idx2remove(idx2remove>=1 & idx2remove<=pnts2keep);
+    for subi = 1:nsubs
+        this_bad = bad_segments_by_participant{subi};
+        this_bad = unique([this_bad this_bad-1]);
+        bad_segments_by_participant{subi} = ...
+            this_bad(this_bad>=1 & this_bad<=pnts2keep);
+    end
+    gap_info.sample_domain = 'input_position';
 end
 
 % Define good indexes to keep for computing the covariance matrices
@@ -307,14 +368,14 @@ if ~isnumeric(fwidth_all) || ~isreal(fwidth_all) || ...
     error('fwidth must contain positive finite values.');
 end
 
-%% Generalized eigendecomposition (GED)
+%% Frequency-resolved decomposition (GED or PCA)
 
 fprintf('\nFREQNESS Network Estimation: estimating frequency-resolved networks for %d participants.\n', nsubs);
 
 % Initialize output structure
 FREQ = [];
 
-% Initialize GED outputs
+% Initialize network outputs (complete spectrum, retained components)
 GEDevals = zeros(size(data,1), nfrex, nsubs);
 [GEDevecs, GEDpats] = deal(zeros(size(data,1), ncomps, nfrex, nsubs));
 GEDts = zeros(ncomps, pnts2keep, nfrex, nsubs);
@@ -333,13 +394,15 @@ for subi = 1:nsubs
             '(' num2str(pct_removed) '% of the input data).']);
     end
 
-    % Compute and regularise the broadband covariance matrix once
-    covR = cov(broadData(:,idx2cov)');
-    evalsR = eig(covR);
-    covR = (1-regularisation)*covR + ...
-        regularisation * mean(evalsR) * eye(size(covR));
+    % Only GED needs a regularised broadband reference covariance.
+    if strcmp(method,'ged')
+        covR = cov(broadData(:,idx2cov)');
+        evalsR = eig(covR);
+        covR = (1-regularisation)*covR + ...
+            regularisation * mean(evalsR) * eye(size(covR));
+    end
 
-    % Perform frequency-resolved network separation via GED
+    % Perform frequency-resolved network separation
     for frexi = 1:nfrex % loop over input frequencies
         disp(['Estimating network at ' ...
             num2str(frex_by_participant(frexi,subi)) ' Hz'])
@@ -355,13 +418,20 @@ for subi = 1:nsubs
         covS = covS  + 1e-6*eye(size(covS)); % regularise the S covariance matrix by adding a small perturbation/noise
 
         % Eigendecomposition
-        [evecs,evals] = eig(covS ,covR);
+        if strcmp(method,'ged')
+            [evecs,evals] = eig(covS ,covR);
+        else
+            [evecs,evals] = eig(covS);
+        end
         [evals,sidx]  = sort( diag(evals),'descend' ); % the first output returns sorted evals extracted from diagonal
         evecs = evecs(:,sidx);          % sort eigenvectors
         if ~isfinite(sum(evals)) || abs(sum(evals)) < realmin
-            error('Generalized eigenvalues cannot be normalized because their sum is zero or non-finite.');
+            if strcmp(method,'ged')
+                error('Generalized eigenvalues cannot be normalized because their sum is zero or non-finite.');
+            end
+            error('PCA eigenvalues cannot be normalized because their sum is zero or non-finite.');
         end
-        evals = evals.*100./sum(evals); % normalize eigenvalues to percent variance explained
+        evals = evals.*100./sum(evals); % relative eigenvalue contribution (%)
         % Assign temporary variables to output
         GEDevecs(:,:,frexi,subi) = evecs(:,1:ncomps);
         GEDevals(:,frexi,subi) = evals;
@@ -406,9 +476,13 @@ FREQ.srate = srate;                      % sampling rate for secondary functions
 FREQ.duration = pnts2keep/srate;        % analyzed duration in seconds
 FREQ.bad_segments = idx2remove;         % excluded sample indices
 FREQ.bad_segments_by_participant = ...
-    gap_info.bad_segments_by_participant; % participant-specific excluded samples
+    bad_segments_by_participant;       % output-sample exclusions per participant
 FREQ.gap_info = gap_info;               % gap reconstruction and QC provenance
-FREQ.regularisation = regularisation;   % covariance shrinkage factor
+FREQ.regularisation = regularisation;   % requested broadband shrinkage (GED only)
+FREQ.method = method;
+FREQ.kinematics = kinematics;
+FREQ.input_n_samples = input_n_samples;
+FREQ.sample_offset = sample_offset;
 
 
 end

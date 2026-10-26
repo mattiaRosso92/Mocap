@@ -4,7 +4,7 @@ function CONTROL = DyadicDance_ControlEstimation(data,frex,srate,fwidth,settings
 % Outputs: all 66 eigenvalues x frequencies x partners x control; axis-only
 % patterns retain four components. No component time series are constructed.
 % GED uses the toolbox covariances/shrinkage; PCA uses eig(covS), exactly as
-% in the supplied DyadicDance_NetworkEstimationPCA reference. Eigenvalues are
+% in FREQNESS_NetworkEstimation_Mocap with method='pca'. Eigenvalues are
 % normalized separately within each participant, frequency and control.
 % Authors: Mattia Rosso, Felix Bigand, Leonardo Bonetti
 

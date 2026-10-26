@@ -458,6 +458,153 @@ verifyEqual(testCase,FREQ.regularisation,regularisation);
 end
 
 
+function testExplicitDefaultsAndMetadata(testCase)
+
+rng(107);
+data = randn(6,480,3);
+args = {[1 2],120,'fwidth',[0.2 0.3],'ncomps',2};
+implicit = FREQNESS_NetworkEstimation_Mocap(data,args{:});
+explicit = FREQNESS_NetworkEstimation_Mocap(data,args{:}, ...
+    'method',"GED",'kinematics',"POSITION");
+verifyEqual(testCase,implicit,explicit);
+verifyEqual(testCase,implicit.method,'ged');
+verifyEqual(testCase,implicit.kinematics,'position');
+verifyEqual(testCase,implicit.input_n_samples,480);
+verifyEqual(testCase,implicit.sample_offset,0);
+
+end
+
+
+function testPCAMatchesNarrowbandCovariance(testCase)
+
+rng(109);
+srate = 120;
+data = randn(9,480,3);
+frex = [1 1.5 1.8; 2 2.5 3];
+fwidth = [0.2 0.25 0.3; 0.4 0.45 0.5];
+bad_segments = 50:70;
+idx_good = setdiff(1:480,bad_segments);
+FREQ = FREQNESS_NetworkEstimation_Mocap(data,frex,srate, ...
+    'method','pca','fwidth',fwidth,'ncomps',2,'bad_segments',bad_segments);
+verifyEqual(testCase,FREQ.method,'pca');
+verifySize(testCase,FREQ.evals,[9 2 3]);
+verifySize(testCase,FREQ.ts,[2 480 2 3]);
+verifyEqual(testCase,sum(FREQ.evals,1),100*ones(1,2,3),'AbsTol',1e-12);
+
+for subi = 1:3
+    for frexi = 1:2
+        narrow_data = filterFGx(data(:,:,subi),srate, ...
+            frex(frexi,subi),fwidth(frexi,subi),0);
+        covS = cov(narrow_data(:,idx_good)') + 1e-6*eye(9);
+        expected_evals = sort(eig(covS),'descend');
+        expected_evals = expected_evals*100/sum(expected_evals);
+        verifyEqual(testCase,FREQ.evals(:,frexi,subi), ...
+            expected_evals,'AbsTol',1e-10);
+        evecs = FREQ.evecs(:,:,frexi,subi);
+        verifyEqual(testCase,evecs'*evecs,eye(2),'AbsTol',1e-12);
+        verifyEqual(testCase,FREQ.ts(:,:,frexi,subi), ...
+            evecs'*data(:,:,subi),'AbsTol',1e-12);
+        for compi = 1:2
+            expected_pattern = covS*evecs(:,compi);
+            [~,idx_max] = max(abs(expected_pattern));
+            expected_pattern = expected_pattern*sign(expected_pattern(idx_max));
+            verifyEqual(testCase,FREQ.pats(:,compi,frexi,subi), ...
+                expected_pattern,'AbsTol',1e-12);
+        end
+    end
+end
+
+end
+
+
+function testPCASpectrumIndependentOfRetainedComponentsAndShrinkage(testCase)
+
+rng(113);
+data = randn(6,480);
+args = {[1 2],120,'method','pca','fwidth',[0.2 0.3]};
+FREQ = FREQNESS_NetworkEstimation_Mocap(data,args{:},'ncomps',1);
+full = FREQNESS_NetworkEstimation_Mocap(data,args{:}, ...
+    'ncomps',6,'regularisation',0.5);
+verifyEqual(testCase,FREQ.evals,full.evals);
+verifyEqual(testCase,FREQ.evecs,full.evecs(:,1,:));
+verifyEqual(testCase,FREQ.pats,full.pats(:,1,:));
+verifyEqual(testCase,FREQ.ts,full.ts(1,:,:));
+[~,ED] = FREQNESS_EffectDim_Mocap(FREQ,'figure',false);
+[~,ED_full] = FREQNESS_EffectDim_Mocap(full,'figure',false);
+verifyEqual(testCase,ED,ED_full);
+verifyEqual(testCase,size(FREQ.evecs),[6 1 2]);
+verifyEqual(testCase,size(FREQ.ts),[1 480 2]);
+
+end
+
+
+function testVelocityMatchesExplicitDifferentiationAndGapMasks(testCase)
+
+rng(127);
+srate = 120;
+data = randn(6,480,2);
+data(1:3,101:103,1) = NaN;
+data(4:6,251:254,2) = NaN;
+supplied_bad = [1 50 360];
+warning_state = warning('off','FREQNESS:GapInterpolation:MissingDataReconstructed');
+cleanup = onCleanup(@() warning(warning_state));
+[positions,detected_bad] = FREQNESS_InterpolateGaps_Mocap(data(:,1:360,:),srate);
+bad = unique([detected_bad supplied_bad]);
+bad = unique([bad bad-1]);
+bad = bad(bad>=1 & bad<360);
+methods = {'ged','pca'};
+for methodi = 1:2
+    args = {[1 2],srate,'method',methods{methodi}, ...
+        'ncomps',2,'fwidth',[0.2 0.3]};
+    FREQ = FREQNESS_NetworkEstimation_Mocap(data,args{:}, ...
+        'kinematics','velocity','duration',3,'bad_segments',supplied_bad);
+    manual = FREQNESS_NetworkEstimation_Mocap(diff(positions,1,2)*srate, ...
+        args{:},'interpolate_gaps',false,'bad_segments',bad);
+    fields = {'evals','evecs','pats','ts','frex','fwhm'};
+    for fieldi = 1:numel(fields)
+        verifyEqual(testCase,FREQ.(fields{fieldi}),manual.(fields{fieldi}));
+    end
+    verifyEqual(testCase,FREQ.bad_segments,bad);
+    verifyEqual(testCase,FREQ.bad_segments_by_participant{1},[1 49 50 100:103 359]);
+    verifyEqual(testCase,FREQ.bad_segments_by_participant{2},[1 49 50 250:254 359]);
+    verifyEqual(testCase,FREQ.gap_info.detected_bad_segments,[101:103 251:254]);
+    verifyEqual(testCase,FREQ.gap_info.sample_domain,'input_position');
+    verifyEqual(testCase,FREQ.input_n_samples,360);
+    verifyEqual(testCase,FREQ.sample_offset,0.5/srate);
+    verifyEqual(testCase,FREQ.kinematics,'velocity');
+    verifyEqual(testCase,FREQ.duration,359/srate);
+    verifySize(testCase,FREQ.ts,[2 359 2 2]);
+end
+
+end
+
+
+function testMethodAndKinematicsValidation(testCase)
+
+data = randn(6,240);
+args = {2,120,'fwidth',0.3,'ncomps',2};
+invalid_methods = {'svd',[],1,{'ged'},["ged" "pca"]};
+for valuei = 1:numel(invalid_methods)
+    verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+        data,args{:},'method',invalid_methods{valuei}), ...
+        'method must be either ''ged'' or ''pca''.');
+end
+invalid_kinematics = {'acceleration',[],1,{'position'},["position" "velocity"]};
+for valuei = 1:numel(invalid_kinematics)
+    verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+        data,args{:},'kinematics',invalid_kinematics{valuei}), ...
+        'kinematics must be either ''position'' or ''velocity''.');
+end
+verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+    data,args{:},'kinematics','velocity','duration',2/120), ...
+    'Velocity estimation requires at least three input position samples.');
+verifyFailureMessage(testCase,@() FREQNESS_NetworkEstimation_Mocap( ...
+    data,args{:},'kinematics','velocity','bad_segments',2:239), ...
+    'Fewer than two samples remain for covariance estimation.');
+
+end
+
+
 function outputData = replaceDataValue(inputData,replacementValue)
 
 outputData = inputData;

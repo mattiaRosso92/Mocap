@@ -20,6 +20,9 @@ function figures = FREQNESS_Visualizer_Mocap(FREQ,Landscape,Patterns,varargin)
 %  - FREQ.pats  : spatial activation patterns
 %                [nChannels x nComponents x nFrex x (nParticipants)]
 %  - FREQ.ts    : component time series, required only for animation
+%  - FREQ.method : optional GED/PCA provenance for landscape labels.
+%  - FREQ.kinematics : velocity outputs support static plots, not positional
+%                     animation (no implicit integration is performed).
 %  - FREQ.frex  : analyzed frequencies
 %
 %  - Landscape.frex   : frequencies to visualize
@@ -160,6 +163,14 @@ fprintf('\nFREQNESS Visualizer: visualizing %d participants.\n', ...
 %% Output #1: Network landscape
 
 colors = component_colors(landscape_ncomps);
+method_label = 'FREQ';
+landscape_ylabel = 'Relative eigenvalue contribution (%)';
+if isfield(FREQ,'method') && strcmpi(FREQ.method,'pca')
+    method_label = 'PCA';
+    landscape_ylabel = 'Narrowband variance (%)';
+elseif isfield(FREQ,'method') && strcmpi(FREQ.method,'ged')
+    method_label = 'GED';
+end
 
 if plot_all || nsubs_landscape == 1
     for subi = 1:nsubs_landscape
@@ -182,7 +193,7 @@ if plot_all || nsubs_landscape == 1
         end
 
         fig = plot_network_landscape(landscape_frex_actual,this_evals, ...
-            this_sem,colors,landscape_xlabel,this_title);
+            this_sem,colors,landscape_xlabel,this_title,method_label,landscape_ylabel);
         figures.landscape(end+1) = fig;
     end
 end
@@ -193,7 +204,7 @@ if nsubs_landscape > 1
     sem_evals = std(all_evals,0,3,'omitnan')/sqrt(nsubs_landscape);
     fig = plot_network_landscape(landscape_frex_actual,avg_evals, ...
         sem_evals,colors,landscape_xlabel, ...
-        [landscape_title ' - Grand average']);
+        [landscape_title ' - Grand average'],method_label,landscape_ylabel);
     figures.landscape(end+1) = fig;
 end
 
@@ -363,6 +374,11 @@ if ~islogical(animate_flag) || ~isscalar(animate_flag)
 end
 
 if animate_flag
+    if isfield(FREQ,'kinematics') && strcmpi(FREQ.kinematics,'velocity')
+        error('FREQNESS:Visualizer:VelocityAnimation', ...
+            ['Velocity-derived components cannot be animated as positions. ' ...
+            'Use Patterns.animate=false for static visualization.']);
+    end
     if numel(idx_patterns) > 1
         error(['The animation supports one frequency at a time. Disable ' ...
             'animation or provide one frequency in Patterns.frex.']);
@@ -392,7 +408,8 @@ end
 
 
 %% Helper function: Plot a network landscape
-function fig = plot_network_landscape(frex,evals,sem,colors,xlabel_text,title_text)
+function fig = plot_network_landscape(frex,evals,sem,colors,xlabel_text,title_text, ...
+    method_label,ylabel_text)
 
 ncomps = size(evals,1);
 npoints = 200;
@@ -433,7 +450,7 @@ for compi = 1:ncomps
     end
 
     line_handles(compi) = plot(ax,x_plot,y,'Color',colors(compi,:), ...
-        'LineWidth',2.5,'DisplayName',sprintf('GED #%d',compi));
+        'LineWidth',2.5,'DisplayName',sprintf('%s #%d',method_label,compi));
 end
 
 set_log2_frequency_axis(ax,x_uniform)
@@ -442,7 +459,7 @@ if upper_limit <= 0 || ~isfinite(upper_limit)
 end
 ylim(ax,[0 min(100,max(10,ceil(1.1*upper_limit/10)*10))])
 xlabel(ax,xlabel_text,'FontSize',14,'FontWeight','bold');
-ylabel(ax,'Explained variance (%)','FontSize',14,'FontWeight','bold');
+ylabel(ax,ylabel_text,'FontSize',14,'FontWeight','bold');
 title(ax,title_text,'FontSize',16,'FontWeight','bold');
 legend(ax,line_handles,'Location','northeast','FontSize',11);
 format_figure_axes(ax)

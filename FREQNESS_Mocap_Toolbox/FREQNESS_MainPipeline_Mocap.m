@@ -77,6 +77,8 @@ frex  = 0.1:0.1:10;
 srate = 250;
 
 network_duration       = [];
+network_method         = 'ged'; % 'ged' or narrowband covariance 'pca'
+network_kinematics     = 'position'; % 'velocity' differentiates input positions
 % [] computes physical widths from the numerical frequency range:
 % logarithmic uses Q = 7 to 3.5; linear uses constant Q = 5.
 network_fwidth         = [];
@@ -136,7 +138,7 @@ patterns_frex    = 1;
 patterns_comp    = 1;
 patterns_start   = 0.25;
 patterns_plot_matrix = true;
-patterns_animate = false;
+patterns_animate = false; % positional animation requires network_kinematics='position'
 patterns_animation_duration = 10;
 patterns_frequency_unit = 'Hz';
 
@@ -308,6 +310,7 @@ for datai = 1:ndatasets
 
     FREQ{datai} = FREQNESS_NetworkEstimation_Mocap( ...
         this_data,this_frex,srate, ...
+        'method',network_method,'kinematics',network_kinematics, ...
         'duration',network_duration, ...
         'fwidth',network_fwidth, ...
         'filter',network_filter, ...

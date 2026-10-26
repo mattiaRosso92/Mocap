@@ -37,10 +37,10 @@ pipeline. No 33-versus-35 comparison or JRQA analysis belongs here.
 
 ## Study-only control implementation
 
-- `DyadicDance_NetworkEstimationPCA.m` is the supplied PCA reference, renamed
-  to distinguish study code from the toolbox. It now accepts partner-specific
-  width matrices and retains all eigenvalues for ED. Its narrowband PCA
-  calculation is unchanged. It is **not** a new public toolbox function.
+- PCA and optional velocity estimation are now available through the public
+  `FREQNESS_NetworkEstimation_Mocap`, using `'method','pca'` and
+  `'kinematics','velocity'`. The former study-only PCA function is retired.
+  Explicit study filter widths preserve the supplementary calculations.
 - `DyadicDance_ControlEstimation.m` computes only eigenvalues and axis patterns.
   GED and PCA share the same covariance. For gap-free inputs, Parseval's
   identity yields the same centered covariance directly from the filtered
@@ -48,9 +48,11 @@ pipeline. No 33-versus-35 comparison or JRQA analysis belongs here.
   Gapped trials use time-domain covariance and the toolbox interpolation
   policy. Axis zeroing precedes gap detection. Velocity is the first
   difference times 250, excluding differences adjacent to reconstructed samples.
-- `DyadicDance_ValidateControls.m` compares these controls against the public
-  GED and supplied PCA references for all five widths, participant-specific
-  widths, zeroed axes, gaps and velocity; it also checks complete-spectrum ED.
+- `DyadicDance_ValidateControls.m` compares the compact calculations against
+  the public estimator's GED and PCA options for all five widths,
+  participant-specific widths and gaps, plus axis-only GED and both velocity
+  methods; it also checks complete-spectrum ED. The compact implementation
+  remains study-only to avoid retaining unused time series for 15 variants.
 
 ## Run and reproduce
 
