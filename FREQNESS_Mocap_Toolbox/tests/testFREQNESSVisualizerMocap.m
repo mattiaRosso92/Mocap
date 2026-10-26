@@ -46,6 +46,54 @@ verifyWarning(testCase,@() FREQNESS_Visualizer_Mocap( ...
 end
 
 
+function testMethodAwareLandscapeLabels(testCase)
+
+original_visibility = get(groot,'DefaultFigureVisible');
+set(groot,'DefaultFigureVisible','off');
+cleanup = onCleanup(@() restoreFigures(original_visibility));
+FREQ = struct('evals',[60 50 40; 40 50 60],'frex',[1 2 4]);
+Landscape = struct('frex',[1 2 4],'ncomps',2);
+methods = {'','ged','pca'};
+labels = {'FREQ','GED','PCA'};
+for methodi = 1:3
+    if methodi>1, FREQ.method = methods{methodi}; end
+    figures = FREQNESS_Visualizer_Mocap(FREQ,Landscape);
+    ax = findobj(figures.landscape,'Type','axes');
+    if methodi==3
+        verifyEqual(testCase,ax.YLabel.String,'Narrowband variance (%)');
+    else
+        verifyEqual(testCase,ax.YLabel.String,'Relative eigenvalue contribution (%)');
+    end
+    curve = findobj(ax,'Type','line','DisplayName',[labels{methodi} ' #1']);
+    assertNumElements(testCase,curve,1);
+    verifyEqual(testCase,curve.YData([1 end]),[60 40],'AbsTol',1e-12);
+end
+
+end
+
+
+function testVelocityStaticPatternsButNoPositionalAnimation(testCase)
+
+original_visibility = get(groot,'DefaultFigureVisible');
+set(groot,'DefaultFigureVisible','off');
+cleanup = onCleanup(@() restoreFigures(original_visibility));
+rng(151);
+FREQ = struct('evals',(1:6)','frex',1,'pats',randn(6,1), ...
+    'ts',randn(1,29),'method','pca','kinematics','velocity');
+Patterns = struct('frex',1,'labels',{{'Marker 1','Marker 2'}}, ...
+    'markerData',randn(6,30),'comp',1,'srate',100,'start',0, ...
+    'plot_bones',false,'plot_matrix',true,'animate',false);
+figures = FREQNESS_Visualizer_Mocap(FREQ,[],Patterns);
+verifyNumElements(testCase,figures.patterns,1);
+verifyNumElements(testCase,figures.pattern_matrix,1);
+verifyEmpty(testCase,figures.animation);
+Patterns.animate = true;
+verifyError(testCase,@() FREQNESS_Visualizer_Mocap(FREQ,[],Patterns), ...
+    'FREQNESS:Visualizer:VelocityAnimation');
+
+end
+
+
 function restoreFigures(originalVisibility)
 
 close all force

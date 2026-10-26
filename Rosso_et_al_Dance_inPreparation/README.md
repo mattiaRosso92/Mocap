@@ -84,6 +84,14 @@ four retained components and the complete eigenspectrum. This is separate from
 the corrected anti-aliasing used downstream for temporal analysis.
 Each partner's frequency grid is defined from their own song tempo.
 
+The optional `which_method='PCA'` setting now uses the public estimator in
+Block 1 with the same explicit filter calibration. Its core files have a
+separate `_PCA` suffix and never reuse GED core files. Run Block 1 only for
+this control: downstream publication blocks require GED and stop if PCA is
+selected. For the full GED/PCA and position/velocity comparisons, use the
+Supplementary entry point. The default GED-on-position workflow and its saved
+output names are unchanged.
+
 Phase-space RQA retains the validated settings: 250 Hz input; fourth-order
 10 Hz Butterworth filtfilt before decimation by 10; central 15–85% window;
 no z-standardization; one partner per joint-space dimension; Euclidean radius

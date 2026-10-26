@@ -167,7 +167,8 @@ vis_flag = CFG.block1.visualize;
 % Choose if you want to enable saving of FREQNESS output
 save_flag = CFG.block1.save;
 
-% Choose the method youn want to use for FREQNESS (GED or PCA)
+% Manuscript default: GED. PCA is an optional BLOCK 1-only control saved
+% with a separate _PCA suffix; downstream publication blocks remain GED.
 which_method = 'GED';
 
 % Initialize the MoCap toolbox and external dependencies

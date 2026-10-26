@@ -20,7 +20,12 @@ path_study = fileparts(script_file);
 run(fullfile(path_study,'Supporting','DyadicDance_Configuration.m'));
 
 %% BLOCK 1 - NETWORK ESTIMATION
- 
+
+which_method = validatestring(which_method,{'GED','PCA'});
+% PCA is an optional BLOCK 1 control, never a replacement for manuscript GED.
+core_suffix = prefix{idx_XYZ};
+if strcmp(which_method,'PCA'), core_suffix = [core_suffix '_PCA']; end
+
 % Loop over conditions
 for condi = 1:nconds
 
@@ -40,33 +45,32 @@ for condi = 1:nconds
 
             output_file = fullfile(CFG.block1.output_path,sprintf( ...
                 'FREQNESS_CORE_D%d_C%d_T%d%s.mat', ...
-                dyadi,condi,triali,prefix{idx_XYZ}));
+                dyadi,condi,triali,core_suffix));
             input_file = output_file;
-            if ~isfile(input_file) && ~isempty(CFG.common.reuse_core_path)
+            if strcmp(which_method,'GED') && ~isfile(input_file) && ...
+                    ~isempty(CFG.common.reuse_core_path)
                 input_file = fullfile(CFG.common.reuse_core_path,sprintf( ...
                     'FREQNESS_CORE_D%d_C%d_T%d%s.mat', ...
                     dyadi,condi,triali,prefix{idx_XYZ}));
             end
             if isfile(input_file) && ~CFG.block1.overwrite_flag
-                if strcmp(which_method,'GED')
-                    % Read only compact fields; do not reload saved time series.
-                    saved_core = load(input_file,'id_trial');
-                    assert(saved_core.id_trial == id_trial,'Saved core trial ID differs.');
-                    saved_frex = h5read(input_file,'/GED/frex');
-                    saved_fwhm = h5read(input_file,'/GED/fwhm');
-                    if strcmp(CFG.common.filter_width_calibration,'legacy')
-                        saved_expected_filter_width = ...
-                            FREQNESS_ComputeLegacyFilterWidths_Mocap( ...
-                            saved_frex,CFG.common.filter_type);
-                    else
-                        saved_expected_filter_width = ...
-                            FREQNESS_ComputeFilterWidths_Mocap( ...
-                            saved_frex,CFG.common.filter_type);
-                    end
-                    assert(isequal(size(saved_fwhm),size(saved_expected_filter_width)) && ...
-                        max(abs(saved_fwhm-saved_expected_filter_width),[],'all') < 1e-12, ...
-                        'Existing core output uses an incompatible filter calibration.');
+                % Read only compact fields; do not reload saved time series.
+                saved_core = load(input_file,'id_trial');
+                assert(saved_core.id_trial == id_trial,'Saved core trial ID differs.');
+                saved_frex = h5read(input_file,['/' which_method '/frex']);
+                saved_fwhm = h5read(input_file,['/' which_method '/fwhm']);
+                if strcmp(CFG.common.filter_width_calibration,'legacy')
+                    saved_expected_filter_width = ...
+                        FREQNESS_ComputeLegacyFilterWidths_Mocap( ...
+                        saved_frex,CFG.common.filter_type);
+                else
+                    saved_expected_filter_width = ...
+                        FREQNESS_ComputeFilterWidths_Mocap( ...
+                        saved_frex,CFG.common.filter_type);
                 end
+                assert(isequal(size(saved_fwhm),size(saved_expected_filter_width)) && ...
+                    max(abs(saved_fwhm-saved_expected_filter_width),[],'all') < 1e-12, ...
+                    'Existing core output uses an incompatible filter calibration.');
                 fprintf('BLOCK 1 output exists; skipping %s.\n',input_file);
                 continue
             end
@@ -120,33 +124,25 @@ for condi = 1:nconds
 
             end
 
-            %% OPTIONAL: convert data to velocity
-            % 
-            % % NOTE: Ask Petri & Felix whether they project the position
-            % % data after the eigendecomposition
-            % 
-            % dt = 1/srate; % differentiate by time units
-            % markData = diff(markData,1,2) / dt; % compute velocity
-
-
             %% Run network decomposition on the dyad
 
             % ncomps controls retained eigenvectors, patterns, and time
             % series only. The complete eigenspectrum is always retained
             % and remains available to EffectDimensionality.
 
+            % Both decompositions use the selected study filter calibration.
+            if strcmp(CFG.common.filter_width_calibration,'legacy')
+                filter_width = FREQNESS_ComputeLegacyFilterWidths_Mocap( ...
+                    frex,CFG.common.filter_type);
+                expected_filter_width = filter_width;
+            else
+                filter_width = [];
+                expected_filter_width = FREQNESS_ComputeFilterWidths_Mocap( ...
+                    frex,CFG.common.filter_type);
+            end
             if strcmp(which_method,'GED')
 
-                % Compute FREQNESS with GED
-                if strcmp(CFG.common.filter_width_calibration,'legacy')
-                    filter_width = FREQNESS_ComputeLegacyFilterWidths_Mocap( ...
-                        frex,CFG.common.filter_type);
-                    expected_filter_width = filter_width;
-                else
-                    filter_width = [];
-                    expected_filter_width = FREQNESS_ComputeFilterWidths_Mocap( ...
-                        frex,CFG.common.filter_type);
-                end
+                % Compute FREQNESS with GED (unchanged default: positions).
                 GED = []; % refresh for loop iterations
                 GED = FREQNESS_NetworkEstimation_Mocap(markData, frex, srate, ...
                     'fwidth',filter_width,'filter',CFG.common.filter_type, ...
@@ -172,9 +168,13 @@ for condi = 1:nconds
 
                 % Compute FREQNESS with PCA
                 PCA = []; % refresh for loop iterations
-                PCA = FREQNESS_NetworkEstimation_Mocap_PCA(markData, frex, srate, ...
+                PCA = FREQNESS_NetworkEstimation_Mocap(markData, frex, srate, ...
+                    'method','pca','kinematics','position', ...
+                    'fwidth',filter_width,'filter',CFG.common.filter_type, ...
                     'ncomps',CFG.common.ncomps); % networks estimation
-                %ED(condi,dyadi,triali,:,:)  = FREQNESS_EffectDim(PCA.evals); % effective dimensionality
+                assert(isequal(PCA.fwhm,expected_filter_width));
+                PCA.filter_width_calibration = string(CFG.common.filter_width_calibration);
+                PCA.filter_type = string(CFG.common.filter_type);
                 % Normalize frequencies by beat
                 PCA.frex_norm = PCA.frex ./ beat_frex;
 
@@ -227,7 +227,14 @@ for condi = 1:nconds
 
                 % Optionally inspect this individual dyad and trial before
                 % proceeding to the group-level analysis blocks.
-                FREQNESS_Visualizer_Mocap(GED,Landscape,Patterns)
+                if strcmp(which_method,'GED'), FREQvis = GED; else, FREQvis = PCA; end
+                % Shared beat-relative axis aligns each partner's own song.
+                FREQvis.frex = FREQvis.frex_norm(:,1);
+                Landscape.frex = FREQvis.frex;
+                Landscape.xlabel = 'Frequency / beat';
+                Patterns.frex = 1;
+                Patterns.frequency_unit = 'x beat';
+                FREQNESS_Visualizer_Mocap(FREQvis,Landscape,Patterns)
 
 
             end
@@ -245,8 +252,10 @@ end
 
 %% BLOCK 2 - NETWORK LANDSCAPES AND EFFECTIVE DIMENSIONALITY
 
-% Select method: 'GED' or 'PCA'
-which_method = 'GED';
+% Publication blocks retain GED; PCA comparisons belong in Supplementary.
+assert(strcmp(which_method,'GED'), ...
+    ['BLOCKS 2-8 use manuscript GED outputs. For PCA, run BLOCK 1 only ' ...
+    'or use DyadicDance_Supplementary.m for the comparisons.']);
 
 % Choose if you want to enable saving of FREQNESS output
 save_flag = 1;

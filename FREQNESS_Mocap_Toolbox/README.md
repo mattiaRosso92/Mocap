@@ -55,6 +55,46 @@ when no component is supplied.
 Use `'Fisher',true` to return `atanh(r)` in the same single output array;
 `'Fisher',false` preserves raw values. Perfect correlations map to +/-Inf.
 
+### Network estimation: GED/PCA and position/velocity
+
+```matlab
+FREQ = FREQNESS_NetworkEstimation_Mocap(data,frex,srate); % GED on positions
+FREQ = FREQNESS_NetworkEstimation_Mocap(data,frex,srate,'method','pca');
+FREQ = FREQNESS_NetworkEstimation_Mocap(data,frex,srate, ...
+    'method','pca','kinematics','velocity');
+```
+
+The defaults are `'method','ged'` and `'kinematics','position'`; existing GED
+calculations and filter defaults are unchanged. Both methods use the same
+narrowband covariance, including its existing `1e-6` diagonal addition.
+GED compares it with the regularised broadband covariance; PCA decomposes
+it directly. `regularisation` controls only GED's broadband shrinkage.
+`FREQ.evals` always retains the complete spectrum, normalized to sum to 100,
+independently of `ncomps`. GED percentages describe relative eigenvalue
+contrasts, whereas PCA percentages describe narrowband covariance variance.
+Patterns and component time series retain their existing dimensions and
+conventions; the latter project the selected broadband kinematic input.
+
+`'kinematics','velocity'` differentiates supplied **positions** using
+`diff(data,1,2)*srate`, before frequency filtering and without extra smoothing.
+Do not use it on input that is already velocity. `duration` and supplied
+`bad_segments` refer to input positions. Gap reconstruction precedes
+differentiation; both velocity samples adjacent to an excluded position are
+excluded where they exist. N analyzed positions yield N-1 output samples.
+`FREQ.bad_segments` and its participant-specific counterpart index those
+output samples, while `FREQ.gap_info` retains input-position QC provenance.
+
+The single output records `FREQ.method`, `FREQ.kinematics`,
+`FREQ.input_n_samples` and `FREQ.sample_offset`. Output timestamps relative to
+the first input sample are `FREQ.sample_offset+(0:nTime-1)/srate`; the offset
+is zero for positions and `0.5/srate` for midpoint velocities.
+`FREQ.duration` remains output sample count divided by sampling rate.
+
+The general MainPipeline exposes both choices in its settings. The Visualizer
+uses method-aware landscape labels and supports static velocity-derived
+patterns. Positional animation rejects velocity-derived outputs: it does not
+silently integrate velocity or add it to positional marker coordinates.
+
 ### Temporal coordination
 
 `FREQNESS_TimeCoord_Mocap` is the single public entry point for both
