@@ -18,7 +18,10 @@ assert(~isempty(script_file), ...
     'Open EmpaticMirroring_MainPipeline.m in MATLAB before running it.');
 path_study = fileparts(script_file);
 path_repo = fileparts(path_study);
-path_data = fullfile(path_study,'EmpaticMirrorring_Data');
+dataset_folder = 'EmpaticMirroring_Data_Clean';
+output_folder = 'outputs_clean';
+excluded_data_folder = '_EXCLUDED_NOT_IMPORTED';
+path_data = fullfile(path_study,dataset_folder);
 path_toolbox = fullfile(path_repo,'FREQNESS_Mocap_Toolbox');
 % Preserve the study's historical filtering by default. Select 'physical'
 % to use the toolbox's frequency-calibrated widths for a new analysis.
@@ -26,7 +29,7 @@ filter_width_calibration = validatestring( ...
     'legacy',{'physical','legacy'});
 filter_type = validatestring('logarithmic',{'logarithmic','linear'});
 filter_output_tag = [filter_width_calibration '_' filter_type];
-path_output = fullfile(path_study,'outputs',filter_output_tag);
+path_output = fullfile(path_study,output_folder,filter_output_tag);
 path_qc = fullfile(path_output,'qc');
 path_models = fullfile(path_output,'preprocessed_models');
 path_participants = fullfile(path_output,'participants');
@@ -141,14 +144,23 @@ pattern_frequencies = [.25 .5 1 2];
 plot_pattern_bones = true;
 write_xlsx = true;
 
-% Folder annotations are audited but waived for these participants. All
-% objective structure, rate, duration, marker, gap and coverage rules remain.
-annotated_subjects = ["002" "022" "046"];
-annotated_subject_notes = ["only 5 recordings" ...
-    "very bad quality; disappeared hips" "only 28 recordings"];
+% Participants 002 and 046 were excluded because their recording sets were
+% incomplete; participant 004 was excluded because one recording was missing.
+% Their files are retained only as .excluded provenance outside the import set.
+excluded_subjects = ["002" "004" "046"];
+excluded_subject_notes = ["only 5 recordings" ...
+    "missing recording" "only 28 recordings"];
+
+% Participant 022 retains an acquisition annotation, but recordings pass only
+% when all objective structure, rate, duration, marker, gap and coverage rules do.
+annotated_subjects = "022";
+annotated_subject_notes = "very bad quality; disappeared hips";
 
 save(fullfile(path_output,'EmpaticMirroring_RunConfiguration.mat'), ...
-    'run_blocks','run_metric_prominence','overwrite','save_flag','vis_flag','srate_teacher', ...
+    'dataset_folder','output_folder','excluded_data_folder', ...
+    'excluded_subjects','excluded_subject_notes','annotated_subjects', ...
+    'annotated_subject_notes','run_blocks','run_metric_prominence', ...
+    'overwrite','save_flag','vis_flag','srate_teacher', ...
     'srate_participant','srate','analysis_duration','teacher_offset', ...
     'participant_offset','short_gap_seconds', ...
     'maximum_reconstructed_gap_seconds', ...
@@ -168,6 +180,11 @@ save(fullfile(path_output,'EmpaticMirroring_RunConfiguration.mat'), ...
 % Recordings started automatically but were stopped manually. Inspect the
 % third dimension of the QTM trajectory matrix before selecting the cohort.
 files = dir(fullfile(path_data,'**','*.mat'));
+file_folders = reshape(string({files.folder}),[],1);
+excluded_path = string(fullfile(path_data,excluded_data_folder));
+in_excluded_folder = file_folders == excluded_path | ...
+    startsWith(file_folders,excluded_path+filesep);
+files = files(~in_excluded_folder);
 assert(~isempty(files),'No MAT files were found below %s.',path_data);
 file_paths = reshape(string(fullfile({files.folder},{files.name})),[],1);
 [file_paths,sort_order] = sort(file_paths);
@@ -424,6 +441,10 @@ for filei = 1:nfiles
     reasons = strings(0,1);
     if LoadStatus(filei) ~= "ok"; reasons(end+1) = "load/structure: "+LoadStatus(filei); end
     if FolderStatus(filei) ~= "ok"; reasons(end+1) = "folder: "+FolderStatus(filei); end
+    excluded_subject_idx = find(Subject(filei) == excluded_subjects,1);
+    if Role(filei) == "participant" && ~isempty(excluded_subject_idx)
+        reasons(end+1) = "participant excluded: "+excluded_subject_notes(excluded_subject_idx);
+    end
     if NameStatus(filei) ~= "ok"
         if NameStatus(filei) == "annotated filename"
             reasons(end+1) = "filename annotation: "+strtrim(Note(filei));
@@ -475,7 +496,7 @@ frameQC = table(File,RelativePath,Subject,Role,FolderStatus,TrialIndex, ...
     ExclusionReasons,ReadyForAlignment,ErrorMessage);
 writetable(frameQC,fullfile(path_qc,'frame_count_qc.csv'))
 
-% Recover objectively valid recordings from the three annotated folders.
+% Recover objectively valid recordings from the retained annotated folder.
 analysisQC = frameQC;
 candidate_rows = analysisQC.Role == "participant" & ismember(analysisQC.Subject,annotated_subjects);
 objective_ok = candidate_rows & analysisQC.FolderStatus == "annotated subject folder" & ...

@@ -23,6 +23,14 @@ numbered blocks run in order and compatible outputs are reused. Set the
 environment variable `EMPATIC_MIRRORING_OVERWRITE=1` only for a deliberate
 full rebuild.
 
+The publication analysis uses `EmpaticMirroring_Data_Clean` exclusively. This
+dataset contains the revised Qualisys reconstruction and is kept separate from
+the historical `EmpaticMirrorring_Data` dataset and its cached outputs. Files
+below `_EXCLUDED_NOT_IMPORTED` are provenance only and are never imported.
+Participants 002 and 046 are excluded because their recording sets are
+incomplete, and participant 004 is excluded because one recording is missing.
+Known corrupt exports are likewise stored with the `.excluded` extension.
+
 Setup includes the toolbox's Analysis, Visualization, and Supporting folders.
 Block 3A uses `FREQNESS_TimeCoord_Mocap` with `'method','phase_space'`; no
 `parameters` structure is needed. The study retains explicit normalization
@@ -122,11 +130,11 @@ second time.
 
 ## Output layout
 
-Generated data remain below calibration-specific folders in the ignored
-`outputs/` tree:
+Generated clean-data results remain below calibration-specific folders in the
+ignored `outputs_clean/` tree:
 
 ```text
-outputs/
+outputs_clean/
 `-- <physical|legacy>_<logarithmic|linear>/
     |-- qc/
     |-- preprocessed_models/
@@ -146,9 +154,8 @@ participant folder. Dense trial results remain per recording; compact group
 files contain only the summaries needed downstream. Raw `.mat`, `.qtm`, and
 `.avi` files and all generated outputs are ignored by Git.
 
-Unversioned files produced by the historical pipeline remain directly below
-`outputs/`. They are retained as reference results but are never inherited by
-new calibration-aware runs.
+Historical `_Data` products below `outputs/` and temporary 13-marker products
+below `outputs_hybrid13_temporary/` are never read by the publication pipeline.
 
 The main exports are:
 
