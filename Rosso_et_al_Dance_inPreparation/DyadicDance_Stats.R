@@ -27,7 +27,7 @@ bonferroni_alpha <- 0.05 / bonferroni_tests
 configured_metric_levels <- c(M1 = 0.25, M2 = 0.5, M3 = 1, M4 = 2)
 # Must match CFG.common.filter_output_tag and CFG.block6.output_tag in MATLAB.
 study_results_folder <- "legacy_logarithmic_recovered_dyads"
-phase_output_tag <- "PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0"
+phase_output_tag <- "PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0_Window10to45s"
 overwrite_flag <- FALSE
 
 # Resolve paths relative to this script so it can run from any directory.
@@ -543,7 +543,7 @@ analyse_component <- function(
       if (method == "PhaseSpaceRQACorrected") {
         paste(
           "35 dyads; 250 Hz input; fourth-order 10 Hz Butterworth filtfilt;",
-          "decimation by 10, then 15--85% crop; no z-standardization;",
+          "decimation by 10, then 10--45 s from recording onset (indices 251--1126, 876 samples); no z-standardization;",
           "Euclidean max_fraction radius 0.1; Theiler 0; lmin 2; vmin 2"
         )
       },

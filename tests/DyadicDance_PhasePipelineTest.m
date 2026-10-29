@@ -24,14 +24,16 @@ function testManuscriptDefaults(testCase)
 p = testCase.TestData.CFG.block6;
 verifyEqual(testCase,p.components,1:2);
 verifyEqual(testCase,[p.srate p.downsample p.lowpass_hz p.filter_order],[250 10 10 4]);
-verifyEqual(testCase,p.duration,[.15 .85]);
+verifyEqual(testCase,p.window_seconds,[10 45]);
+verifyEqual(testCase,p.duration,[251 1126]/1500);
+verifyEmpty(testCase,p.reuse_rqa_path);
 verifyEqual(testCase,p.metric_levels,[.25 .5 1 2]);
 verifyFalse(testCase,p.standardize);
 verifyEqual(testCase,p.threshold_method,'max_fraction');
 verifyEqual(testCase,p.threshold,.1);
 verifyEqual(testCase,[p.theiler_window p.lmin p.vmin],[0 2 2]);
 verifyEqual(testCase,p.output_tag, ...
-    'PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0');
+    'PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0_Window10to45s');
 verifyTrue(testCase,contains(testCase.TestData.r_code,p.output_tag));
 verifyTrue(testCase,contains(testCase.TestData.r_code, ...
     'unset = "SpatialRaw,SpatialFisher,PhaseSpaceRQACorrected"'));
@@ -50,8 +52,9 @@ verifyGreaterThan(testCase,abs(H(1))^2,.99);
 verifyLessThan(testCase,abs(H(2))^2,1e-4);
 n = numel(y(1:p.downsample:end));
 indices = round(p.duration(1)*n):round(p.duration(2)*n);
-verifyEqual(testCase,numel(indices),1051);
-verifyEqual(testCase,indices([1 end]),[225 1275]);
+verifyEqual(testCase,numel(indices),876);
+verifyEqual(testCase,indices([1 end]),[251 1126]);
+verifyEqual(testCase,(indices([1 end])-1)/(p.srate/p.downsample),[10 45]);
 end
 
 function testSeparateOutputsAndCacheChecks(testCase)

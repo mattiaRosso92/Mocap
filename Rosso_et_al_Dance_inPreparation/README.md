@@ -28,8 +28,8 @@ Authors: Mattia Rosso, Felix Bigand, Leonardo Bonetti.
 | [Examples/DyadicDance_Example.m](Examples/DyadicDance_Example.m) | Single-recording toolbox demonstration, not a cohort analysis |
 
 All Dance source filenames use `DyadicDance_*`. Toolbox functions retain
-`FREQNESS_*`. Existing MAT/XLSX/CSV filenames, variable names and output
-directories are intentionally unchanged so completed results remain reusable.
+`FREQNESS_*`. MAT/XLSX/CSV filenames and variable names are stable; temporal
+output directories include the analysis window so only matching results are reused.
 The toolbox, Empatic and Orchestra analyses are not reorganized here.
 
 ## Run order and stable block IDs
@@ -93,13 +93,16 @@ Supplementary entry point. The default GED-on-position workflow and its saved
 output names are unchanged.
 
 Phase-space RQA retains the validated settings: 250 Hz input; fourth-order
-10 Hz Butterworth filtfilt before decimation by 10; central 15–85% window;
+10 Hz Butterworth filtfilt before decimation by 10; 10–45 s from recording
+onset, inclusive (indices 251–1126 at 25 Hz; 876 samples per 60 s trial);
 no z-standardization; one partner per joint-space dimension; Euclidean radius
 0.1 times the trial's maximum joint distance; strict distance < radius;
 Theiler window 0, lmin 2, vmin 2; beat multiples [.25 .5 1 2].
 
-Compatible existing RR/DET summaries are reused. The optional validated
-comparison-cache import checks settings, retained trials, frequencies and
+Set `CFG.block6.window_seconds` in the shared configuration to select the
+window. `duration` is derived for the toolbox's proportional endpoint convention.
+Compatible existing RR/DET summaries are reused. Optional cache import is
+disabled by default and checks settings, retained trials, frequencies and
 sample counts before reuse. RR/DET-only summaries do not fabricate the six
 other RQA metrics. No historical RQA result is silently substituted.
 
@@ -117,9 +120,13 @@ during organization.
 
 ## Output safety
 
-All numerical locations under
+Numerical outputs remain under
 `Dance_Data/FREQNESS_Results_Rosso_et_al_inPreparation/legacy_logarithmic_recovered_dyads`
-are unchanged, including core reuse from the original results root.
+with core reuse from the original results root. Temporal results, statistical
+exports, R outputs and group figures use the tag
+`PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0_Window10to45s`.
+Supplementary RR/DET panels use the same tag beneath `Supplementary_35/Figures`;
+the document builder reads those panels and the matching R outputs.
 Existing per-trial spatial results cover the complete final cohort; no old
 33-dyad spatial summary is imported by the final pipeline.
 

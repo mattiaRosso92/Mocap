@@ -26,7 +26,7 @@ root = repo / 'Dance_Data/FREQNESS_Results_Rosso_et_al_inPreparation/legacy_loga
 output = root / 'Supplementary_35'
 figures = output / 'Figures'
 stats = repo / 'Dance_Data/FREQNESS_Mocap_Stats_Results/legacy_logarithmic_recovered_dyads'
-phase_tag = 'PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0'
+phase_tag = 'PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0_Window10to45s'
 parser = argparse.ArgumentParser()
 parser.add_argument('--name', default='DyadicDance_Supplementary_Material.docx')
 parser.add_argument('--template', type=Path,
@@ -251,21 +251,21 @@ paragraph('For phase-space RQA, each partner contributes one coordinate to the j
 paragraph('These invariances do not address arbitrary rotations among exactly degenerate components or potential mismatching of components across participants. They also do not establish that recurrence in a joint trajectory uniquely identifies interpersonal coupling independently of individual dynamics.')
 
 heading('Temporal recurrence in the first component')
-paragraph('For comparison with the second component, we show the condition profiles of the first component using the same 35-dyad phase-space RQA. The factorial RR model showed effects of Visual contact, Musical input and Metric level, together with a Visual-by-Music interaction (p = .048). Interactions involving Metric level were not significant. Bonferroni-corrected follow-ups identified a Visual effect at beat (p = .042) and Music effects at beat/4 (p = .0017) and beat (p < .001). The localized Visual significance does not establish a difference in Visual effects between metric levels.')
-figure('S10_C1_RR', 'Recurrence rate for component 1. Original-scale means and SEMs are shown across all four conditions and metric levels. Models used log RR and 35 dyads. Red and blue denote absence and presence of visual contact.', 5.4)
+paragraph('For comparison with the second component, we show the condition profiles of the first component using the same 35-dyad phase-space RQA. The factorial RR model showed effects of Visual contact, Musical input and Metric level, together with a Visual-by-Music interaction (p = .028). Interactions involving Metric level were not significant. Bonferroni-corrected follow-ups identified a Visual-by-Music interaction at beat (p = .018) and Music effects at beat/4 (p = .0214) and beat (p < .001). The localized interaction significance does not establish a difference in Visual-by-Music interactions between metric levels.')
+figure(f'{phase_tag}/S10_C1_RR', 'Recurrence rate for component 1. Original-scale means and SEMs are shown across all four conditions and metric levels. Models used log RR and 35 dyads. Red and blue denote absence and presence of visual contact.', 5.4)
 heading('Determinism in the first component')
-paragraph('The factorial DET model showed effects of Musical input and Metric level, and a Music-by-Metric interaction (p < .001). Bonferroni-corrected Music effects occurred at beat/4 (p = .0039) and beat (p < .001). A corrected Visual effect was also present at 2 × beat (p = .041), although the overall Visual effect and Visual-by-Metric interaction were not significant.')
-figure('S10_C1_DET', 'Determinism for component 1. Points show means and error bars denote SEMs across 35 dyads. Both the plotted values and the modeled dependent variable are on the original scale.', 5.5)
+paragraph('The factorial DET model showed effects of Musical input and Metric level, and a Music-by-Metric interaction (p < .001). Bonferroni-corrected Music effects occurred at beat/4 (p = .0142) and beat (p < .001). No Visual effect passed correction (2 × beat: p = .080); the overall Visual effect and Visual-by-Metric interaction were not significant.')
+figure(f'{phase_tag}/S10_C1_DET', 'Determinism for component 1. Points show means and error bars denote SEMs across 35 dyads. Both the plotted values and the modeled dependent variable are on the original scale.', 5.5)
 heading('Spatial coordination in the first component')
 paragraph('For the first component, the raw-correlation factorial model showed effects of Visual contact and Metric level. Musical input and all interactions were nonsignificant. The Bonferroni-corrected Visual effect was significant at beat (p < .001); none of the other level-specific effects survived correction. The absence of a Visual-by-Metric interaction again limits claims of uniquely beat-specific modulation.')
 figure('S10_C1_Mirror', 'Spatial coordination for component 1. Means and SEMs of raw partner-pattern correlations are shown for 35 dyads. Correlations were computed on absolute activation patterns within each trial and then averaged within dyad and condition.', 5.5)
 
 heading('Coordination in the second component')
-paragraph('We repeated the coordination analyses for the second body network using the same retained trials and settings as for the first. Temporal recurrence was computed from non-standardized network activation time series after a fourth-order, zero-phase 10-Hz low-pass filter and downsampling from 250 to 25 Hz. The central 15–85% of each trial was retained. Each partner formed one dimension of the joint phase space; recurrences were defined by Euclidean distances strictly below 10% of the maximum joint distance. The identity diagonal was retained and the minimum diagonal length for DET was two samples.')
-paragraph('For RR, the factorial model showed effects of Musical input and Metric level, but no significant effect of Visual contact or interaction. After Bonferroni correction across the four metric levels, the Musical-input effect was significant at beat/4 (p = .0015). For DET, Metric level was significant in the factorial model, whereas the overall Musical-input effect did not reach the .05 threshold (p = .059). The retained level-specific tests showed Musical-input effects at beat/4 (p = .00146) and beat (p = .00251). These follow-up results do not establish a significant Music-by-Metric interaction.')
-figure('S10_C2_RR', 'Recurrence rate for component 2 across the four metric levels. Red and blue indicate absence and presence of visual contact, respectively. Points and error bars show original-scale means ± SEM across 35 dyads. Inferential models used log-transformed RR.', 4.9)
+paragraph('We repeated the coordination analyses for the second body network using the same retained trials and settings as for the first. Temporal recurrence was computed from non-standardized network activation time series after a fourth-order, zero-phase 10-Hz low-pass filter and downsampling from 250 to 25 Hz. The interval from 10 to 45 s after recording onset was retained, using inclusive downsampled indices 251–1126 (876 samples). Each partner formed one dimension of the joint phase space; recurrences were defined by Euclidean distances strictly below 10% of the maximum joint distance. The identity diagonal was retained and the minimum diagonal length for DET was two samples.')
+paragraph('For RR, the factorial model showed effects of Musical input and Metric level, but no significant effect of Visual contact or interaction. After Bonferroni correction across the four metric levels, the Musical-input effect was significant at beat/4 (p = .0440). For DET, Metric level was significant in the factorial model, whereas the overall Musical-input effect did not reach the .05 threshold (p = .107). The retained level-specific tests showed Musical-input effects at beat/4 (p = .01153) and beat (p = .00383). These follow-up results do not establish a significant Music-by-Metric interaction.')
+figure(f'{phase_tag}/S10_C2_RR', 'Recurrence rate for component 2 across the four metric levels. Red and blue indicate absence and presence of visual contact, respectively. Points and error bars show original-scale means ± SEM across 35 dyads. Inferential models used log-transformed RR.', 4.9)
 heading('Determinism in the second component')
-figure('S10_C2_DET', 'Determinism for component 2. The four panels show beat/4, beat/2, beat and 2 × beat. Means and SEMs are shown on the original scale, which was also used in the inferential models. All 35 dyads are included.', 5.7)
+figure(f'{phase_tag}/S10_C2_DET', 'Determinism for component 2. The four panels show beat/4, beat/2, beat and 2 × beat. Means and SEMs are shown on the original scale, which was also used in the inferential models. All 35 dyads are included.', 5.7)
 heading('Spatial coordination in the second component')
 paragraph('Spatial coordination was quantified as the Pearson correlation between the partners’ absolute activation patterns and averaged across retained trials within each dyad and condition. The raw-correlation factorial model showed effects of Visual contact and Metric level, without a reliable Musical-input effect or interaction. Bonferroni-corrected Visual-contact effects were significant at beat (p = .033) and 2 × beat (p < .001). The absence of a Visual-by-Metric interaction means that this pattern should not be interpreted as formal evidence that the Visual effect differs between metric levels.')
 figure('S10_C2_Mirror', 'Spatial coordination for component 2. Points show mean raw pattern correlations and error bars denote ± SEM across 35 dyads. The inferential model used raw correlations rather than Fisher-transformed values.', 5.5)
@@ -362,7 +362,9 @@ doc.save(destination)
 archive = output / (destination.stem + '_Figures.zip')
 if not archive.exists():
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED) as z:
-        for path in sorted(figures.glob('*')):
+        for path in sorted(figures.glob('*')) + sorted((figures / phase_tag).glob('*')):
+            if path.parent == figures and re.fullmatch(r'S10_C[12]_(RR|DET)', path.stem):
+                continue
             if path.suffix in ['.png','.pdf']:
                 z.write(path,path.name)
 archive = output / (destination.stem + '_Statistics.zip')
