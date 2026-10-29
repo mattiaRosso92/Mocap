@@ -456,7 +456,10 @@ stats_path = fullfile(CFG.common.data_path,'FREQNESS_Mocap_Stats_Results', ...
 for compi = 1:2
     for outcomei = 1:3
         outcomes = {'RR','DET','Mirror'}; outcome = outcomes{outcomei};
+        this_figure_path = figure_path;
         if outcomei<3
+            this_figure_path = fullfile(figure_path,CFG.block6.output_tag);
+            if ~isfolder(this_figure_path), mkdir(this_figure_path); end
             this_path = fullfile(stats_path,CFG.block6.output_tag, ...
                 sprintf('Component_%d',compi),outcome);
             S = load(fullfile(CFG.block6.output_path,sprintf('Component_%d',compi), ...
@@ -490,7 +493,7 @@ for compi = 1:2
                 ["Diff" "Same" "Diff" "Same"],mu,mu-sem,mu+sem);
             title(meterlabels{metri}); ylabel(outcome);
         end
-        save_panel(fig,sprintf('S10_C%d_%s',compi,outcome),figure_path,CFG);
+        save_panel(fig,sprintf('S10_C%d_%s',compi,outcome),this_figure_path,CFG);
     end
 end
 fig = figure('Color','w','Position',[50 50 1100 750]);

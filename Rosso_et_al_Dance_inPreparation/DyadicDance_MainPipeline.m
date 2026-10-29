@@ -713,8 +713,8 @@ for condi = 1:nconds
             end
 
             % Filter the complete 250 Hz series before decimation, then let
-            % the toolbox crop the 15--85% interval on the 25 Hz sample grid.
-            % This ordering preserves the validated endpoints (1051 samples).
+            % the toolbox crop 10--45 s on the 25 Hz sample grid, retaining
+            % inclusive indices 251:1126 (876 samples) of each 60 s trial.
             assert(~isfield(GED,'bad_segments') || isempty(GED.bad_segments), ...
                 'BLOCK 6 expects the complete, gap-free Dance core time series.');
             phase_components = PhaseRQA.component;
