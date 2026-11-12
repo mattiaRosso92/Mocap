@@ -19,6 +19,7 @@ function [filtdat,empVals,fx] = filterFGx(data,srate,f,fwhm,showplot)
 % number of time points, and may thus be slightly different from
 % the requested values.
 % 
+% Original function by Mike X Cohen; adapted for FREQ-NESS MoCap.
 % mikexcohen@gmail.com
 
 %% input check

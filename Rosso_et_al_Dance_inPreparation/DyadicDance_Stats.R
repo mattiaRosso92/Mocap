@@ -26,7 +26,7 @@ bonferroni_tests <- 4
 bonferroni_alpha <- 0.05 / bonferroni_tests
 configured_metric_levels <- c(M1 = 0.25, M2 = 0.5, M3 = 1, M4 = 2)
 # Must match CFG.common.filter_output_tag and CFG.block6.output_tag in MATLAB.
-study_results_folder <- "legacy_logarithmic_recovered_dyads"
+study_results_folder <- "legacy_logarithmic"
 phase_output_tag <- "PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0_Window10to45s"
 overwrite_flag <- FALSE
 

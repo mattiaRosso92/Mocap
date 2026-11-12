@@ -59,8 +59,9 @@ pipeline. No 33-versus-35 comparison or JRQA analysis belongs here.
 1. Run the main pipeline to populate/reuse the final 35-dyad summaries.
 2. Run `DyadicDance_Supplementary.m`. Existing prominence/similarity outputs
    and matching control files are reused. New controls, figures and their
-   provenance are written only under `Supplementary_35` in the recovered-dyad
-   results root. No primary core, coordination or RQA file is overwritten.
+   provenance are written under `Supplementary_35` in
+   `Dance_Data/FREQNESS_Results_Rosso_et_al_inPreparation/legacy_logarithmic`.
+   No primary core, coordination or RQA file is overwritten.
 3. Run `DyadicDance_Stats.R` in the study root and the prominence/similarity R
    scripts here. Existing completed results may be reused; the two latter
    scripts require a new output directory if explicitly rerun.
@@ -79,25 +80,23 @@ documentation belong in Git. The manuscript is never edited by this workflow.
 
 ## Scope and interpretation
 
-- These are newly reconstructed **35-dyad** controls, not relabelled figures
-  from the presentation's 33-dyad analyses.
+- All estimation controls use the final **35-dyad** cohort and 1119 retained trials.
 - Width multipliers modify the primary legacy-logarithmic schedule. They do
   not test the alternative physical-width calibration or independently vary
-  frequency-grid resolution. Remove the separate frequency-resolution claim
-  from the manuscript unless that additional experiment is specified.
+  frequency-grid resolution.
 - Sign indeterminacy is addressed analytically: independent axis reflection
   preserves joint Euclidean distances, the max-distance radius, RR and DET;
   absolute patterns are likewise invariant. This is not an empirical coupling
   test or a test of component matching under eigenvalue degeneracy.
-- Add metric prominence and landscape similarity to the manuscript's list of
-  supplementary analyses. The latter correlates H2 entropy, not ED itself.
-- Do not claim cubic fits are best for every outcome: component-2 spatial
-  coordination favors the quadratic model by AIC in the saved final analyses.
+- Metric prominence and landscape similarity are supplementary analyses.
+  Landscape similarity correlates H2 entropy, not ED itself.
+- Component-2 spatial coordination favors the quadratic model by AIC;
+  cubic fits are not preferred for every outcome.
 - Spatial pattern displays retain the shared post-aggregation magnitude scale;
   they do not normalize each participant/component to its own maximum first.
 - Primary GED percentages are normalized eigenvalue contrasts; PCA percentages
   are narrowband covariance variance proportions. They have different meanings.
-- Avoid stating that exactly two components suffice at every metric level:
-  the 35-dyad mean effective dimensionality at twice the beat is 2.71.
+- Effective dimensionality is a continuous summary of the full eigenspectrum.
+  Its 35-dyad mean at twice the beat is 2.71.
 - Component-pattern correlations preserve the original trial-weighted curve.
   Other descriptive landscapes average trials then partners within dyad.

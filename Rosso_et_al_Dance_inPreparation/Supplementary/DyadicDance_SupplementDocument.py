@@ -22,10 +22,10 @@ from PIL import Image
 
 
 repo = Path(__file__).resolve().parents[2]
-root = repo / 'Dance_Data/FREQNESS_Results_Rosso_et_al_inPreparation/legacy_logarithmic_recovered_dyads'
+root = repo / 'Dance_Data/FREQNESS_Results_Rosso_et_al_inPreparation/legacy_logarithmic'
 output = root / 'Supplementary_35'
 figures = output / 'Figures'
-stats = repo / 'Dance_Data/FREQNESS_Mocap_Stats_Results/legacy_logarithmic_recovered_dyads'
+stats = repo / 'Dance_Data/FREQNESS_Mocap_Stats_Results/legacy_logarithmic'
 phase_tag = 'PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0_Window10to45s'
 parser = argparse.ArgumentParser()
 parser.add_argument('--name', default='DyadicDance_Supplementary_Material.docx')

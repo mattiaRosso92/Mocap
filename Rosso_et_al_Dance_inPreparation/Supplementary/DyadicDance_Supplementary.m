@@ -452,7 +452,7 @@ save_panel(fig,'S09_ComponentPatternCorrelation',figure_path,CFG);
 % Match the original-scale means/SEMs used in R. Read the same final MATLAB
 % summaries, so first-time replication does not require R before plotting.
 stats_path = fullfile(CFG.common.data_path,'FREQNESS_Mocap_Stats_Results', ...
-    [CFG.common.filter_output_tag '_recovered_dyads']);
+    CFG.common.filter_output_tag);
 for compi = 1:2
     for outcomei = 1:3
         outcomes = {'RR','DET','Mirror'}; outcome = outcomes{outcomei};
