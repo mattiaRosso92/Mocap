@@ -9,7 +9,7 @@ for(e in parse(script)) {
        (is.call(e[[3]]) && identical(e[[3]][[1]],as.name("function"))))) eval(e,env)
 }
 root <- file.path(repo,"Dance_Data","FREQNESS_Results_Rosso_et_al_inPreparation",
-  "legacy_logarithmic_recovered_dyads")
+  "legacy_logarithmic")
 spatial <- file.path(root,"06_Statistics_R","SpatialCoordination","OUT2R_Comp#1.xlsx")
 if(file.exists(spatial)) {
   input <- read_excel(spatial)

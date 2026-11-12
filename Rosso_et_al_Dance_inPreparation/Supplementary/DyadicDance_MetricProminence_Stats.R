@@ -7,7 +7,7 @@ args <- commandArgs(trailingOnly = TRUE)
 script_file <- sub("^--file=", "", grep("^--file=", commandArgs(), value = TRUE))
 repo <- dirname(dirname(dirname(normalizePath(script_file))))
 input_file <- if(length(args)>=1) args[1] else file.path(repo,"Dance_Data",
-  "FREQNESS_Results_Rosso_et_al_inPreparation","legacy_logarithmic_recovered_dyads",
+  "FREQNESS_Results_Rosso_et_al_inPreparation","legacy_logarithmic",
   "04_MetricProminence","Component_1","OUT2R_MetricProminence.csv")
 output_path <- if(length(args)>=2) args[2] else file.path(dirname(input_file),"R_Statistics")
 if(dir.exists(output_path)) stop("Output folder exists; choose a new folder to preserve completed results.")

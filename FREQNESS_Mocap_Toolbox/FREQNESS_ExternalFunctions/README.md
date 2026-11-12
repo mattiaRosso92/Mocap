@@ -40,3 +40,17 @@ The complete CRP Toolbox is not bundled. The local change in
 full-toolbox `crp.m` entry point is absent. The accompanying `.gpl.crp` marker
 keeps automated `silent` analyses non-interactive. The JRQA numerical routines
 are otherwise unchanged.
+
+## Sources and license notices
+
+The project-level GPL-3.0-or-later declaration applies to the project's original
+code. Third-party files retain the notices and terms listed here.
+
+| Files | Upstream source and attribution | Terms |
+| --- | --- | --- |
+| `crp2.m`, `jrqa.m`, `dl.m`, `tt.m`, `entropy.m`, `pss.m`, and the CRP `private/*.m` helpers | Norbert Marwan, [CRP Toolbox](https://tocsy.pik-potsdam.de/CRPtoolbox/); retained files carry their individual revision dates | GNU GPL version 2 or later; [license text](LICENSES/GPL-2.0-or-later.txt) |
+| `mutual.m`, `false_nearest.m` | Hui Yang, [Recurrence plot and recurrence quantification analysis](https://www.mathworks.com/matlabcentral/fileexchange/58246-recurrence-plot-and-recurrence-quantification-analysis) | [BSD 3-Clause notice](LICENSES/Hui-Yang-BSD-3-Clause.txt) |
+| `extrema.m` | Carlos Adrian Vargas Aguilera, [extrema.m, extrema2.m](https://www.mathworks.com/matlabcentral/fileexchange/12275-extrema-m-extrema2-m) | [BSD 2-Clause notice](LICENSES/extrema-BSD-2-Clause.txt) |
+
+The local `false_nearest.m` header records suppression of console output.
+CRP modifications are described above.

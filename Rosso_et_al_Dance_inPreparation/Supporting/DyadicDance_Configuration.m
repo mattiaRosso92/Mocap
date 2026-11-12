@@ -2,9 +2,8 @@
 % Authors: Mattia Rosso, Felix Bigand, Leonardo Bonetti
 %% BLOCK 0 - USER SETTINGS, STARTUP, AND OUTPUT ROUTING
 
-% All raw inputs and all newly generated outputs stay on the local drive in
-% Dance_Data. The dedicated results root prevents this replication from
-% modifying any legacy analyses currently stored directly in Dance_Data.
+% Raw inputs and generated outputs reside in repository-level Dance_Data.
+% Analysis settings determine the numerical and figure output folders.
 % Shared study configuration; run this complete script, not a selection.
 path_script = fileparts(fileparts(mfilename('fullpath')));
 path_repo = fileparts(path_script);
@@ -46,7 +45,7 @@ CFG.common.filter_output_tag = [CFG.common.filter_width_calibration ...
     '_' CFG.common.filter_type];
 CFG.common.results_folder = fullfile( ...
     'FREQNESS_Results_Rosso_et_al_inPreparation', ...
-    [CFG.common.filter_output_tag '_recovered_dyads']);
+    CFG.common.filter_output_tag);
 CFG.common.results_path = fullfile( ...
     CFG.common.data_path,CFG.common.results_folder);
 CFG.common.ncomps = 4;
@@ -54,12 +53,8 @@ CFG.common.list_dyads = 1:35; % Final main and supplementary cohort; no dyad-lev
 % Original recording IDs, not within-condition trial slots.
 % Dyad 32 trial 32 contains no recorded marker coordinates for either partner.
 CFG.common.excluded_trials = [32 32];
-% Reuse matching original outputs across ALL blocks, not only temporal RQA.
+% Optional external cache reuse; disabled for publication replication.
 CFG.common.reuse_results_path = '';
-if strcmp(CFG.common.filter_output_tag,'legacy_logarithmic')
-    CFG.common.reuse_results_path = fullfile(CFG.common.data_path, ...
-        'FREQNESS_Results_Rosso_et_al_inPreparation');
-end
 CFG.common.reuse_core_path = '';
 if ~isempty(CFG.common.reuse_results_path)
     CFG.common.reuse_core_path = fullfile(CFG.common.reuse_results_path,'01_Core');
@@ -131,7 +126,7 @@ CFG.block8.overwrite_flag = false;
 CFG.block1.visualize = false;
 CFG.block1.save = true;
 
-% Confirm that this run is isolated from the legacy result locations.
+% Keep generated results separate from raw inputs.
 path_home = CFG.common.data_path;
 assert(isfolder(path_home), ...
     'Dance_Data was not found at the repository-relative local path.');

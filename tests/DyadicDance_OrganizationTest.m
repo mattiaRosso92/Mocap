@@ -30,7 +30,7 @@ function testFinalCohortAndSupplementaryResume(testCase)
 repo = fileparts(fileparts(mfilename('fullpath')));
 study = fullfile(repo,'Rosso_et_al_Dance_inPreparation');
 root = fullfile(repo,'Dance_Data','FREQNESS_Results_Rosso_et_al_inPreparation', ...
-    'legacy_logarithmic_recovered_dyads');
+    'legacy_logarithmic');
 metric_path = fullfile(root,'04_MetricProminence','Component_1');
 similarity_path = fullfile(root,'05_LandscapeSimilarity','Component_1');
 assumeTrue(testCase,numel(dir(fullfile(metric_path,'FREQNESS_METRIC_D*.mat'))) == 1119);
@@ -47,7 +47,7 @@ verifyEqual(testCase,CFG.common.trial_counts(32,:),[8 8 8 7]);
 verifyFalse(testCase,CFG.block4.overwrite_flag || CFG.block5.overwrite_flag);
 before = [dir(fullfile(metric_path,'*')); dir(fullfile(similarity_path,'*'))];
 code = fileread(fullfile(study,'Supplementary','DyadicDance_Supplementary.m'));
-block = code(strfind(code,'%% BLOCK 4 -'):strfind(code,'%% BLOCK 7 -')-1);
+block = code(strfind(code,'%% BLOCK 4 -'):strfind(code,'%% BLOCK S1 -')-1);
 execute_block(CFG,block);
 after = [dir(fullfile(metric_path,'*')); dir(fullfile(similarity_path,'*'))];
 verifyEqual(testCase,{after.name},{before.name});

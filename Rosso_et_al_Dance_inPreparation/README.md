@@ -19,7 +19,7 @@ Authors: Mattia Rosso, Felix Bigand, Leonardo Bonetti.
 | --- | --- |
 | [DyadicDance_MainPipeline.m](DyadicDance_MainPipeline.m) | Main MATLAB analyses and exports |
 | [DyadicDance_Stats.R](DyadicDance_Stats.R) | Main RR/DET and spatial models; also the 35-dyad Fisher sensitivity and extended model tables |
-| [Supplementary/DyadicDance_Supplementary.m](Supplementary/DyadicDance_Supplementary.m) | Metric prominence, landscape similarity and supplementary figures |
+| [Supplementary/DyadicDance_Supplementary.m](Supplementary/DyadicDance_Supplementary.m) | Metric prominence, landscape similarity, GED/PCA, bandwidth, position/velocity and axis-only controls, and supplementary figures |
 | [Supplementary/DyadicDance_MetricProminence_Stats.R](Supplementary/DyadicDance_MetricProminence_Stats.R) | Global + four metric-level prominence models |
 | [Supplementary/DyadicDance_LandscapeSimilarity_Stats.R](Supplementary/DyadicDance_LandscapeSimilarity_Stats.R) | Component-landscape and H2-landscape similarity models |
 | [Supplementary/DyadicDance_SpatialComparison.R](Supplementary/DyadicDance_SpatialComparison.R) | Raw/Fisher comparison using only the final 35 dyads |
@@ -48,6 +48,7 @@ fresh replication, or resume the required blocks using completed outputs.
 | 4 | Supplementary | Metric prominence, component 1 |
 | 5 | Supplementary | Beat-relative landscape similarity, component 1 |
 | 6 | Main | Corrected phase-space RQA, components 1 and 2 |
+| S1 | Supplementary | GED/PCA, bandwidth, position/velocity and axis-only estimation controls |
 | 7 | Both | Main or supplementary figures from saved summaries |
 | 8 | Main | Final spatial and RR/DET workbooks for R |
 
@@ -121,10 +122,13 @@ during organization.
 ## Output safety
 
 Numerical outputs remain under
-`Dance_Data/FREQNESS_Results_Rosso_et_al_inPreparation/legacy_logarithmic_recovered_dyads`
-with core reuse from the original results root. Temporal results, statistical
+`Dance_Data/FREQNESS_Results_Rosso_et_al_inPreparation/legacy_logarithmic`
+with external cache reuse disabled by default. Completed outputs in this
+results folder support resuming the same analysis. Temporal results, statistical
 exports, R outputs and group figures use the tag
 `PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0_Window10to45s`.
+R outputs are stored under
+`Dance_Data/FREQNESS_Mocap_Stats_Results/legacy_logarithmic`.
 Supplementary RR/DET panels use the same tag beneath `Supplementary_35/Figures`;
 the document builder reads those panels and the matching R outputs.
 Existing per-trial spatial results cover the complete final cohort; no old

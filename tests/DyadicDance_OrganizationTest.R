@@ -6,7 +6,7 @@ files <- list.files(study,pattern="[.]R$",recursive=TRUE,full.names=TRUE)
 for(file in files) parse(file)
 stopifnot(all(startsWith(basename(files),"DyadicDance_")))
 root <- file.path(repo,"Dance_Data","FREQNESS_Results_Rosso_et_al_inPreparation",
-  "legacy_logarithmic_recovered_dyads")
+  "legacy_logarithmic")
 phase_tag <- "PhaseSpaceRQA_AA10Hz_Dwn10_Radius10_Standardize0_Window10to45s"
 required <- c(file.path(root,"06_Statistics_R",phase_tag,"OUT2R_Comp#1.xlsx"),
   file.path(root,"06_Statistics_R","SpatialCoordination","OUT2R_Comp#1.xlsx"))

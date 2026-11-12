@@ -1,12 +1,12 @@
 # FREQ-NESS MoCap
 
-Private development repository for the motion-capture extension of FREQ-NESS.
-The repository is not yet intended for public release.
+MATLAB toolbox and study pipelines for frequency-resolved analysis of
+full-body motion-capture data.
 
 FREQ-NESS MoCap applies frequency-resolved network estimation to multivariate
 full-body kinematics. It is designed to support analysis of single participants
-and interaction analyses involving dyads and, in future developments, larger
-groups.
+and interaction analyses involving dyads. Phase-space RQA also supports larger
+groups, with one participant per coordinate of the joint state.
 
 ## Repository structure
 
@@ -19,7 +19,7 @@ FREQNESS_Mocap_Toolbox/
       private/                Internal temporal-coordination implementations
     Visualization/            Visualizer only
     Supporting/               Signal-processing and analysis helpers
-  FREQNESS_ExampleScripts/     Dataset-independent usage examples
+  FREQNESS_ExampleScripts/     Reserved for dataset-independent examples
   FREQNESS_Data/               Small example or reference data only
   FREQNESS_ExternalFunctions/  Documented third-party MATLAB dependencies
   python/                      Future Python implementation and tests
@@ -52,12 +52,34 @@ The MATLAB toolbox currently contains three levels of analysis:
    Theiler exclusion, and complete provenance. Historical JRQA comparisons
    can read saved study outputs, but the obsolete computation is not available.
 
-## Reference test case
+## Reproduce the Dyadic Dance study
 
-`Rosso_et_al_Dance_inPreparation` is the current priority and the first
-reference application of the toolbox. It is based on the openly available
-dyadic dance dataset introduced by Bigand et al. (2024).
+Follow the [study instructions](Rosso_et_al_Dance_inPreparation/README.md)
+for data placement, dependencies, execution order and output locations.
+The [public dataset](https://doi.org/10.48557/UR2GBG) was introduced by
+Bigand et al. (2024). Raw data and analysis outputs are not included in Git.
+
+The publication defaults use all 35 dyads and 1119 retained trials, GED on
+positions with the study's legacy logarithmic filter widths, and the 10–45 s
+window for phase-space RQA. Main and supplementary workflows share these
+settings. Outputs are written under repository-level `Dance_Data`; external
+cache imports are disabled by default.
+
+MATLAB is required for estimation and figures; R is required for statistical
+models. The optional supplement builder requires Python, python-docx and Pillow.
+The study README lists the required R packages and commands.
 
 The remaining study directories are retained as separate work areas so their
 pipelines, outputs, and statistical analyses do not become part of the reusable
 toolbox API.
+
+## License
+
+The project's original code is licensed under the GNU General Public License,
+version 3 or (at your option) any later version (SPDX: GPL-3.0-or-later).
+See [LICENSE](LICENSE) for the complete terms. Existing authorship notices
+remain applicable.
+
+Bundled third-party files retain their original copyright notices and terms;
+the project license does not relicense them. See the
+[dependency notices](FREQNESS_Mocap_Toolbox/FREQNESS_ExternalFunctions/README.md).
