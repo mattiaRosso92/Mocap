@@ -1,6 +1,6 @@
 # FREQ-NESS MoCap
 
-MATLAB toolbox and study pipelines for frequency-resolved analysis of
+MATLAB/Python toolbox and study pipelines for frequency-resolved analysis of
 full-body motion-capture data.
 
 FREQ-NESS MoCap applies frequency-resolved network estimation to multivariate
@@ -22,7 +22,8 @@ FREQNESS_Mocap_Toolbox/
   FREQNESS_ExampleScripts/     Reserved for dataset-independent examples
   FREQNESS_Data/               Small example or reference data only
   FREQNESS_ExternalFunctions/  Documented third-party MATLAB dependencies
-  python/                      Future Python implementation and tests
+  python/                      Python package, entry script, notebook and tests
+  VERSION                      Shared MATLAB/Python release version
 
 Rosso_et_al_Dance_inPreparation/
 Rosso_et_al_EmpaticMirroring_inPreparation/
@@ -36,7 +37,7 @@ toolbox, but reusable toolbox code should not depend on a particular study.
 
 ## Analysis levels
 
-The MATLAB toolbox currently contains three levels of analysis:
+The MATLAB and Python toolbox implementations contain three levels of analysis:
 
 1. `FREQNESS_NetworkEstimation_Mocap` performs the core participant-level
    frequency-resolved decomposition.
@@ -51,6 +52,22 @@ The MATLAB toolbox currently contains three levels of analysis:
    with explicit anti-alias filtering, delay-embedding, recurrence threshold,
    Theiler exclusion, and complete provenance. Historical JRQA comparisons
    can read saved study outputs, but the obsolete computation is not available.
+
+## Python toolbox
+
+The Python package follows the brain FREQ-NESS `src/` layout, public function
+names, dataclass result and editable pipeline/notebook pattern, while preserving
+the MoCap MATLAB algorithms, array dimensions and defaults. Install from the
+repository root:
+
+```sh
+python -m pip install './FREQNESS_Mocap_Toolbox/python[plot,mat73]'
+```
+
+See the [Python guide](FREQNESS_Mocap_Toolbox/python/README.md) for examples,
+MATLAB/Python conventions, dependencies and numerical parity tests. MATLAB
+is not needed to run the Python package. The study scripts remain MATLAB/R;
+this port does not silently replace their computations or saved outputs.
 
 ## Reproduce the Dyadic Dance study
 
@@ -72,6 +89,16 @@ The study README lists the required R packages and commands.
 The remaining study directories are retained as separate work areas so their
 pipelines, outputs, and statistical analyses do not become part of the reusable
 toolbox API.
+
+## Versioned releases
+
+`FREQNESS_Mocap_Toolbox/VERSION` and the Python `_version.py` must agree.
+The initial Python version is `0.1.0a1`, a development prerelease, not a claim
+that a release has already been published. The parity workflow runs Python
+tests on Linux, macOS and Windows and generates fresh MATLAB reference outputs
+for cross-language regression tests. Publishing a GitHub release tagged
+`v<VERSION>` triggers those checks before attaching a source-only toolbox ZIP,
+Python wheel and source distribution. This does not publish to PyPI.
 
 ## License
 

@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "freqness-mocap"
+dynamic = ["version"]
+description = "MATLAB-compatible frequency-resolved bodily networks and coordination"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+license-files = ["src/freqness_mocap/licenses/*.txt", "THIRD_PARTY.md"]
+authors = [{name = "Mattia Rosso"}, {name = "Felix Bigand"}, {name = "Leonardo Bonetti"}]
+dependencies = ["numpy>=1.24", "scipy>=1.10"]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.7"]
+mat73 = ["h5py>=3.8"]
+test = ["pytest>=8", "matplotlib>=3.7", "h5py>=3.8"]
+
+[project.urls]
+Repository = "https://github.com/mattiaRosso92/Mocap"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "freqness_mocap._version.__version__"}
+
+[tool.setuptools.package-data]
+freqness_mocap = ["licenses/*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+

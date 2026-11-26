@@ -1,0 +1,5 @@
+include FREQNESS_MainPipeline_Mocap.py
+include FREQNESS_NotebookPipeline.ipynb
+include THIRD_PARTY.md
+include tests/generate_matlab_reference.m
+include tools/package_release.py

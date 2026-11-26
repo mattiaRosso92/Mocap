@@ -159,6 +159,34 @@ verifyFailureMessage(testCase,@() FREQNESS_TimeCoord_Mocap(FREQ,1), ...
 end
 
 
+function testPhaseSpaceTrajectoriesPreserveGaps(testCase)
+
+oldVisible = get(groot,'DefaultFigureVisible');
+cleanup = onCleanup(@() set(groot,'DefaultFigureVisible',oldVisible));
+set(groot,'DefaultFigureVisible','off');
+for nsubs = [2 3]
+    FREQ = syntheticFREQ(12);
+    if nsubs == 3
+        FREQ.ts(:,:,:,3) = .3*FREQ.ts(:,:,:,1)+FREQ.ts(:,:,:,2);
+    end
+    FREQ.bad_segments = 5;
+    [result,figures] = FREQNESS_TimeCoord_Mocap(FREQ,1, ...
+        'figure',true,'animate',true,'animation_pause',0);
+    verifyEmpty(testCase,findall(figures.phase_space,'Type','scatter'));
+    trajectory = findall(figures.phase_space,'Type','surface');
+    verifyNumElements(testCase,trajectory,1);
+    verifyEqual(testCase,trajectory.XData(:,1),result.PhaseSpace(:,1));
+    verifyTrue(testCase,isnan(trajectory.XData(5,1)));
+    verifyEqual(testCase,trajectory.EdgeColor,'interp');
+    verifyEmpty(testCase,findall(figures.animation,'Type','scatter'));
+    verifyNotEmpty(testCase,findall(figures.animation,'Type','line'));
+    close([figures.phase_space figures.distance_matrix ...
+        figures.recurrence_plot figures.animation]);
+end
+
+end
+
+
 function FREQ = syntheticFREQ(nSamples)
 
 time = linspace(0,8*pi,nSamples);

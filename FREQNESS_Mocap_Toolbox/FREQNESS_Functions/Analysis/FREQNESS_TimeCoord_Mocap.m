@@ -46,7 +46,8 @@ function [FREQcoord,figures] = FREQNESS_TimeCoord_Mocap( ...
 %  - 'bad_segments'    : Additional shared exclusions, combined with
 %                        FREQ.bad_segments without concatenating valid runs.
 %  - 'figure'/'animate': Logical flags, default false. Animation supports
-%                        two or three participants.
+%                        two or three participants. Phase-space plots use
+%                        time-coloured trajectory lines, broken at gaps.
 %  - 'animation_pause': Seconds per animation frame. Default 0.01.
 %
 %  JRQA options (exactly two participants, no marked gaps):
