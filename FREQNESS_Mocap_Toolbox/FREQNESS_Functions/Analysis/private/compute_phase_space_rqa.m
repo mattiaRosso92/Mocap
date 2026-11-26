@@ -412,13 +412,18 @@ fig_phase = figure('Color','w','Units','pixels','Position',[100 100 760 650]);
 ax_phase = axes('Parent',fig_phase);
 hold(ax_phase,'on')
 if nsubs == 2
-    scatter(ax_phase,phase_space(:,1),phase_space(:,2),28,time,'filled');
+    % Time-coloured trajectory; NaN rows retain breaks at excluded samples.
+    surface(ax_phase,repmat(phase_space(:,1),1,2), ...
+        repmat(phase_space(:,2),1,2),zeros(size(phase_space,1),2), ...
+        repmat(time(:),1,2),'FaceColor','none','EdgeColor','interp','LineWidth',1.5);
+    view(ax_phase,2)
     xlabel(ax_phase,'Participant #1 network score','FontWeight','bold')
     ylabel(ax_phase,'Participant #2 network score','FontWeight','bold')
     axis(ax_phase,'square')
 elseif nsubs == 3
-    scatter3(ax_phase,phase_space(:,1),phase_space(:,2),phase_space(:,3), ...
-        28,time,'filled');
+    surface(ax_phase,repmat(phase_space(:,1),1,2), ...
+        repmat(phase_space(:,2),1,2),repmat(phase_space(:,3),1,2), ...
+        repmat(time(:),1,2),'FaceColor','none','EdgeColor','interp','LineWidth',1.5);
     xlabel(ax_phase,'Participant #1 network score','FontWeight','bold')
     ylabel(ax_phase,'Participant #2 network score','FontWeight','bold')
     zlabel(ax_phase,'Participant #3 network score','FontWeight','bold')
@@ -521,12 +526,15 @@ for framei = 1:frame_step:nframes
     if ~isgraphics(fig)
         break
     end
+    % Include intermediate samples when animation frames are subsampled.
+    % NaNs break trajectories rather than joining across missing states.
+    frame_indices = max(1,framei-frame_step):framei;
     if nsubs == 2
-        scatter(ax,phase_space(framei,1),phase_space(framei,2), ...
-            34,cmap(framei,:),'filled')
+        plot(ax,phase_space(frame_indices,1),phase_space(frame_indices,2), ...
+            'Color',cmap(framei,:),'LineWidth',1.5);
     else
-        scatter3(ax,phase_space(framei,1),phase_space(framei,2), ...
-            phase_space(framei,3),34,cmap(framei,:),'filled')
+        plot3(ax,phase_space(frame_indices,1),phase_space(frame_indices,2), ...
+            phase_space(frame_indices,3),'Color',cmap(framei,:),'LineWidth',1.5);
     end
     title(ax,sprintf(['Group phase-space animation | Metric level = %g | ' ...
         '%s = %.3g'],metric_level,time_label,time(framei)), ...

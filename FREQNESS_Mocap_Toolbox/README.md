@@ -28,7 +28,9 @@ belong in the study directories at the repository root.
 - `FREQNESS_ExternalFunctions`: third-party MATLAB dependencies, accompanied
   by their source, version, and licence information when redistribution is
   permitted.
-- `python`: the future Python package and its tests.
+- `python`: the MATLAB-compatible Python package, editable pipeline, notebook,
+  numerical parity tests and packaging instructions; see its [guide](python/README.md).
+- `VERSION`: shared release version, checked against the Python package version.
 
 Startup adds all public function subfolders automatically; MainPipeline uses
 Startup, so function calls do not change. For manual path setup, use
@@ -50,6 +52,11 @@ therefore supports dyads and larger groups without scalar delay embedding.
 Its frequency and component inputs can be scalars shared by the whole group
 or participant-specific vectors; component 1 is used for all participants
 when no component is supplied.
+
+In both MATLAB and Python, two- and three-participant phase-space plots and
+animations use time-coloured trajectory lines, not point clouds. Excluded
+samples break the lines; they are never joined across gaps. This rendering
+choice does not change the phase-space coordinates, recurrence plot or metrics.
 
 `FREQNESS_SpaceCoord_Mocap` returns raw spatial correlations by default.
 Use `'Fisher',true` to return `atanh(r)` in the same single output array;
