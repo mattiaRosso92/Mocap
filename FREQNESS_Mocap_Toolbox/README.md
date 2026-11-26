@@ -4,6 +4,26 @@ This directory contains reusable FREQ-NESS MoCap code. Project-specific data
 loading, experimental contrasts, statistics, and manuscript figure generation
 belong in the study directories at the repository root.
 
+## Quick start
+
+**[Download the latest MATLAB/Python toolbox](https://github.com/mattiaRosso92/Mocap/releases/latest/download/FREQNESS_Mocap.zip)**
+
+Version **1.0.0** shares one version number and release tag across MATLAB and
+Python. The archive extracts to `FREQNESS_Mocap`; the equivalent directory in a
+Git clone is `FREQNESS_Mocap_Toolbox`. Study pipelines and data are not bundled.
+
+- **MATLAB:** make this toolbox directory the current folder, run
+  `FREQNESS_Startup_Mocap`, then edit the settings in `FREQNESS_MainPipeline_Mocap.m`.
+  Put your own numeric MAT datasets in `FREQNESS_Data` as described in its README.
+- **Python:** from this toolbox directory, run
+  `python -m pip install './python[plot,mat73]'`, then edit the entry script or
+  notebook in `python/`. See the [Python guide](python/README.md) for details.
+
+The download link becomes available after the stable release and its automated
+asset upload complete. Python wheels are also attached on the
+[release page](https://github.com/mattiaRosso92/Mocap/releases); the combined ZIP
+is recommended when you want both languages, examples and pipeline templates.
+
 ## Contents
 
 - `FREQNESS_Startup_Mocap.m`: initializes the toolbox and loads datasets from

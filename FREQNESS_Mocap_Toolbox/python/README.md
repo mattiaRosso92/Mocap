@@ -1,14 +1,22 @@
 # FREQ-NESS MoCap — Python
 
 Python implementation of the current MoCap MATLAB toolbox. It follows the
-brain FREQ-NESS package's `src/` layout, named public functions, dataclass
-network result and editable script/notebook workflow. The scientific reference
+brain FREQ-NESS named public functions, dataclass network result and editable
+script/notebook workflow, packaged using a `src/` layout. The scientific reference
 is MoCap MATLAB, including its conventions and explicit legacy-filter helper.
 The MATLAB study pipelines and R models are not translated or modified.
 
 ## Install and run
 
-Python 3.10 or later is required. From the repository root:
+Python 3.10 or later is required. The recommended
+[combined MATLAB/Python download](https://github.com/mattiaRosso92/Mocap/releases/latest/download/FREQNESS_Mocap.zip)
+extracts to `FREQNESS_Mocap`. From inside that extracted folder:
+
+```sh
+python -m pip install './python[plot,mat73]'
+```
+
+Alternatively, from the root of a Git clone:
 
 ```sh
 python -m pip install './FREQNESS_Mocap_Toolbox/python[plot,mat73]'
@@ -163,18 +171,23 @@ Sample Dance data and comparison figures are intentionally not distributed.
 
 ## Packaging and releases
 
-`../VERSION` and `src/freqness_mocap/_version.py` must match. `0.1.0a1` is the
-initial development prerelease. Build locally without publishing:
+`../VERSION` and `src/freqness_mocap/_version.py` both specify **1.0.0**;
+the GitHub release tag must be **v1.0.0**. Python package metadata reads
+`_version.py` automatically. From this `python` directory, build locally
+without publishing:
 
 ```sh
 python -m pip install build
 python -m build
-python tools/package_release.py --tag v0.1.0a1 --output /tmp/FREQNESS_Mocap-0.1.0a1.zip
+python tools/package_release.py --tag v1.0.0 --output /tmp/FREQNESS_Mocap-1.0.0.zip
 ```
 
 The ZIP uses a short `FREQNESS_Mocap/` root and includes source, docs, notebook,
 tests and third-party notices, not studies, raw data, generated outputs or caches.
 It refuses to overwrite an existing ZIP. A published GitHub release triggers
 parity validation before attaching the ZIP, wheel and source distribution; it
-does not publish to PyPI. See [THIRD_PARTY.md](THIRD_PARTY.md) and installed
+does not publish to PyPI. Mark v1.0.0 as a stable/latest release, not a prerelease.
+The current publish-and-attach workflow requires mutable releases; immutable
+releases require uploading assets to a draft before publishing instead.
+See [THIRD_PARTY.md](THIRD_PARTY.md) and installed
 `freqness_mocap/licenses` for original attribution and licences.

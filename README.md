@@ -1,5 +1,19 @@
 # FREQ-NESS MoCap
 
+## Download the toolbox
+
+**[Download the latest FREQ-NESS MoCap Toolbox release](https://github.com/mattiaRosso92/Mocap/releases/latest/download/FREQNESS_Mocap.zip)**
+
+The recommended archive contains **both MATLAB and Python** and extracts to the
+short folder name `FREQNESS_Mocap`, following the brain FREQ-NESS release approach.
+It excludes study pipelines, research data and generated results. See the
+[toolbox setup instructions](FREQNESS_Mocap_Toolbox/README.md#quick-start).
+For individual versions and Python wheel downloads, see [all releases](https://github.com/mattiaRosso92/Mocap/releases).
+The download link becomes available after the first stable release is published
+and its packaging workflow finishes successfully.
+
+## Overview
+
 MATLAB/Python toolbox and study pipelines for frequency-resolved analysis of
 full-body motion-capture data.
 
@@ -55,8 +69,8 @@ The MATLAB and Python toolbox implementations contain three levels of analysis:
 
 ## Python toolbox
 
-The Python package follows the brain FREQ-NESS `src/` layout, public function
-names, dataclass result and editable pipeline/notebook pattern, while preserving
+The Python package follows the brain FREQ-NESS public function names, dataclass
+result and editable pipeline/notebook pattern, using a `src/` package layout while preserving
 the MoCap MATLAB algorithms, array dimensions and defaults. Install from the
 repository root:
 
@@ -93,12 +107,27 @@ toolbox API.
 ## Versioned releases
 
 `FREQNESS_Mocap_Toolbox/VERSION` and the Python `_version.py` must agree.
-The initial Python version is `0.1.0a1`, a development prerelease, not a claim
-that a release has already been published. The parity workflow runs Python
-tests on Linux, macOS and Windows and generates fresh MATLAB reference outputs
-for cross-language regression tests. Publishing a GitHub release tagged
-`v<VERSION>` triggers those checks before attaching a source-only toolbox ZIP,
-Python wheel and source distribution. This does not publish to PyPI.
+Version **1.0.0** is prepared as the first stable MATLAB/Python release. The
+Python package metadata reads its version automatically from `_version.py`.
+The parity workflow runs Python tests/builds on Linux, macOS and Windows and
+generates fresh MATLAB reference outputs for cross-language regression tests.
+
+To publish after merging the release PR and passing checks:
+
+1. Create a GitHub release with tag `v1.0.0`, targeting the merged `main` commit.
+2. Title it `FREQ-NESS MoCap v1.0.0`; leave **This is a pre-release** unchecked
+   and select **Set as latest release**.
+3. Publish and wait for **Package FREQ-NESS MoCap release** to succeed. It reruns
+   validation, checks version/tag agreement, and attaches `FREQNESS_Mocap.zip`,
+   a Python wheel and a Python source distribution from that same tagged commit.
+4. Confirm all three assets are present and the download link above works.
+
+This is the brain toolbox's publish-and-attach approach, with additional Python
+distributions and parity validation. It assumes mutable GitHub releases: if
+immutable releases are enabled, assets must instead be attached to a draft
+before publication and the workflow must be adapted first. No action here
+publishes to PyPI. Do not move an already published tag to different code;
+subsequent fixes should receive a new version and tag.
 
 ## License
 

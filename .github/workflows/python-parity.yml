@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install './FREQNESS_Mocap_Toolbox/python[test]' build
-      - run: python -m pytest FREQNESS_Mocap_Toolbox/python/tests/test_toolbox.py
+      - run: python -m pytest FREQNESS_Mocap_Toolbox/python/tests/test_toolbox.py FREQNESS_Mocap_Toolbox/python/tests/test_release.py
       - run: python -m build FREQNESS_Mocap_Toolbox/python
 
   matlab-reference:

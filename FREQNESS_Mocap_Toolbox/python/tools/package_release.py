@@ -14,6 +14,10 @@ def package(output, tag=None):
         raise ValueError('Toolbox VERSION, Python version and release tag must match')
     output = Path(output)
     output.parent.mkdir(parents=True,exist_ok=True)
+    # The extracted toolbox contains LICENSE; a Git clone keeps it one level up.
+    license_file = toolbox/'LICENSE'
+    if not license_file.is_file():
+        license_file = toolbox.parent/'LICENSE'
     # Explicit source whitelist: no study data, generated figures, caches or symlinks.
     extensions = {'.m','.py','.md','.toml','.txt','.ipynb'}
     excluded = {'__pycache__','.pytest_cache','.venv','build','dist'}
@@ -25,7 +29,7 @@ def package(output, tag=None):
             if path.suffix not in extensions and path.name not in {'VERSION','MANIFEST.in'}:
                 continue
             archive.write(path,Path('FREQNESS_Mocap')/relative)
-        archive.write(toolbox.parent/'LICENSE','FREQNESS_Mocap/LICENSE')
+        archive.write(license_file,'FREQNESS_Mocap/LICENSE')
     return output
 
 
