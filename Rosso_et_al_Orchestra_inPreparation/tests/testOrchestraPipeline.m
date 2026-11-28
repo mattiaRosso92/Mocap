@@ -117,6 +117,7 @@ cleanup = onCleanup(@() rmdir(fixture.root,'s'));
 execute_pipeline(testCase,fixture,[true true false]);
 rmdir(fixture.data_path,'s');
 state = execute_pipeline(testCase,fixture,[false false true]);
+verifyFalse(testCase,state.CFG.block3.matrix_labels_flag);
 files = dir(fullfile(state.CFG.block3.output_path,'**','*.png'));
 verifyNumElements(testCase,files,18);
 metadata = dir(fullfile(state.CFG.block3.output_path,'**','visualization_info.mat'));
@@ -126,6 +127,7 @@ verifyEqual(testCase,saved.visual_info.settings.component,1);
 verifyEqual(testCase,saved.visual_info.actual_frex, ...
     saved.visual_info.source.frex(saved.visual_info.idx_peak));
 catalog = jsondecode(fileread(fullfile(state.CFG.block3.output_path,'full_piece','figure_catalog.json')));
+verifyFalse(testCase,isfield(catalog,'matrix_label_settings'));
 for obsi = 1:numel(catalog.observations)
     observation = catalog.observations(obsi);
     core = load(observation.core_file,'GED');
@@ -248,6 +250,10 @@ code = strrep(code,'CFG.common.output_path = fullfile(path_study,''FREQNESS_Outp
     sprintf('CFG.common.output_path = ''%s'';',fixture.output_path));
 code = strrep(code,'CFG.common.frex = .5:.1:10;','CFG.common.frex = [.5 1 2];');
 code = strrep(code,'CFG.common.ncomps = 4;','CFG.common.ncomps = 2;');
+% Synthetic tracks have no instrument identities. Keep the numeric-ID cache
+% contract here; testOrchestraLabels exercises the optional labelled display.
+code = strrep(code,'CFG.block3.matrix_labels_flag = true;', ...
+    'CFG.block3.matrix_labels_flag = false;');
 for blocki = 1:3
     code = regexprep(code,sprintf('CFG.block%d.run_flag = (true|false);',blocki), ...
         sprintf('CFG.block%d.run_flag = logical(%d);',blocki,run_blocks(blocki)));

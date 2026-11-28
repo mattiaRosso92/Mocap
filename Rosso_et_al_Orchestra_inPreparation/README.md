@@ -49,7 +49,8 @@ handover names and the generated `FREQNESS_Output` directory are gitignored.
 - Each solution represents **one ensemble recording or section**. Musicians
   are coordinate channels, not independent observations along a participant
   dimension. Tracks are labelled `Track_1`, `Track_2`, etc., preserving CSV
-  IDs. Unverified conductor/instrument labels are not assigned.
+  IDs in saved cores. Activation matrices can add provisional instrument/member
+  labels as described below; these do not change core channel identities.
 - There is no resampling, detrending, despiking, interpolation, or missing-data
   repair. Segment frame counts and original frame indices must agree with the
   manifest. Missing segment CSVs are recorded as `missing_source` and skipped;
@@ -140,7 +141,28 @@ Each denominator, raw magnitude, normalized display value and all-zero flag
 is saved. Zero patterns remain finite and zero. These maps show relative
 spatial distributions, not comparable absolute movement amplitudes across
 recordings. Z remains an unmeasured placeholder. Track IDs remain unchanged;
-verified musician labels and activity exclusions are deferred.
+activity exclusions are deferred.
+
+`CFG.block3.matrix_labels_flag=true` adds provisional labels to activation
+matrices, using `orchestra_provisional_labels.csv`. Its 64 instrument/member
+labels and source headers were copied from
+`CoE_2026_Hackaton/data/64track-deeplabcut-carmen.csv`; the sibling repository
+is not required at runtime. Labels are joined by numeric track ID, never
+by row position or by renumbering a smaller ensemble. The user authorised
+applying this provisional mapping to every recording, including those with
+38, 62 or 63 tracks. Unknown IDs stop the labelled display rather than
+receive a guessed identity. Numeric IDs remain visible beside every label.
+
+**Peter Keller must double-check these assignments by visual inspection.**
+The Carmen demo is not verified as a processed study recording, and its
+ViolinA/ViolinB assignments differ from the historical Orchestra Main.
+Figure titles and explorer captions identify this uncertainty. This mapping
+must not be interpreted as a verified recording-specific musician crosswalk.
+Separate, hash-routed matrix PNGs and provenance MAT files preserve the
+original matrix figures, core estimates, overhead maps and landscape caches.
+The catalog selects the additional labelled PNG and records the mapping,
+source headers, numeric IDs and pending review. Disable the flag to select
+the original numeric-ID matrices.
 
 Figures are saved as 200-dpi PNGs and closed by default. For interactive
 inspection, set `figure_visibility='on'` and `close_figures_flag=false`.
@@ -266,6 +288,7 @@ results = runtests({ ...
     'Rosso_et_al_Orchestra_inPreparation/tests/testOrchestraPipeline.m', ...
     'Rosso_et_al_Orchestra_inPreparation/tests/testOrchestraSpatialDisplays.m', ...
     'Rosso_et_al_Orchestra_inPreparation/tests/testOrchestraBeatCore.m', ...
+    'Rosso_et_al_Orchestra_inPreparation/tests/testOrchestraLabels.m', ...
     'FREQNESS_Mocap_Toolbox/tests/testFREQNESSFilterWidthsMocap.m'});
 assertSuccess(results)
 ```
@@ -290,8 +313,8 @@ Run `tests/testOrchestraTempo.m` separately with the pinned MIR dependency
 available, before any real-audio tempo run. Its known 120-BPM synthetic pulse
 test must pass without relaxing the tolerance. Then inspect representative
 real audio with automatic acceptance disabled before enabling screening for
-the remaining segments. New score-section mapping, musician names and
-not-playing exclusions remain deferred.
+the remaining segments. New score-section mapping, verification of provisional
+musician labels and not-playing exclusions remain deferred.
 
 ## November 2026 implementation status
 
@@ -299,14 +322,14 @@ not-playing exclusions remain deferred.
 | --- | --- | --- |
 | 1 — Sampling rate | Implemented: 25 Hz, user-confirmed | Independent camera metadata and audio/frame alignment remain unresolved. |
 | 2 — Filter comparison | Complete: physical and matched legacy | Both calibrations have 27 full-piece and 351 segment cores; the new legacy spectra reproduce the archive exactly. |
-| 3 — Segment tempo | Deferred by the user after MIR validation failed | Execution remains off; no real-audio or beat-normalized study result has been published. |
+| 3 — Segment tempo | Method under discussion; production execution disabled | Direct MIR tracking reproduces the synthetic discrepancy; explicit-window untracked calls are promising in isolated diagnostics, but real-audio validation is outstanding. No beat-normalized study result has been published. |
 | 4 — Spatial displays | Complete: both calibrations exported | Absolute coordinates and XY norms retain signed cores and record their display denominators. |
-| 5 — Musician labels | Deferred | Existing numeric track IDs remain. |
-| 6 — Playing annotations | Deferred | No activity masking or covariance exclusion is applied. |
-| 3+6 — Section/tempo integration | Deferred | Existing WAV boundaries need a verified mapping to Peter's newer score sections. |
+| 5 — Musician labels | Complete: 756 provisional labelled matrices published | Uses the named Carmen demo's numeric-ID assignments, retaining Track_ID beside each label. **Peter Keller must double-check by visual inspection**: recording-specific correspondence is unverified and historical violin assignments differ. |
+| 6 — Annotation-based weighting/masking of non-playing musicians | Not implemented; method to discuss | Design how annotations exclude or downweight covariance contributions without zeroing/chopping the motion series and introducing filtering artifacts. No weighting, masking or activity exclusion is currently applied. |
+| 3+6 — Section/tempo/weighting integration | Deferred | Map existing WAV and motion segments to Peter's score sections so tempo normalization and playing-status weights refer to the same intervals. |
 
-The integrated synthetic study/calibration suite passed 34 MATLAB tests;
-the gallery contract suite passed four Python tests. The separate tempo
+Before the label addition, the integrated study/calibration suite passed
+34 MATLAB tests and the gallery contract suite passed four Python tests. The separate tempo
 suite passed three tests and failed the known-pulse output-contract test.
 The read-only core audit checked all 756 estimates, sampling provenance,
 complete spectra, filter widths, retained samples and source-file metadata.
@@ -314,8 +337,21 @@ Across 378 comparisons, new and archived legacy eigenvalues were identical.
 All 378 archived cores and 46 toolbox files retained their original hashes.
 The final display audit checked all 756 published observations against the
 audited cores: maximum H2 and spatial-display differences were both zero.
-The explorer contains 2,396 existing original PNGs and passed browser checks
+The initial explorer contained 2,396 PNGs and passed browser checks
 for calibration switching, navigation, filters, image loading and enlargement.
+
+The provisional-label update published 756 additional matrix PNGs: 27 full
+pieces and 351 segments per calibration. The explorer still displays 2,396
+figures, selecting the labelled matrices while preserving the original files.
+The label integration passed 27 MATLAB study tests and five Python gallery
+tests. The audit verified all 756 ID-to-label joins and unchanged numerical
+and original display metadata; all 4,018 protected files retained their hashes,
+including 756 cores, 2,396 original PNGs, existing visualization/landscape
+metadata and 46 toolbox functions. Browser checks passed for both calibrations,
+provisional notices, matrix enlargement, smaller ensembles and existing navigation.
+Runtime logs, source-header checks and
+the publication audit are in the ignored
+`FREQNESS_Output/_Run_2026-11-28_provisional_labels` directory.
 
 Physical segment results require particular care at the low-frequency edge:
 175 of 351 maxima are at 0.5 Hz and three at 10 Hz; 12 segments have the lowest
@@ -323,3 +359,13 @@ Physical segment results require particular care at the low-frequency edge:
 cycles at 0.5 Hz. This illustrates why cycle count alone does not establish
 adequate narrowband resolution. The frequency grid and supplied data are
 unchanged; these descriptive diagnostics are retained with the run outputs.
+
+The subsequent task-3 diagnostic compared direct tracking with the previous
+chained call: both returned 129.737 BPM on the 120-BPM pulse. Explicit
+8-second waveform windows, analyzed independently without MIR's `Frame` or
+`Track` options, returned approximately 80.00, 119.98 and 181.80 BPM for
+known 80-, 120- and 180-BPM signals. These tests used known-level search
+bounds that exclude half/double alternatives; they do not validate metrical
+level selection or orchestral audio. They changed no toolbox functions and
+did not enable the production tempo stage. Diagnostics are in the ignored
+`FREQNESS_Output/_Audit_2026-11-28_tempo_discussion` directory.

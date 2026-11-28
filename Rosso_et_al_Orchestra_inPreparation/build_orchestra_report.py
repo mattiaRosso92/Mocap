@@ -27,14 +27,15 @@ calibration.value=DATA.calibrations.includes(params.get('calibration'))?params.g
 reference.value=DATA.references.includes(params.get('reference'))?params.get('reference'):DATA.references[0];
 function selectedData(){return DATA.datasets[calibration.value+':'+reference.value]||{}}
 function current(){return selectedData()[stage]||{observations:[],overlays:[]}}
+function labelCaption(o){return kind==='matrix'&&o.matrix_label_status==='provisional'?' · Provisional musician labels; '+o.matrix_label_review+' pending':''}
 function updateLinks(){const query=new URLSearchParams({calibration:calibration.value,reference:reference.value});document.querySelectorAll('a[data-navigation]').forEach(a=>a.search=query.toString());history.replaceState(null,'','?'+query.toString())}
 function setRecordings(){const previous=recording.value;recording.replaceChildren(new Option('All recordings',''));for(const o of current().observations.filter(o=>!piece.value||o.piece===piece.value)){if(![...recording.options].some(x=>x.value===o.recording))recording.add(new Option(o.piece+' · '+o.recording_label,o.recording))}recording.value=[...recording.options].some(o=>o.value===previous)?previous:''}
 function render(){
- const data=current(),q=search.value.trim().toLowerCase(),overlay=kind==='leading'||kind==='h2';grid.classList.toggle('landscapes',overlay);let selected;
+ const data=current(),q=search.value.trim().toLowerCase(),overlay=kind==='leading'||kind==='h2';grid.classList.toggle('landscapes',overlay||kind==='matrix');let selected;
  const recordingPiece=data.observations.find(o=>o.recording===recording.value)?.piece;
  const matchesRecording=o=>!recording.value||(o.recording?o.recording===recording.value:o.piece===recordingPiece);
  if(overlay){selected=data.overlays.filter(o=>(!piece.value||o.piece===piece.value)&&matchesRecording(o)&&(!q||[o.title,...o.labels].join(' ').toLowerCase().includes(q))).map(o=>({title:o.title,src:o.figures[kind],meta:o.ncurves+' individual curves · '+(stage==='full_piece'?'all sessions for this piece':'musical segments in score order'),caption:(kind==='leading'?'Component 1 · percent of complete eigenvalue sum':'H2 entropy · nats · complete eigenspectrum')+(o.insufficient_cycles_flag?' · Crosses: limited cycle support':'')+(o.bandwidth_below_resolution_flag?' · Triangles: filter bandwidth below Fourier spacing':''),flag:!!o.insufficient_cycles_flag||!!o.bandwidth_below_resolution_flag}))}
- else{selected=data.observations.filter(o=>(!piece.value||o.piece===piece.value)&&(!recording.value||o.recording===recording.value)&&(!q||[o.piece,o.recording,o.recording_label,o.segment_label].join(' ').toLowerCase().includes(q))&&o.figures[kind]).map(o=>({title:o.piece+' · '+o.recording_label+(o.segment_label?' · '+o.segment_index+' | '+o.segment_label:''),src:o.figures[kind],meta:o.ntracks+' tracks · '+o.npnts.toLocaleString()+' frames',caption:'Component 1 at '+o.peak_frequency.toFixed(3)+' Hz'+(o.peak_frequency_normalized!=null?' / '+o.peak_frequency_normalized.toFixed(3)+' × beat':'')+' · '+({matrix:'Absolute weights; raw pattern units',activation:'Absolute coordinate weights / observation maximum',xy_norm:'XY vector magnitude / observation maximum'}[kind])+(o.boundary_peak?' · FREQUENCY BOUNDARY':'')+(o.peak_tie_count>1?' · FIRST TIED BIN':'')+(o.insufficient_cycles?.some(Boolean)?' · Limited cycle support; see landscape markers':'')+(o.bandwidth_below_resolution?.some(Boolean)?' · Some filter bandwidths are below Fourier spacing':''),flag:o.boundary_peak||o.peak_tie_count>1||o.insufficient_cycles?.some(Boolean)||o.bandwidth_below_resolution?.some(Boolean)}))}
+ else{selected=data.observations.filter(o=>(!piece.value||o.piece===piece.value)&&(!recording.value||o.recording===recording.value)&&(!q||[o.piece,o.recording,o.recording_label,o.segment_label].join(' ').toLowerCase().includes(q))&&o.figures[kind]).map(o=>({title:o.piece+' · '+o.recording_label+(o.segment_label?' · '+o.segment_index+' | '+o.segment_label:''),src:o.figures[kind],meta:o.ntracks+' tracks · '+o.npnts.toLocaleString()+' frames',caption:'Component 1 at '+o.peak_frequency.toFixed(3)+' Hz'+(o.peak_frequency_normalized!=null?' / '+o.peak_frequency_normalized.toFixed(3)+' × beat':'')+' · '+({matrix:'Absolute weights; raw pattern units',activation:'Absolute coordinate weights / observation maximum',xy_norm:'XY vector magnitude / observation maximum'}[kind])+labelCaption(o)+(o.boundary_peak?' · FREQUENCY BOUNDARY':'')+(o.peak_tie_count>1?' · FIRST TIED BIN':'')+(o.insufficient_cycles?.some(Boolean)?' · Limited cycle support; see landscape markers':'')+(o.bandwidth_below_resolution?.some(Boolean)?' · Some filter bandwidths are below Fourier spacing':''),flag:o.boundary_peak||o.peak_tie_count>1||o.insufficient_cycles?.some(Boolean)||o.bandwidth_below_resolution?.some(Boolean)}))}
  document.querySelector('#count').textContent=selected.length+' figures match · showing '+Math.min(limit,selected.length)+(overlay&&stage==='full_piece'?' · each overlay retains all sessions for its piece':'');
  grid.innerHTML=selected.slice(0,limit).map(o=>`<article class="card"><header><h3>${esc(o.title)}</h3><p class="meta">${esc(o.meta)}</p></header><a class="image-link" href="${esc(o.src)}" data-title="${esc(o.title)}"><img loading="lazy" src="${esc(o.src)}" alt="${esc(o.title+' — '+o.caption)}"></a><div class="caption ${o.flag?'flag':''}">${esc(o.caption)} · <a href="${esc(o.src)}" target="_blank">Full size ↗</a></div></article>`).join('')||'<p>No figures available for this selection. Beat normalization applies to segments with accepted tempo estimates.</p>';more.hidden=selected.length<=limit;
 }
@@ -44,6 +45,8 @@ function changeMode(){
  const confirmed=all.length&&all.every(o=>o.srate_confirmed&&o.timing_provenance?.srate_confirmation_source==='user');
  document.querySelector('#provenance').textContent=(calibration.value==='physical'?'Physical':'Legacy')+' filters · '+(reference.value==='beat'?'Beat-relative segment analysis':'Physical-frequency analysis')+' · '+(all.length?rates+' Hz sampling rate'+(confirmed?' (user-confirmed 28 November 2026)':' (see catalog provenance)'):'results not available');
  document.querySelector('#tempo-context').textContent=reference.value==='beat'?'Tempo is estimated independently for each existing WAV segment. Only estimates passing the recorded screening rules are included; metrical-level interpretation and audio/frame alignment remain limitations. Crosses flag limited cycle support; triangles flag filter bandwidths below the segment’s Fourier spacing. These diagnostics do not certify narrowband validity.':(DATA.references.includes('beat')?'':'Beat-normalized results are not available in this report.');
+ const provisional=all.filter(o=>o.matrix_label_status==='provisional').length;
+ document.querySelector('#label-context').textContent=provisional?provisional+' activation matrices use provisional musician/instrument labels from the Carmen demo. Numeric track IDs are retained. Peter Keller must double-check the assignments by visual inspection.':'Activation matrices retain numeric track IDs; musician labels are not supplied for this selection.';
  document.querySelector('#coverage').textContent=all.length+' observations in this selection. '+Object.values(datasets).map(d=>d.missing_text||'').filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(' ');
  if(stage){setRecordings();limit=12;render()}else{
  document.querySelector('#overview-rows').innerHTML=DATA.pieces.map(p=>'<tr><td>'+esc(p[0].toUpperCase()+p.slice(1))+'</td>'+[['full_piece','full','recordings'],['segment_piece','segments','segments']].map(([s,prefix,label])=>'<td><a data-navigation href="'+prefix+'-'+p+'.html">'+(datasets[s]?.observations||[]).filter(o=>o.piece===p).length+' '+label+'</a></td>').join('')+'</tr>').join('');}
@@ -111,6 +114,18 @@ def build_report(visualization_paths, report_path):
                 if not set(roles).issubset({'matrix', 'activation', 'xy_norm'}):
                     raise ValueError(f'Unknown spatial figure role: {source}')
                 observation['figures'] = {role: figure_url(p) for role, p in zip(roles, files)}
+                label_info = observation.get('matrix_labels')
+                if label_info:
+                    labels = as_list(label_info.get('labels'))
+                    track_ids = as_list(label_info.get('track_ids'))
+                    if (label_info.get('status') != 'provisional'
+                            or len(labels) != observation['ntracks']
+                            or len(track_ids) != len(labels)
+                            or len(set(track_ids)) != len(track_ids)
+                            or not label_info.get('review_required')):
+                        raise ValueError(f'Invalid provisional matrix-label metadata: {source}')
+                    observation['matrix_label_status'] = label_info['status']
+                    observation['matrix_label_review'] = label_info['review_required']
                 observations.append(observation)
             for overlay in as_list(raw['overlays']):
                 overlay['labels'] = as_list(overlay['labels'])
@@ -131,6 +146,8 @@ def build_report(visualization_paths, report_path):
                         counts = Counter(r['Status'] for r in missing)
                         missing_text = 'Unavailable segments: ' + ', '.join(f'{n} {status.replace("_", " ")}' for status, n in sorted(counts.items())) + '. See the core index for individual reasons.'
             datasets[key][stage] = {'observations': observations, 'overlays': overlays, 'missing_text': missing_text}
+            if 'matrix_label_settings' in raw:
+                datasets[key][stage]['matrix_label_settings'] = raw['matrix_label_settings']
     if not datasets:
         raise ValueError('No Block 3 figure catalogs found.')
     if any(p != palettes[0] for p in palettes):
@@ -147,7 +164,7 @@ def build_report(visualization_paths, report_path):
         'segment_label', 'ntracks', 'npnts', 'srate', 'srate_confirmed',
         'timing_provenance', 'peak_frequency', 'peak_frequency_normalized',
         'boundary_peak', 'peak_tie_count', 'figures', 'insufficient_cycles',
-        'bandwidth_below_resolution'}
+        'bandwidth_below_resolution', 'matrix_label_status', 'matrix_label_review'}
     overlay_fields = {'piece', 'recording', 'title', 'labels', 'ncurves',
         'figures', 'insufficient_cycles_flag', 'bandwidth_below_resolution_flag'}
     for key, stages in datasets.items():
@@ -171,9 +188,9 @@ def build_report(visualization_paths, report_path):
         return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)} · Orchestra FREQ-NESS</title><style>{CSS}{palette_css}</style></head><body data-stage="{stage}" data-piece="{piece}">
 <header><div class="muted">ORCHESTRA STUDY · MATLAB FIGURES</div><h1>{html.escape(title)}</h1>
 <div class="panel filters"><label>Filter calibration<select id="calibration">{calibration_options}</select></label><label>Frequency reference<select id="reference">{reference_options}</select></label></div>{nav}
-<div class="note"><strong id="provenance"></strong><br><span id="tempo-context"></span><br>Component 1 and complete-spectrum H2 are shown separately. Every curve is one observation, without averaging. Spatial displays use its highest analyzed component-1 bin; boundary maxima are flagged. Magnitudes affect displays only; signed cores are preserved.</div>
+<div class="note"><strong id="provenance"></strong><br><span id="tempo-context"></span><br>Component 1 and complete-spectrum H2 are shown separately. Every curve is one observation, without averaging. Spatial displays use its highest analyzed component-1 bin; boundary maxima are flagged. Magnitudes affect displays only; signed cores are preserved.<br><span id="label-context"></span></div>
 <div class="legend"><span>First</span><span class="gradient"></span><span>Last rehearsal / musical segment</span><span class="purple"></span><span>Concerts; Concert 2 dashed</span></div></header><main>{body}</main>
-<footer><span id="coverage"></span> <a href="figure_catalog.json">Figure catalog and numerical values</a>.<br>H2 = −ln Σp², normalized across the complete eigenspectrum. Raw H2 depends on channel count. Leading components are ranked independently at each frequency.<br>Absolute coordinate and XY-magnitude overhead views use separate, recorded observation-level maxima; matrices retain raw absolute weights. These show relative spatial distributions, not cross-recording absolute movement amplitudes. Z is unmeasured. Track IDs are retained; musician labels and playing annotations are deferred.<br>Audio/frame alignment remains unresolved; the 25 Hz analysis rate is user-confirmed, not independently verified camera metadata. Existing WAV segments differ from Peter's new score sections. Boundary maxima need not be interior spectral peaks, and short segments may not resolve the narrowest filters. These descriptive plots do not test the plasticity hypothesis.</footer>
+<footer><span id="coverage"></span> <a href="figure_catalog.json">Figure catalog and numerical values</a>.<br>H2 = −ln Σp², normalized across the complete eigenspectrum. Raw H2 depends on channel count. Leading components are ranked independently at each frequency.<br>Absolute coordinate and XY-magnitude overhead views use separate, recorded observation-level maxima; matrices retain raw absolute weights. These show relative spatial distributions, not cross-recording absolute movement amplitudes. Z is unmeasured. Provisional labels do not establish recording-specific identities. Playing-status weighting/masking remains unimplemented.<br>Audio/frame alignment remains unresolved; the 25 Hz analysis rate is user-confirmed, not independently verified camera metadata. Existing WAV segments differ from Peter's new score sections. Boundary maxima need not be interior spectral peaks, and short segments may not resolve the narrowest filters. These descriptive plots do not test the plasticity hypothesis.</footer>
 <script>const DATA={script_data};{JS}</script></body></html>'''
 
     body = '''<section class="panel"><h2>Full pieces and musical segments</h2><p>Choose the filter calibration above. Each selection displays independently estimated results. Full-piece overlays compare sessions within each piece; segment overlays follow score-label order within each recording.</p><table><thead><tr><th>Piece</th><th>Full pieces</th><th>Musical segments</th></tr></thead><tbody id="overview-rows"></tbody></table></section><section class="panel"><h2>Spatial displays</h2><p>Absolute activation matrices and overhead coordinate views retain the existing plots. XY vector magnitude adds an orientation-invariant view in the measured image plane, computed as sqrt(X² + Y²) from the signed pattern weights before display scaling. All spatial views use the same empirical leading-component peak.</p></section>'''

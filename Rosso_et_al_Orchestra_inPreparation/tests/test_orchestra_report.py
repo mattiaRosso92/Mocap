@@ -64,6 +64,37 @@ class ReportTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Duplicate catalog'):
                 report.build_report([physical, physical], root / 'report')
 
+    def test_provisional_matrix_labels_preserve_provenance_and_review_status(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            physical = self.make_catalog(root, 'physical')
+            file = physical / 'segment_piece' / 'figure_catalog.json'
+            catalog = json.loads(file.read_text())
+            label_info = {'status': 'provisional', 'track_ids': [3, 13],
+                'labels': ['Track_3 | ViolinA_1', 'Track_13 | ViolinA_11'],
+                'source_file': '64track-deeplabcut-carmen.csv',
+                'source_sha256': 'fixture-source', 'mapping_sha256': 'fixture-map',
+                'review_required': 'Peter Keller visual inspection'}
+            catalog['observations']['matrix_labels'] = label_info
+            catalog['matrix_label_settings'] = {'source_origin': 'Carmen demo headers',
+                'source_headers': ['03ViolinA_1.x', '13ViolinA_11.x']}
+            file.write_text(json.dumps(catalog))
+            report.build_report(physical, root / 'report')
+            published = json.loads((root / 'report' / 'figure_catalog.json').read_text())
+            observed = published['datasets']['physical:hz']['segment_piece']['observations'][0]
+            self.assertEqual(observed['matrix_labels'], label_info)
+            self.assertEqual(observed['matrix_label_status'], 'provisional')
+            self.assertEqual(published['datasets']['physical:hz']['segment_piece']['matrix_label_settings'],
+                             catalog['matrix_label_settings'])
+            page = (root / 'report' / 'segments.html').read_text()
+            self.assertIn('Peter Keller visual inspection', page)
+            self.assertIn('id="label-context"', page)
+            self.assertNotIn('fixture-source', page)  # Full provenance stays in the catalog.
+            catalog['observations']['matrix_labels']['labels'].pop()
+            file.write_text(json.dumps(catalog))
+            with self.assertRaisesRegex(ValueError, 'Invalid provisional matrix-label'):
+                report.build_report(physical, root / 'report')
+
     def test_reject_mislabeled_results(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
